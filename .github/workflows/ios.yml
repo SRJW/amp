@@ -234,13 +234,14 @@ jobs:
         type: string
         default: ''
       validation_scope:
-        description: Full player validation or focused waveform gesture regressions
+        description: Full player validation or focused waveform/library checks
         type: choice
         default: full-player
         options:
         - full-player
         - waveforms-only
         - library-only
+        - library-editor-only
       runner:
         description: macos-15 is Apple Silicon; choose it when ARM capacity is available.
         type: choice

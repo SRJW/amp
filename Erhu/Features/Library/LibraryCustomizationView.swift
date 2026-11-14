@@ -15,23 +15,24 @@ struct LibraryCustomizationView: View {
                 Section {
                     ForEach(LibraryCategory.ordered(storedOrder)) { category in
                         let visible = !LibraryCategory.hidden(hiddenSections).contains(category)
-                        Button { toggle(category) } label: {
-                            HStack {
-                                Label(category.title, systemImage: category.icon).foregroundStyle(palette.onSurface)
-                                Spacer()
+                        HStack {
+                            Label(category.title, systemImage: category.icon).foregroundStyle(palette.onSurface)
+                            Spacer()
+                            Button { toggle(category) } label: {
                                 Image(systemName: visible ? "eye" : "eye.slash")
                                     .font(.system(size: Self.visibilityIconSize, weight: .semibold))
                                     .foregroundStyle(visible ? palette.primary : palette.onSurfaceVariant)
                                     .frame(width: Self.rowHeight, height: Self.rowHeight)
+                                    .contentShape(Rectangle())
                             }
-                            .frame(minHeight: Self.rowHeight).contentShape(Rectangle())
+                            .buttonStyle(.plain)
+                            .accessibilityAddTraits(.isButton)
+                            .accessibilityLabel("\(visible ? LibraryCustomizationText.hide : LibraryCustomizationText.show) \(category.title)")
+                            .accessibilityValue(visible ? LibraryCustomizationText.visible : LibraryCustomizationText.hidden)
+                            .accessibilityIdentifier("libraryCategoryVisible.\(category.rawValue)")
                         }
-                        // The reorder handle remains independent from the visibility action.
-                        .buttonStyle(.borderless)
-                        .accessibilityElement(children: .ignore)
-                        .accessibilityLabel(category.title)
-                        .accessibilityValue(visible ? LibraryCustomizationText.visible : LibraryCustomizationText.hidden)
-                        .accessibilityIdentifier("libraryCategoryVisible.\(category.rawValue)")
+                        .frame(minHeight: Self.rowHeight)
+                        .accessibilityElement(children: .contain)
                     }
                     .onMove { source, destination in
                         var order = LibraryCategory.ordered(storedOrder)

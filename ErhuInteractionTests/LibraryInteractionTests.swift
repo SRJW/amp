@@ -8,16 +8,17 @@ final class LibraryInteractionTests: XCTestCase {
         app.buttons["appSection.library"].tap()
         app.buttons["Library options"].tap()
         app.buttons["customizeLibrary"].tap()
-        let albumsVisibility = app.buttons["libraryCategoryVisible.albums"]
-        XCTAssertTrue(albumsVisibility.waitForExistence(timeout: 10))
-        // The list must already be populated, without touching Reset or another toolbar action.
-        if albumsVisibility.value as? String == "Hidden" { albumsVisibility.tap() }
-        albumsVisibility.tap()
-        let hidden = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            albumsVisibility.value as? String == "Hidden"
+        let hideAlbums = app.buttons["Hide Albums"]
+        let showAlbums = app.buttons["Show Albums"]
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            hideAlbums.exists || showAlbums.exists
         }, object: nil)
-        XCTAssertEqual(XCTWaiter.wait(for: [hidden], timeout: 5), .completed,
-                       "Tapping a section must change its visibility before closing the editor")
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 10), .completed,
+                       "The editor must show its sections immediately, without Reset")
+        if showAlbums.exists { showAlbums.tap() }
+        hideAlbums.tap()
+        XCTAssertTrue(showAlbums.waitForExistence(timeout: 5), "The eye action must update before closing the editor")
+        XCTAssertEqual(showAlbums.value as? String, "Hidden")
         app.buttons["Done"].tap()
         XCTAssertFalse(app.buttons["libraryCategory.albums"].exists)
         app.terminate(); app.launch()

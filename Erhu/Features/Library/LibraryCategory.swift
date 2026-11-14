@@ -60,7 +60,9 @@ enum LibraryCategory: String, CaseIterable, Identifiable {
 
 enum LibraryCustomizationText {
     static let action = "Customize Library"
-    static let instructions = "Drag to reorder. Tap a section to show or hide it."
+    static let instructions = "Drag to reorder. Tap the eye to show or hide a section."
+    static let hide = "Hide"
+    static let show = "Show"
     static let visible = "Visible"
     static let hidden = "Hidden"
     static let empty = "All sections are hidden. Choose which sections appear in Library."
