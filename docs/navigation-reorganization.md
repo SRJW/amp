@@ -33,3 +33,5 @@ GitHub Actions compila y empaqueta el IPA en macOS. La comprobación nativa cubr
 En el iPhone aún hay que comprobar el comportamiento de la tarjeta del Centro de control y bloqueo con los logs `Documents/Diagnostics/lifecycle.log`; el simulador no reproduce el re-firmado de FlareStore. Que no haya logs de primer plano indicaría que iOS no está abriendo el proceso; no se fuerza navegación en todos los regresos para ocultar esa diferencia.
 
 Entrega: `v0.1.0-amp.90`. IPA descargado y verificado: versión y build propios, modo de audio en segundo plano y ausencia del modelo de VYBE. Las tres pruebas nativas de cierre del reproductor, historial/selección/borrado y navegación/segundo plano pasaron en la revisión final. Durante la implementación también pasaron 30 pruebas de rutas, formatos y audio, y 26 de renderizado y animación; los dos modos de waveform y los controles de reproducción conservaron sus comprobaciones.
+
+Los ajustes posteriores y la entrega 103, junto con las pruebas y el diagnóstico de la tarjeta del Centro de control, están en [player-library-follow-up.md](player-library-follow-up.md).
