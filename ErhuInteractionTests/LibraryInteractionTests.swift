@@ -8,11 +8,16 @@ final class LibraryInteractionTests: XCTestCase {
         app.buttons["appSection.library"].tap()
         app.buttons["Library options"].tap()
         app.buttons["customizeLibrary"].tap()
-        let albumsSwitch = app.switches["libraryCategoryVisible.albums"]
-        XCTAssertTrue(albumsSwitch.waitForExistence(timeout: 10))
+        let albumsVisibility = app.buttons["libraryCategoryVisible.albums"]
+        XCTAssertTrue(albumsVisibility.waitForExistence(timeout: 10))
         // The list must already be populated, without touching Reset or another toolbar action.
-        if albumsSwitch.value as? String == "0" { albumsSwitch.tap() }
-        albumsSwitch.tap()
+        if albumsVisibility.value as? String == "Hidden" { albumsVisibility.tap() }
+        albumsVisibility.tap()
+        let hidden = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            albumsVisibility.value as? String == "Hidden"
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [hidden], timeout: 5), .completed,
+                       "Tapping a section must change its visibility before closing the editor")
         app.buttons["Done"].tap()
         XCTAssertFalse(app.buttons["libraryCategory.albums"].exists)
         app.terminate(); app.launch()

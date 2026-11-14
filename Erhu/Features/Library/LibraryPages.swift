@@ -9,8 +9,8 @@ struct LibraryOverviewView: View {
     @Environment(AppRouter.self) private var router
     @Environment(LibraryStore.self) private var library
     @State private var releases = ReleaseChecker.shared
-    @AppStorage("library.overview.sectionOrder") private var storedOrder = "songs,albums,artists,playlists,mostPlayed,recentlyPlayed,recentlyAdded,favorites,folders,albumArtists,radio"
-    @AppStorage("library.overview.hiddenSections") private var hiddenSections = ""
+    @AppStorage(LibraryCustomizationPreferences.orderKey) private var storedOrder = LibraryCustomizationPreferences.defaultOrder
+    @AppStorage(LibraryCustomizationPreferences.hiddenKey) private var hiddenSections = ""
     @State private var showsOrder = false
     var body: some View {
         LibraryRootScrollView {
@@ -49,51 +49,10 @@ struct LibraryOverviewView: View {
                 .accessibilityLabel("Library options")
             }
         }
-        .sheet(isPresented: $showsOrder) {
-            NavigationStack {
-                List {
-                    Section {
-                        ForEach(LibraryCategory.ordered(storedOrder)) { category in
-                            Toggle(isOn: visibility(of: category)) { Label(category.title, systemImage: category.icon) }
-                                .toggleStyle(.switch)
-                                .accessibilityIdentifier("libraryCategoryVisible.\(category.rawValue)")
-                        }
-                        .onMove { source, destination in
-                            var editingOrder = LibraryCategory.ordered(storedOrder)
-                            editingOrder.move(fromOffsets: source, toOffset: destination)
-                            storedOrder = editingOrder.map(\.rawValue).joined(separator: ",")
-                        }
-                    } footer: { Text(LibraryCustomizationText.instructions) }
-                }
-                .environment(\.editMode, .constant(.active))
-                .navigationTitle(LibraryCustomizationText.action)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Menu {
-                            Button("Restore defaults") {
-                                storedOrder = LibraryCategory.allCases.map(\.rawValue).joined(separator: ",")
-                                hiddenSections = ""
-                            }
-                        } label: { Image(systemName: "ellipsis") }
-                        .accessibilityLabel("Customization options")
-                    }
-                    ToolbarItem(placement: .confirmationAction) { Button("Done") { showsOrder = false } }
-                }
-            }
-        }
+        .sheet(isPresented: $showsOrder) { LibraryCustomizationView() }
     }
 
-    private func customize() {
-        showsOrder = true
-    }
-
-    private func visibility(of category: LibraryCategory) -> Binding<Bool> {
-        Binding(get: { !LibraryCategory.hidden(hiddenSections).contains(category) }, set: { visible in
-            var hidden = LibraryCategory.hidden(hiddenSections)
-            if visible { hidden.remove(category) } else { hidden.insert(category) }
-            hiddenSections = hidden.map(\.rawValue).sorted().joined(separator: ",")
-        })
-    }
+    private func customize() { showsOrder = true }
 }
 
 struct LibraryShelfView: View {

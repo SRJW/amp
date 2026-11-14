@@ -60,7 +60,9 @@ enum LibraryCategory: String, CaseIterable, Identifiable {
 
 enum LibraryCustomizationText {
     static let action = "Customize Library"
-    static let instructions = "Drag to reorder. Turn off sections to hide them."
+    static let instructions = "Drag to reorder. Tap a section to show or hide it."
+    static let visible = "Visible"
+    static let hidden = "Hidden"
     static let empty = "All sections are hidden. Choose which sections appear in Library."
 }
 
@@ -103,4 +105,11 @@ struct CategoryHeader<Options: View>: View {
                 .background(.primary.opacity(selecting && id == "songsSelect" ? 0.15 : 0.04), in: Capsule())
         }.accessibilityLabel(title).accessibilityIdentifier(id)
     }
+}
+
+
+enum LibraryCustomizationPreferences {
+    static let orderKey = "library.overview.sectionOrder"
+    static let hiddenKey = "library.overview.hiddenSections"
+    static let defaultOrder = LibraryCategory.allCases.map(\.rawValue).joined(separator: ",")
 }
