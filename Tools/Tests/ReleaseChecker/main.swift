@@ -10,6 +10,20 @@ private actor ReleaseHTTP: HTTPClient {
     }
 }
 
+/// CI-only authentication avoids the shared runner IP's anonymous API quota.
+/// This file is compiled as a test executable and is never included in the app.
+private struct CIReleaseHTTP: HTTPClient {
+    let token: String?
+    func get(_ url: URL, headers: [String: String]) async throws -> (Data, HTTPURLResponse) {
+        var requestHeaders = headers
+        if url.host == "api.github.com", url.path == "/repos/SRJW/amp/releases",
+           let token, !token.isEmpty {
+            requestHeaders["Authorization"] = "Bearer " + token
+        }
+        return try await URLSessionHTTPClient(cachePolicy: .reloadIgnoringLocalCacheData).get(url, headers: requestHeaders)
+    }
+}
+
 @main struct ReleaseChecks {
     @MainActor static func main() async throws {
         let resigned: [String: Any] = ["ErhuReleaseTag": "v0.1.0-amp.80", "CFBundleShortVersionString": "1.0.1",
@@ -43,7 +57,8 @@ private actor ReleaseHTTP: HTTPClient {
         let reopened = ReleaseChecker(client: client, installed: "v0.1.0-amp.35", defaults: defaults, animated: false)
         precondition(reopened.state == .available(update))
         // Verify that the current public GitHub response actually passes the app's decoder and filter.
-        let live = ReleaseChecker(installed: "v0.1.0-amp.1", defaults: defaults, animated: false)
+        let live = ReleaseChecker(client: CIReleaseHTTP(token: ProcessInfo.processInfo.environment["AMP_CI_GITHUB_TOKEN"]),
+                                  installed: "v0.1.0-amp.1", defaults: defaults, animated: false)
         await live.check(manual: true)
         guard case .available(let release) = live.state else {
             fatalError("Live GitHub release detection failed: \(live.state)")

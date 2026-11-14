@@ -58,6 +58,8 @@ jobs:
         xcrun swiftc Erhu/Core/Common/PreparedAudioShare.swift Tools/Tests/AudioShare/main.swift -o "$RUNNER_TEMP/amp-share-tests"
         "$RUNNER_TEMP/amp-share-tests"
     - name: Test release detection against GitHub
+      env:
+        AMP_CI_GITHUB_TOKEN: ${{ github.token }}
       run: |
         xcrun swiftc -target "$(uname -m)-apple-macosx14.0" -parse-as-library Erhu/Core/Common/HTTPClient.swift Erhu/Core/Settings/ReleaseChecker.swift Tools/Tests/ReleaseChecker/main.swift -o "$RUNNER_TEMP/amp-release-tests"
         "$RUNNER_TEMP/amp-release-tests"
