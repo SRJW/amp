@@ -38,6 +38,7 @@ final class PlayerController {
     @ObservationIgnored private lazy var loopPlayer = ControllerLoopPlayer(controller: self)
     @ObservationIgnored private var loopTarget: (positionMs: Int64, onReached: () -> Void)?
     @ObservationIgnored private var timer: Timer?
+    @ObservationIgnored private var displayTimeline = PlaybackDisplayTimeline()
     @ObservationIgnored private var ticks = 0
     enum VisualMotion: Hashable { case carousel, presentation }
     @ObservationIgnored private var visualMotion: Set<VisualMotion> = []
@@ -353,10 +354,15 @@ final class PlayerController {
         return position.positionMs
     }
 
-    func displayPositionMs() -> Int64 {
-        guard state.isPlaying, let position = engine.displayPosition(),
-              position.entryId == state.currentEntry?.id else { return currentPositionMs() }
-        return position.positionMs
+    func displayPositionMs(smoothed: Bool = true) -> Int64 {
+        guard let entry = state.currentEntry else { displayTimeline.reset(); return 0 }
+        let sampled = engine.displayPosition()
+        let position: Int64
+        if let sampled, sampled.entryId == entry.id { position = sampled.positionMs }
+        else { position = currentPositionMs() }
+        guard smoothed else { return position }
+        return displayTimeline.position(audioMs: position, entry: entry.id,
+            uptime: ProcessInfo.processInfo.systemUptime, durationMs: state.durationMs, playing: state.isPlaying)
     }
 
     private func scheduleLoop(at positionMs: Int64, _ onReached: @escaping () -> Void) -> Cancellable {
@@ -602,6 +608,7 @@ final class PlayerController {
     }
 
     private func setPosition(_ positionMs: Int64) {
+        displayTimeline.reset()
         state.positionMs = positionMs
         clock.positionMs = positionMs
     }

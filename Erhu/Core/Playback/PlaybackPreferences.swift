@@ -9,6 +9,36 @@ enum PlaybackVisualPosition {
     }
 }
 
+/// A display clock advances every frame even when the audio render clock publishes in buffers.
+/// Small timing differences are corrected gradually; explicit seeks reset it immediately.
+struct PlaybackDisplayTimeline {
+    static let correctionSeconds = 0.35
+    private var entryID: UUID?
+    private var lastUptime: Double?
+    private var displayedMs = 0.0
+
+    mutating func reset() { entryID = nil; lastUptime = nil }
+
+    mutating func position(audioMs: Int64, entry: UUID, uptime: Double, durationMs: Int64, playing: Bool) -> Int64 {
+        let audio = Double(min(max(audioMs, 0), max(durationMs, 0)))
+        guard playing, uptime.isFinite, entryID == entry, let previousUptime = lastUptime,
+              uptime >= previousUptime else {
+            entryID = playing ? entry : nil
+            lastUptime = uptime.isFinite ? uptime : nil
+            displayedMs = audio
+            return Int64(audio)
+        }
+        let elapsed = uptime - previousUptime
+        let predicted = displayedMs + elapsed * 1000
+        let correction = min(elapsed / Self.correctionSeconds, 1)
+        let corrected = predicted + (audio - predicted) * correction
+        // Do not move backwards to chase a late buffer. A long gap means the view was suspended.
+        displayedMs = min(max(elapsed >= Self.correctionSeconds ? audio : max(displayedMs, corrected), 0), Double(max(durationMs, 0)))
+        lastUptime = uptime
+        return Int64(displayedMs.rounded())
+    }
+}
+
 enum PlayerWaveformMode: String, CaseIterable, Identifiable {
     case fullTrack, scrolling
     var id: String { rawValue }

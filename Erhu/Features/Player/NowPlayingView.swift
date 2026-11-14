@@ -102,7 +102,7 @@ struct NowPlayingView: View {
         .contentShape(Rectangle())
         .overlay(alignment: .bottom) { toast }
         .animation(.easeInOut(duration: 0.2), value: actions.message)
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(artworkControls ? nil : .dark)
         .routerSheets(active: true)
         .sheet(isPresented: $showsQueue) { QueueSheet() }
         .sheet(item: $artworkTarget) { ArtworkPickerSheet(target: $0) }
@@ -436,7 +436,7 @@ private struct ProgressSection<Controls: View>: View {
             ZStack {
                 TimelineView(.animation(minimumInterval: 1.0 / 60,
                                         paused: !state.isPlaying || previewMs != nil || playerInMotion)) { _ in
-                    let position = player.displayPositionMs()
+                    let position = player.displayPositionMs(smoothed: waveformMode == PlayerWaveformMode.scrolling.rawValue)
                     WaveformSeekBar(levels: levelsSongID == song.id ? levels : nil, positionMs: position,
                                     durationMs: duration, bookmarks: bookmarks,
                                     loop: state.abLoop?.songId == song.id ? state.abLoop : nil,

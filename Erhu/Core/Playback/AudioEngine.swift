@@ -377,10 +377,13 @@ final class AudioEngine {
     /// Rendering advances by audio buffers. Only the display interpolates between them;
     /// scheduling, seeking, loops and Now Playing continue to use the real render position.
     func displayPosition() -> (entryId: UUID, positionMs: Int64)? {
-        guard let segment = currentSegment(active) else { return nil }
-        let position = position(of: active, in: segment)
         guard active.player.isPlaying, let render = active.player.lastRenderTime,
-              render.isHostTimeValid else { return (segment.entryId, position) }
+              render.isHostTimeValid, let sample = active.player.playerTime(forNodeTime: render) else { return currentPosition() }
+        // Read sample and host time from one snapshot: mixing successive render buffers jitters.
+        let played = max(sample.sampleTime, 0)
+        guard let segment = active.segments.last(where: { $0.deckStartFrame <= played }) ?? active.segments.first else { return nil }
+        let frames = segment.fileStartFrame + min(max(played - segment.deckStartFrame, 0), AVAudioFramePosition(segment.frameCount))
+        let position = Int64(Double(frames) / segment.file.processingFormat.sampleRate * 1000)
         let now = AVAudioTime.seconds(forHostTime: mach_absolute_time())
         let renderedAt = AVAudioTime.seconds(forHostTime: render.hostTime)
         let duration = Int64(Double(segment.file.length) / segment.file.processingFormat.sampleRate * 1000)

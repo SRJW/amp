@@ -11,6 +11,27 @@ final class PlaybackPresentationTests: XCTestCase {
         XCTAssertEqual(PlaybackVisualPosition.interpolated(10_000, elapsed: -1, duration: 60_000), 10_000)
     }
 
+    func testScrollingClockMovesBetweenBufferedUpdatesAndResetsForSeeks() {
+        var clock = PlaybackDisplayTimeline()
+        let entry = UUID()
+        var previous: Int64 = 0
+        for frame in 0...180 {
+            let uptime = Double(frame) / 60
+            let audio = Int64(floor(uptime / 0.1) * 100)
+            let position = clock.position(audioMs: audio, entry: entry, uptime: uptime, durationMs: 60_000, playing: true)
+            if frame > 1 {
+                XCTAssertGreaterThan(position - previous, 0, "Every frame advances even between buffers")
+                XCTAssertLessThanOrEqual(position - previous, 30, "A buffer update never jumps the drawing by 100 ms")
+            }
+            previous = position
+        }
+        XCTAssertLessThan(abs(previous - 3000), 100)
+        clock.reset()
+        XCTAssertEqual(clock.position(audioMs: 5000, entry: entry, uptime: 4, durationMs: 60_000, playing: true), 5000)
+        XCTAssertEqual(clock.position(audioMs: 5020, entry: entry, uptime: 4.1, durationMs: 60_000, playing: false), 5020)
+        XCTAssertEqual(clock.position(audioMs: 0, entry: UUID(), uptime: 4.2, durationMs: 60_000, playing: true), 0)
+    }
+
     func testNewBackgroundSettingsPreservePreviouslySavedSliders() throws {
         let json = #"{"fadeStart":0.3,"blur":42,"details":0.7,"intensity":0.8,"saturation":1.5}"#
         var saved = try JSONDecoder().decode(PlayerBackgroundSettings.self, from: Data(json.utf8))
@@ -46,6 +67,8 @@ final class PlaybackPresentationTests: XCTestCase {
     func testArtworkTransportSymbolsContrastWithTheirFill() {
         for color: UInt32 in [0xFFFF3300, 0xFF0066FF, 0xFF00AA55, 0xFFFFFF00, 0xFF000000, 0xFFFFFFFF] {
             let sampled = LyricsPalette.fromPixels(Array(repeating: color, count: 64))
+            XCTAssertGreaterThan(relativeLuminance(sampled.forScheme(.light).buttonFill), relativeLuminance(sampled.forScheme(.dark).buttonFill))
+            XCTAssertNil(ThemeChoice.artwork.colorScheme, "Artwork colours must follow the iPhone's appearance")
             for palette in [sampled.forScheme(.dark), sampled.forScheme(.light)] {
                 XCTAssertGreaterThanOrEqual(contrast(palette.onButtonFill, palette.buttonFill), 4.5)
             }

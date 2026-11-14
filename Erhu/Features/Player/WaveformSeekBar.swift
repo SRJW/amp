@@ -134,8 +134,12 @@ struct WaveformSeekBar: View {
                 } else { level = 0.12 }
                 let height = max(CGFloat(level) * size.height * 0.75, 2)
                 let rect = CGRect(x: x - barWidth / 2, y: (size.height - height) / 2, width: barWidth, height: height)
-                context.fill(Path(roundedRect: rect, cornerRadius: barWidth / 2),
-                             with: .color(.white.opacity(x <= playedX ? 0.25 : 0.70)))
+                let path = Path(roundedRect: rect, cornerRadius: barWidth / 2)
+                context.fill(path, with: .color(.white.opacity(0.70)))
+                var played = context
+                played.clip(to: Path(CGRect(x: 0, y: 0, width: playedX, height: size.height)))
+                played.blendMode = .copy
+                played.fill(path, with: .color(.white.opacity(0.25)))
             }
         } else {
             for (i, level) in bars.enumerated() {
