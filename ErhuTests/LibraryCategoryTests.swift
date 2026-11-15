@@ -31,6 +31,16 @@ final class LibraryCategoryTests: XCTestCase {
         XCTAssertEqual(SongAlphabet.anchors([songs[1]]), ["A": 2])
     }
 
+    func testEmptyAlphabetLettersResolveToPopulatedGroupsIncludingTheEnds() {
+        let anchors: [String: Int64] = ["H": 1, "Y": 2, "Z": 3]
+        XCTAssertEqual(SongAlphabet.target(for: "A", anchors: anchors), 1)
+        XCTAssertEqual(SongAlphabet.target(for: "M", anchors: anchors), 2)
+        XCTAssertEqual(SongAlphabet.target(for: "Z", anchors: anchors), 3)
+        XCTAssertEqual(SongAlphabet.target(for: "#", anchors: anchors), 3)
+        XCTAssertNil(SongAlphabet.target(for: "A", anchors: [:]))
+        XCTAssertNil(SongAlphabet.target(for: "?", anchors: anchors))
+    }
+
     func testAdditionalSearchTypesRespectFolderPathsAndAlbumArtists() {
         let song = Song(id: 1, title: "Track", artist: "Guest", album: "Record", durationMs: 1, path: "Colección/track.m4a")
         let artist = Artist(id: 9, name: "Álvaro", songCount: 1, albumCount: 1)

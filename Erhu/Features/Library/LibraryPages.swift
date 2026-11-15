@@ -111,6 +111,7 @@ struct SongList: View {
                             onPlay?()
                             onPlaySong?(song)
                             actions.play(songs, startIndex: index, origin: origin, source: source)
+                            router.openPlayer()
                         }
                     }
                 }

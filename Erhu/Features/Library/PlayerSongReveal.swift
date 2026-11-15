@@ -4,6 +4,7 @@ struct SongRevealRequest: Hashable {
     let id = UUID()
     let songID: Int64
     let destination: Route
+    var dismissesPlayer = false
 }
 
 extension Song {
@@ -18,6 +19,7 @@ struct PlayerSongReveal<Content: View>: View {
     var alphabetEnabled = false
     @ViewBuilder let content: Content
     @Environment(AppRouter.self) private var router
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var readyRequest: SongRevealRequest? {
         guard let request = router.songReveal, request.destination == destination,
@@ -28,10 +30,14 @@ struct PlayerSongReveal<Content: View>: View {
     var body: some View {
         ScrollViewReader { proxy in
             content
-                .padding(.trailing, alphabetEnabled ? 24 : 0)
+                .padding(.trailing, alphabetEnabled ? SongAlphabetMetrics.width : 0)
                 .overlay(alignment: .trailing) {
                     if alphabetEnabled {
-                        SongAlphabetIndex(songs: songs) { id in proxy.scrollTo(Self.anchor(id), anchor: .top) }
+                        SongAlphabetIndex(songs: songs) { id in
+                            withAnimation(reduceMotion ? nil : .easeOut(duration: SongAlphabetMetrics.scrollDuration)) {
+                                proxy.scrollTo(Self.anchor(id), anchor: .top)
+                            }
+                        }
                     }
                 }
                 .task(id: readyRequest) {
@@ -44,13 +50,15 @@ struct PlayerSongReveal<Content: View>: View {
                 }
                 do {
                     // Let the destination and its asynchronously loaded rows finish layout.
-                    try await Task.sleep(for: .seconds(AppNavigationMetrics.duration + PlayerButtonConstants.revealDelaySeconds))
+                    // Prepare the target under the player, before revealing the library.
+                    try await Task.sleep(for: .seconds(PlayerButtonConstants.revealDelaySeconds))
                     proxy.scrollTo(Self.anchor(request.songID), anchor: .center)
                     // A lazy row can refine its height when artwork and metadata arrive.
                     try await Task.sleep(for: .seconds(PlayerButtonConstants.revealDelaySeconds))
                     proxy.scrollTo(Self.anchor(request.songID), anchor: .center)
-                    router.highlightedSongID = request.songID
-                    try await Task.sleep(for: .seconds(PlayerButtonConstants.highlightSeconds))
+                    router.completeSongReveal(request)
+                    try await Task.sleep(for: .seconds(PlayerButtonConstants.highlightSeconds
+                        + (request.dismissesPlayer ? PlayerMotionTiming.duration : 0)))
                 } catch { /* Navigation cancels the transient highlight. */ }
             }
         }

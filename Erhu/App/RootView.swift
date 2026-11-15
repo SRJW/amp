@@ -23,17 +23,23 @@ struct RootView: View {
         @Bindable var library = library
         ZStack(alignment: .bottom) {
             palette.background.ignoresSafeArea()
-            sectionStack(router.section)
-                .id(router.section)
-                .allowsHitTesting(!router.showsNowPlaying && router.presentedTool == nil)
-                .accessibilityHidden(router.showsNowPlaying || router.presentedTool != nil)
-            if !router.showsNowPlaying && router.presentedTool == nil {
-                AppBottomBar().zIndex(2)
+            ZStack(alignment: .bottom) {
+                sectionStack(router.section)
+                    .id(router.section)
+                    .allowsHitTesting(!router.showsNowPlaying && router.presentedTool == nil)
+                    .accessibilityHidden(router.showsNowPlaying || router.presentedTool != nil)
+                if router.presentedTool == nil {
+                    AppBottomBar()
+                        .allowsHitTesting(!router.showsNowPlaying)
+                        .accessibilityHidden(router.showsNowPlaying)
+                        .zIndex(2)
+                }
+                if let message = actions.message, !router.showsNowPlaying {
+                    LibraryChromeToast(text: message, id: actions.messageID, hasSong: player.state.currentSong != nil)
+                        .zIndex(2)
+                }
             }
-            if let message = actions.message, !router.showsNowPlaying {
-                LibraryChromeToast(text: message, id: actions.messageID, hasSong: player.state.currentSong != nil)
-                    .zIndex(2)
-            }
+            .modifier(PlayerLibraryMotion(progress: playerMotion.isPresented ? playerMotion.progress : 0, reduceMotion: reduceMotion))
         }
         .overlay {
             GeometryReader { geometry in

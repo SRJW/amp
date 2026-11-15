@@ -13,15 +13,37 @@ enum SongAlphabet {
         for song in songs where result[key(song.title)] == nil { result[key(song.title)] = song.id }
         return result
     }
+
+    /// Empty letters still have a position in the index; seek to the next populated group.
+    static func target(for letter: String, anchors: [String: Int64]) -> Int64? {
+        guard let index = letters.firstIndex(of: letter) else { return nil }
+        let resolved = letters[index...].first { anchors[$0] != nil }
+            ?? letters[...index].last { anchors[$0] != nil }
+        return resolved.flatMap { anchors[$0] }
+    }
+}
+
+enum SongAlphabetMetrics {
+    static let width: CGFloat = 44
+    static let rowHeight: CGFloat = 14
+    static let maximumHeight: CGFloat = 360
+    static let letterSize: CGFloat = 10
+    static let bubbleSize: CGFloat = 64
+    static let bubbleTextSize: CGFloat = 38
+    static let bubbleGap: CGFloat = 4
+    static let scrollDuration = 0.16
+    static let bubbleDuration = 0.12
+    static let accessibilityLabel = "Song alphabet index"
 }
 
 struct SongAlphabetIndex: View {
     let songs: [Song]
     let scrollTo: (Int64) -> Void
     @State private var active: String?
+    @State private var scrubbing = false
+    @State private var touchY: CGFloat = 0
     @Environment(\.palette) private var palette
-    private static let width: CGFloat = 24
-    private static let height: CGFloat = 14
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let anchors = SongAlphabet.anchors(songs)
@@ -29,35 +51,54 @@ struct SongAlphabetIndex: View {
         Group {
             if available.count > 1 {
                 GeometryReader { geometry in
-                    let rowHeight = min(Self.height, geometry.size.height / CGFloat(SongAlphabet.letters.count))
+                    let rowHeight = geometry.size.height / CGFloat(SongAlphabet.letters.count)
                     VStack(spacing: 0) {
                         ForEach(SongAlphabet.letters, id: \.self) { letter in
-                            Text(letter).font(.system(size: 10, weight: .bold))
+                            Text(letter).font(.system(size: SongAlphabetMetrics.letterSize, weight: .bold))
                                 .opacity(anchors[letter] == nil ? 0.25 : 1)
-                                .frame(width: Self.width, height: rowHeight)
+                                .frame(width: SongAlphabetMetrics.width, height: rowHeight)
+                                .background {
+                                    if scrubbing && active == letter {
+                                        Capsule().fill(palette.primary.opacity(0.16))
+                                    }
+                                }
                         }
                     }
                     .foregroundStyle(palette.primary)
                     .contentShape(Rectangle())
                     .gesture(DragGesture(minimumDistance: 0).onChanged { value in
                         let index = min(max(Int(value.location.y / max(rowHeight, 1)), 0), SongAlphabet.letters.count - 1)
-                        let forward = SongAlphabet.letters[index...].first { anchors[$0] != nil }
-                        let backward = SongAlphabet.letters[...index].last { anchors[$0] != nil }
-                        if let letter = forward ?? backward, active != letter, let id = anchors[letter] {
-                            active = letter; scrollTo(id)
+                        touchY = min(max(value.location.y, SongAlphabetMetrics.bubbleSize / 2),
+                                     geometry.size.height - SongAlphabetMetrics.bubbleSize / 2)
+                        scrubbing = true
+                        let letter = SongAlphabet.letters[index]
+                        if active != letter, let id = SongAlphabet.target(for: letter, anchors: anchors) {
+                            active = letter
+                            scrollTo(id)
                         }
-                    }.onEnded { _ in active = nil })
-                }
-                .frame(width: Self.width, height: min(CGFloat(SongAlphabet.letters.count) * Self.height, 360))
-                .overlay(alignment: .leading) {
-                    if let active {
-                        Text(active).font(.largeTitle.bold()).padding(Spacing.md)
-                            .background(palette.surface, in: RoundedRectangle(cornerRadius: Radius.medium))
-                            .offset(x: -64).allowsHitTesting(false)
+                    }.onEnded { _ in
+                        scrubbing = false
+                        active = nil
+                    })
+                    .overlay(alignment: .topLeading) {
+                        if scrubbing, let active {
+                            Text(active).font(.system(size: SongAlphabetMetrics.bubbleTextSize, weight: .bold))
+                                .foregroundStyle(palette.onSurface)
+                                .frame(width: SongAlphabetMetrics.bubbleSize, height: SongAlphabetMetrics.bubbleSize)
+                                .background(palette.surface, in: RoundedRectangle(cornerRadius: Radius.medium))
+                                .position(x: -SongAlphabetMetrics.bubbleSize / 2 - SongAlphabetMetrics.bubbleGap, y: touchY)
+                                .transition(.opacity)
+                                .allowsHitTesting(false)
+                                .accessibilityHidden(true)
+                        }
                     }
                 }
+                .frame(width: SongAlphabetMetrics.width,
+                       height: min(CGFloat(SongAlphabet.letters.count) * SongAlphabetMetrics.rowHeight, SongAlphabetMetrics.maximumHeight))
+                .animation(reduceMotion ? nil : .easeOut(duration: SongAlphabetMetrics.bubbleDuration), value: scrubbing)
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Song alphabet index")
+                .accessibilityLabel(SongAlphabetMetrics.accessibilityLabel)
+                .accessibilityIdentifier("songAlphabetIndex")
                 .accessibilityValue(active ?? available.first ?? "")
                 .accessibilityAdjustableAction { direction in
                     let current = available.firstIndex(of: active ?? "") ?? 0

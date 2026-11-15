@@ -127,6 +127,8 @@ final class AppRouter {
     }
 
     func activate(_ target: LibrarySection) {
+        songReveal = nil
+        highlightedSongID = nil
         presentedTool = nil
         showsNowPlaying = false
         showsDrawer = false
@@ -135,6 +137,8 @@ final class AppRouter {
     }
 
     func openPlayer() {
+        songReveal = nil
+        highlightedSongID = nil
         presentedTool = nil
         showsDrawer = false
         showsNowPlaying = true
@@ -177,13 +181,16 @@ final class AppRouter {
     /// Resolve the current database entry before navigating; never alter playback.
     @discardableResult
     func revealSong(_ song: Song, album: Bool, source: PlaybackSource?, library: LibraryStore) -> Bool {
-        showsNowPlaying = false
+        let dismissesPlayer = showsNowPlaying
         showsSearch = false
         songReveal = nil
         highlightedSongID = nil
         select(.library)
         guard let current = library.songs.first(where: { $0.id == song.id }),
-              PreparedAudioShare.available(current.url) else { return false }
+              PreparedAudioShare.available(current.url) else {
+            showsNowPlaying = false
+            return false
+        }
         let destination: Route
         if !album {
             allSongsRevealID = UUID()
@@ -194,9 +201,16 @@ final class AppRouter {
         } else {
             destination = .songFolder((current.path as NSString).deletingLastPathComponent)
         }
-        songReveal = SongRevealRequest(songID: current.id, destination: destination)
+        songReveal = SongRevealRequest(songID: current.id, destination: destination, dismissesPlayer: dismissesPlayer)
         open(destination)
         return true
+    }
+
+    /// Reveal only after the existing list has mounted and positioned the exact file.
+    func completeSongReveal(_ request: SongRevealRequest) {
+        guard songReveal?.id == request.id, section == .library else { return }
+        highlightedSongID = request.songID
+        if request.dismissesPlayer { showsNowPlaying = false }
     }
 
     func songActions(_ actions: LibraryActions, source: PlaybackSource? = nil) -> SongActions {

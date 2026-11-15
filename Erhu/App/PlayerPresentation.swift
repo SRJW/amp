@@ -75,8 +75,43 @@ struct PlayerPresentation: View {
 
     var body: some View {
         NowPlayingView(drag: drag)
+            .modifier(PlayerScreenScale(progress: drag.progress, reduceMotion: reduceMotion, meter: drag.meter))
             .environment(\.playerInMotion, drag.isMoving)
             .onAppear { drag.finishEntrance(reduceMotion: reduceMotion) }
+    }
+}
+
+enum PlayerNavigationMotion {
+    static let libraryZoom: CGFloat = 0.16
+    static let playerZoom: CGFloat = 0.10
+}
+
+/// Native interpolation paints both screens without rebuilding the song list each frame.
+struct PlayerLibraryMotion: AnimatableModifier {
+    var progress: CGFloat
+    let reduceMotion: Bool
+    var animatableData: CGFloat {
+        get { progress }
+        set { progress = newValue }
+    }
+    func body(content: Content) -> some View {
+        let amount = progress.clamped(0, 1)
+        content
+            .scaleEffect(reduceMotion ? 1 : 1 + PlayerNavigationMotion.libraryZoom * amount)
+            .opacity(1 - PlayerCoverGeometry.chromeOpacity(amount))
+    }
+}
+
+struct PlayerScreenScale: AnimatableModifier {
+    var progress: CGFloat
+    let reduceMotion: Bool
+    let meter: PlayerProgressMeter
+    var animatableData: CGFloat {
+        get { progress }
+        set { progress = newValue; meter.record(progress) }
+    }
+    func body(content: Content) -> some View {
+        content.scaleEffect(reduceMotion ? 1 : 1 - PlayerNavigationMotion.playerZoom * (1 - progress.clamped(0, 1)))
     }
 }
 
@@ -285,7 +320,7 @@ final class PlayerProgressMeter: @unchecked Sendable {
 }
 
 enum PlayerMotionTiming {
-    static let duration: TimeInterval = 0.46
+    static let duration: TimeInterval = 0.32
     static func presentation(reduceMotion: Bool, duration: TimeInterval = PlayerMotionTiming.duration,
                              delta: CGFloat = 1, velocity: CGFloat? = nil) -> Animation {
         guard !reduceMotion else { return .linear(duration: 0.16) }

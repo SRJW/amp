@@ -187,7 +187,6 @@ struct NowPlayingView: View {
     }
 
     private func reveal(_ song: Song, album: Bool) {
-        close()
         if !router.revealSong(song, album: album, source: player.state.currentEntry?.source, library: library) {
             actions.show(PlayerButtonConstants.locationUnavailable)
         }

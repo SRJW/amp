@@ -29,6 +29,10 @@ final class LibraryInteractionTests: XCTestCase {
         let song = page.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "History fixture one")).firstMatch
         XCTAssertTrue(song.waitForExistence(timeout: 20))
         song.tap()
+        let openedTitle = app.buttons["nowPlayingTitle"]
+        XCTAssertTrue(openedTitle.waitForExistence(timeout: 10), "Tapping a song opens the existing full player")
+        openedTitle.tap()
+        XCTAssertTrue(page.waitForExistence(timeout: 10))
         page.buttons["sectionSearchButton"].tap()
         let field = page.textFields["sectionSearchField"]
         XCTAssertTrue(field.waitForExistence(timeout: 10))
@@ -51,16 +55,28 @@ final class LibraryInteractionTests: XCTestCase {
         let page = app.scrollViews["songsPage"]
         XCTAssertTrue(page.waitForExistence(timeout: 30))
         let target = page.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "ZZZ offscreen song")).firstMatch
-        for _ in 0..<14 {
-            if target.exists && target.isHittable { break }
-            page.swipeUp()
-        }
-        XCTAssertTrue(target.exists && target.isHittable)
+        let alphabet = app.descendants(matching: .any).matching(identifier: "songAlphabetIndex").firstMatch
+        XCTAssertTrue(alphabet.waitForExistence(timeout: 10))
+        alphabet.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.05))
+            .press(forDuration: 0.05, thenDragTo: alphabet.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.94)))
+        let atEnd = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            target.exists && target.isHittable
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [atEnd], timeout: 10), .completed)
         target.tap()
-        for _ in 0..<10 { page.swipeDown() }
+        let title = app.buttons["nowPlayingTitle"]
+        XCTAssertTrue(title.waitForExistence(timeout: 10), "A library row opens the full player directly")
+        XCTAssertEqual(title.label, "ZZZ offscreen song")
+        title.tap()
+        XCTAssertTrue(alphabet.waitForExistence(timeout: 10))
+        alphabet.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.94))
+            .press(forDuration: 0.05, thenDragTo: alphabet.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.01)))
+        let atStart = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            !(target.exists && target.isHittable)
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [atStart], timeout: 10), .completed)
         XCTAssertFalse(target.exists && target.isHittable, "The song starts outside the visible viewport")
         app.buttons["openNowPlaying"].tap()
-        let title = app.buttons["nowPlayingTitle"]
         XCTAssertTrue(title.waitForExistence(timeout: 10))
         XCTAssertEqual(title.label, "ZZZ offscreen song")
         title.tap()

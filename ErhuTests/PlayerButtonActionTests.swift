@@ -28,7 +28,10 @@ final class PlayerButtonActionTests: XCTestCase {
         XCTAssertEqual(router.section, .library)
         XCTAssertEqual(router.songReveal?.destination, .allSongs)
         XCTAssertEqual(router.songReveal?.songID, song.id)
+        XCTAssertTrue(router.showsNowPlaying, "Keep the player visible until All Songs has positioned the file")
+        router.completeSongReveal(try XCTUnwrap(router.songReveal))
         XCTAssertFalse(router.showsNowPlaying)
+        XCTAssertEqual(router.highlightedSongID, song.id)
         let firstReveal = router.allSongsRevealID
         XCTAssertTrue(router.revealSong(song, album: false, source: .album(song.albumId), library: library))
         XCTAssertEqual(router.songReveal?.destination, .allSongs)
@@ -59,5 +62,19 @@ final class PlayerButtonActionTests: XCTestCase {
         XCTAssertEqual(router.paths[.library]?.count, 0)
         XCTAssertNil(router.songReveal)
         XCTAssertNil(router.highlightedSongID)
+    }
+
+    @MainActor func testCancelledRevealCannotCloseAReopenedPlayer() throws {
+        let (library, song, folder) = try fixture()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let router = AppRouter()
+        router.openPlayer()
+        XCTAssertTrue(router.revealSong(song, album: false, source: .library, library: library))
+        let stale = try XCTUnwrap(router.songReveal)
+        router.openPlayer()
+        router.completeSongReveal(stale)
+        XCTAssertTrue(router.showsNowPlaying)
+        XCTAssertNil(router.highlightedSongID)
+        XCTAssertNil(router.songReveal)
     }
 }
