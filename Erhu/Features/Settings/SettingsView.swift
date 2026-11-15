@@ -428,6 +428,7 @@ private struct LibrarySettingsView: View {
             SettingsGroup("Navigation") {
                 SettingsValueRow(title: SongAlphabetPreferences.hapticsTitle, icon: "hand.tap") {
                     Toggle(SongAlphabetPreferences.hapticsTitle, isOn: $alphabetHaptics)
+                        .toggleStyle(.switch).fixedSize()
                 }
                 Text(SongAlphabetPreferences.hapticsDescription)
                     .font(.footnote).foregroundStyle(.secondary)
