@@ -20,6 +20,7 @@ struct PlayerSongReveal<Content: View>: View {
     @ViewBuilder let content: Content
     @Environment(AppRouter.self) private var router
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var alphabetTarget: Int64?
 
     private var readyRequest: SongRevealRequest? {
         guard let request = router.songReveal, request.destination == destination,
@@ -34,11 +35,24 @@ struct PlayerSongReveal<Content: View>: View {
                 .overlay(alignment: .trailing) {
                     if alphabetEnabled {
                         SongAlphabetIndex(songs: songs) { id in
+                            alphabetTarget = id
                             withAnimation(reduceMotion ? nil : .easeOut(duration: SongAlphabetMetrics.scrollDuration)) {
                                 proxy.scrollTo(Self.anchor(id), anchor: .top)
                             }
                         }
                     }
+                }
+                .task(id: alphabetTarget) {
+                    guard let id = alphabetTarget else { return }
+                    do {
+                        // Rapid letter changes can outrun lazy row measurement. Once the
+                        // latest scroll has settled, resolve that same identity again.
+                        try await Task.sleep(for: .seconds(SongAlphabetMetrics.scrollDuration))
+                        try Task.checkCancellation()
+                        withAnimation(reduceMotion ? nil : .easeOut(duration: SongAlphabetMetrics.scrollDuration)) {
+                            proxy.scrollTo(Self.anchor(id), anchor: .top)
+                        }
+                    } catch { /* A newer letter or navigation cancels this refinement. */ }
                 }
                 .task(id: readyRequest) {
                 guard let request = readyRequest else { return }
