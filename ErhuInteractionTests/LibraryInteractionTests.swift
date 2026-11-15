@@ -1,6 +1,36 @@
 import XCTest
 
 final class LibraryInteractionTests: XCTestCase {
+    @MainActor func testLibraryAndPlayerNavigationShareScreenCoordinates() {
+        let app = launch("player")
+        let mini = app.buttons["openNowPlaying"]
+        XCTAssertTrue(mini.waitForExistence(timeout: 30))
+        let identifiers = ["appSection.library", "appSection.equalizer", "appSection.search", "appMenu"]
+        let libraryFrames = identifiers.map { app.buttons[$0].frame }
+        func navigationMatchesLibrary() -> Bool {
+            zip(identifiers, libraryFrames).allSatisfy { identifier, expected in
+                let button = app.buttons[identifier]
+                guard button.exists && button.isHittable else { return false }
+                let actual = button.frame
+                return abs(actual.midX - expected.midX) < 0.5 && abs(actual.midY - expected.midY) < 0.5
+                    && abs(actual.width - expected.width) < 0.5 && abs(actual.height - expected.height) < 0.5
+            }
+        }
+        mini.tap()
+        XCTAssertTrue(app.buttons["nowPlayingTitle"].waitForExistence(timeout: 10))
+        let aligned = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in navigationMatchesLibrary() }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [aligned], timeout: 10), .completed,
+                       "The full player must preserve every Library navigation button's screen coordinates and size")
+        for (identifier, expected) in zip(identifiers, libraryFrames) {
+            let actual = app.buttons[identifier].frame
+            XCTAssertEqual(actual.midX, expected.midX, accuracy: 0.5, identifier)
+            XCTAssertEqual(actual.midY, expected.midY, accuracy: 0.5, identifier)
+        }
+        app.buttons["appSection.library"].tap()
+        XCTAssertTrue(mini.waitForExistence(timeout: 10))
+        XCTAssertTrue(navigationMatchesLibrary(), "Returning to Library must leave its capsule and mini player in place")
+    }
+
     @MainActor func testLibraryVisibilityPersistsAndPlayerTitleRevealsUnfilteredAllSongs() {
         let app = launch("songs")
         let page = app.scrollViews["songsPage"]

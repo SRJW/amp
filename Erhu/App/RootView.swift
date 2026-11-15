@@ -70,6 +70,7 @@ struct RootView: View {
         .animation(.easeInOut(duration: 0.2), value: actions.message)
         .environment(chrome)
         .environment(playerMotion)
+        .modifier(AppNavigationSafeArea())
         .environment(\.visualWorkBudget, visualBudget)
         .onReceive(NotificationCenter.default.publisher(for: .NSProcessInfoPowerStateDidChange).receive(on: RunLoop.main)) { _ in visualBudget = .current }
         .onReceive(NotificationCenter.default.publisher(for: ProcessInfo.thermalStateDidChangeNotification).receive(on: RunLoop.main)) { _ in visualBudget = .current }

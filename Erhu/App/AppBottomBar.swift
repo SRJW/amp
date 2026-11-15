@@ -4,6 +4,11 @@ enum AppNavigationMetrics {
     static let duration = 0.3
     static let stripHeight: CGFloat = MiniPlayerMetrics.height
     static let buttonsHeight: CGFloat = 48
+    static let horizontalInset: CGFloat = Spacing.md
+    static let bottomPadding: CGFloat = Spacing.xs
+    static func centreY(height: CGFloat, safeAreaBottom: CGFloat) -> CGFloat {
+        height - max(safeAreaBottom, 0) - bottomPadding - buttonsHeight / 2
+    }
     static let reservedHeight: CGFloat = stripHeight + buttonsHeight + 28
     static let menuWidth: CGFloat = 320
     static let menuBottom: CGFloat = 64
@@ -42,7 +47,7 @@ struct AppBottomBar: View {
             .background { Color.clear.chromeSurface(enabled: settings.glassEnabled).allowsHitTesting(false) }
             .clipShape(Capsule())
         }
-        .padding(.horizontal, Spacing.md).padding(.bottom, Spacing.xs)
+        .padding(.horizontal, AppNavigationMetrics.horizontalInset).padding(.bottom, AppNavigationMetrics.bottomPadding)
     }
 }
 

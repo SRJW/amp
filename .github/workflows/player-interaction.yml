@@ -14,6 +14,7 @@ run-name: Player verification — ${{ inputs.scope || 'full-player' }} (${{ inpu
         - library-only
         - library-editor-only
         - library-reveal-only
+        - navigation-alignment-only
       runner:
         description: macOS runner for simulator verification
         type: choice
@@ -120,7 +121,11 @@ jobs:
     - name: Run real cover swipe and dismissal checks
       if: ${{ inputs.scope != 'animation-only' }}
       run: |
-        if [ "${{ inputs.scope }}" = 'library-reveal-only' ]; then
+        if [ "${{ inputs.scope }}" = 'navigation-alignment-only' ]; then
+          test_filters=(
+            -only-testing:ErhuInteractionTests/LibraryInteractionTests/testLibraryAndPlayerNavigationShareScreenCoordinates
+          )
+        elif [ "${{ inputs.scope }}" = 'library-reveal-only' ]; then
           test_filters=(
             -only-testing:ErhuInteractionTests/LibraryInteractionTests/testPlayerTitleScrollsToAnOffscreenSong
           )
@@ -144,6 +149,7 @@ jobs:
           )
           if [ "${{ inputs.scope }}" = 'full-player' ]; then
             test_filters+=(
+              -only-testing:ErhuInteractionTests/LibraryInteractionTests/testLibraryAndPlayerNavigationShareScreenCoordinates
               -only-testing:ErhuInteractionTests/LibraryInteractionTests/testPlayerTitleScrollsToAnOffscreenSong
               -only-testing:ErhuInteractionTests/LibraryInteractionTests/testMiniPlayerScrubsAndSwipesWithoutOpeningThePlayer
               -only-testing:ErhuInteractionTests/LibraryInteractionTests/testLibraryVisibilityPersistsAndPlayerTitleRevealsUnfilteredAllSongs
@@ -197,7 +203,7 @@ jobs:
           build/source-file-stamps.json
         key: ${{ steps.setup.outputs.build-cache-key }}
     - name: Verify the actual rendered colour blend
-      if: ${{ !cancelled() && steps.simulator-build.outcome == 'success' && (inputs.scope == 'full-player' || inputs.scope == 'animation-only') }}
+      if: ${{ !cancelled() && steps.simulator-build.outcome == 'success' && (inputs.scope == 'full-player' || inputs.scope == 'animation-only' || inputs.scope == 'navigation-alignment-only') }}
       run: |
         if [ "${{ inputs.scope }}" = "animation-only" ]; then
           echo "Animation-only run: UI gesture tests are intentionally not selected."

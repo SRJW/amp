@@ -11,6 +11,7 @@ struct NowPlayingView: View {
     @Environment(AppSettings.self) private var settings
     @Environment(\.palette) private var palette
     @Environment(\.playerReduceMotion) private var reduceMotion
+    @Environment(\.appNavigationBottomInset) private var navigationBottomInset
     @State private var artworkDrag = 0.0
     @State private var artworkGestureMode = 0
     @State private var artworkGestureEntry: UUID?
@@ -63,8 +64,8 @@ struct NowPlayingView: View {
                             .lineLimit(1).minimumScaleFactor(0.75)
                     }
                     .frame(width: width - 24).position(x: width / 2, y: height * 0.895)
-                    referenceNavigation(width: width).frame(width: width, height: 44)
-                        .position(x: width / 2, y: height * 0.94)
+                    referenceNavigation(width: width)
+                        .position(x: width / 2, y: AppNavigationMetrics.centreY(height: height, safeAreaBottom: navigationBottomInset))
                 }
                 .foregroundStyle(.white)
             } else {
@@ -72,7 +73,8 @@ struct NowPlayingView: View {
                     EmptyState(message: "Nothing is playing. Pick a song from your library.", systemImage: "music.note")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                     referenceNavigation(width: geometry.size.width)
-                        .position(x: geometry.size.width / 2, y: geometry.size.height * 0.94)
+                        .position(x: geometry.size.width / 2,
+                                  y: AppNavigationMetrics.centreY(height: geometry.size.height, safeAreaBottom: navigationBottomInset))
                 }
             }
         }
@@ -376,7 +378,8 @@ struct NowPlayingView: View {
     }
 
     private func referenceNavigation(width: CGFloat) -> some View {
-        AppNavigationButtons(width: width, inPlayer: true)
+        AppNavigationButtons(width: max(width - 2 * AppNavigationMetrics.horizontalInset, 0), inPlayer: true)
+            .frame(width: width, height: AppNavigationMetrics.buttonsHeight)
     }
 
     private func audioSummary(_ song: Song) -> String {

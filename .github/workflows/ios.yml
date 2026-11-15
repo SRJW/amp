@@ -240,6 +240,7 @@ jobs:
         options:
         - full-player
         - animation-only
+        - navigation-alignment-only
         - waveforms-only
         - library-only
         - library-editor-only
