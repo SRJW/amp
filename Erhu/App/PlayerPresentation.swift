@@ -82,7 +82,7 @@ struct PlayerPresentation: View {
 }
 
 enum PlayerNavigationMotion {
-    static let libraryZoom: CGFloat = 0.16
+    static let libraryZoom: CGFloat = 0.55
     static let playerZoom: CGFloat = 0.10
 }
 

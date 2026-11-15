@@ -158,6 +158,8 @@ final class LibraryInteractionTests: XCTestCase {
         mini.tap()
         XCTAssertTrue(app.buttons["nowPlayingTitle"].waitForExistence(timeout: 10))
         XCTAssertFalse(mini.exists && mini.isHittable, "The redundant song strip stays hidden inside the full player")
+        XCTAssertEqual(app.buttons.matching(identifier: "appMenu").count, 1,
+                       "The full player must expose only its own Menu control")
         app.buttons["appMenu"].tap()
         XCTAssertTrue(app.buttons["appMenu.soundCapsule"].waitForExistence(timeout: 5))
         app.buttons["appMenu.soundCapsule"].tap()

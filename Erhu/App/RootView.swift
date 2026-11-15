@@ -28,11 +28,8 @@ struct RootView: View {
                     .id(router.section)
                     .allowsHitTesting(!router.showsNowPlaying && router.presentedTool == nil)
                     .accessibilityHidden(router.showsNowPlaying || router.presentedTool != nil)
-                if router.presentedTool == nil {
-                    AppBottomBar()
-                        .allowsHitTesting(!router.showsNowPlaying)
-                        .accessibilityHidden(router.showsNowPlaying)
-                        .zIndex(2)
+                if !router.showsNowPlaying && router.presentedTool == nil {
+                    AppBottomBar().zIndex(2)
                 }
                 if let message = actions.message, !router.showsNowPlaying {
                     LibraryChromeToast(text: message, id: actions.messageID, hasSong: player.state.currentSong != nil)
