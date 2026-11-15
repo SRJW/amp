@@ -99,7 +99,6 @@ struct SongAlphabetIndex: View {
                 .onEnded { value in
                     move(to: value.location.y, height: geometry.size.height, anchors: anchors)
                     scrubbing = false
-                    active = nil
                 })
             .overlay(alignment: .topLeading) {
                 if scrubbing, let active { bubble(active) }

@@ -13,6 +13,7 @@ run-name: Player verification — ${{ inputs.scope || 'full-player' }} (${{ inpu
         - waveforms-only
         - library-only
         - library-editor-only
+        - library-reveal-only
       runner:
         description: macOS runner for simulator verification
         type: choice
@@ -119,7 +120,11 @@ jobs:
     - name: Run real cover swipe and dismissal checks
       if: ${{ inputs.scope != 'animation-only' }}
       run: |
-        if [ "${{ inputs.scope }}" = 'library-editor-only' ]; then
+        if [ "${{ inputs.scope }}" = 'library-reveal-only' ]; then
+          test_filters=(
+            -only-testing:ErhuInteractionTests/LibraryInteractionTests/testPlayerTitleScrollsToAnOffscreenSong
+          )
+        elif [ "${{ inputs.scope }}" = 'library-editor-only' ]; then
           test_filters=(
             -only-testing:ErhuInteractionTests/LibraryInteractionTests/testLibraryVisibilityPersistsAndPlayerTitleRevealsUnfilteredAllSongs
           )

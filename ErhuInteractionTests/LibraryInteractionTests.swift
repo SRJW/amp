@@ -57,8 +57,10 @@ final class LibraryInteractionTests: XCTestCase {
         let target = page.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "ZZZ offscreen song")).firstMatch
         let alphabet = app.descendants(matching: .any).matching(identifier: "songAlphabetIndex").firstMatch
         XCTAssertTrue(alphabet.waitForExistence(timeout: 10))
+        print("Alphabet frame before drag: \(alphabet.frame); value: \(String(describing: alphabet.value))")
         alphabet.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.05))
             .press(forDuration: 0.05, thenDragTo: alphabet.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.94)))
+        print("Alphabet frame after drag: \(alphabet.frame); value: \(String(describing: alphabet.value))")
         let atEnd = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
             target.exists && target.isHittable
         }, object: nil)
