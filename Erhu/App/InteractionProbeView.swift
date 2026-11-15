@@ -17,7 +17,7 @@ struct InteractionProbeView: View {
             if page == "player" || page == "player-reduced-motion" || page == "player-artwork" {
                 PlayerInteractionProbe(reduceMotion: page == "player-reduced-motion", withArtwork: page == "player-artwork")
             } else if page == "songs" || page == "songs-reveal" {
-                SongsInteractionProbe(offscreenReveal: page == "songs-reveal")
+                SongsInteractionProbe()
             } else if page == "search" {
                 Button("Open search") { router.showsSearch = true }
                     .accessibilityIdentifier("openSearchProbe")
@@ -121,7 +121,6 @@ private struct PlayerInteractionProbe: View {
 }
 /// A real, owned-file library fixture for search persistence, selection and confirmed deletion.
 private struct SongsInteractionProbe: View {
-    var offscreenReveal = false
     @Environment(PlayerController.self) private var player
     @Environment(AppSettings.self) private var settings
     @Environment(AppRouter.self) private var router
@@ -155,13 +154,6 @@ private struct SongsInteractionProbe: View {
             do {
                 let folder = LibraryPaths.musicFolder.appendingPathComponent("__songs-ui-fixture", isDirectory: true)
                 try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-                if !offscreenReveal {
-                    // Keep the large-library fixture isolated from subsequent small-library tests.
-                    for url in try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
-                    where url.lastPathComponent.hasPrefix("Y scroll fixture ") || url.lastPathComponent == "ZZZ offscreen song.m4a" {
-                        try FileManager.default.removeItem(at: url)
-                    }
-                }
                 let format = AVAudioFormat(standardFormatWithSampleRate: 44_100, channels: 1)!
                 let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 44_100)!
                 buffer.frameLength = buffer.frameCapacity
@@ -177,7 +169,9 @@ private struct SongsInteractionProbe: View {
                     tags.title = name; tags.artist = "Fixture artist"; tags.album = "Fixture album"
                     try TagWriter.write(tags, to: url)
                 }
-                if offscreenReveal {
+                // All library tests share one complete fixture; no launch mode deletes
+                // another case's offscreen targets while the library is being scanned.
+                do {
                     for index in 0..<32 {
                         let url = folder.appendingPathComponent(String(format: "Y scroll fixture %02d.m4a", index))
                         if !FileManager.default.fileExists(atPath: url.path) {
@@ -201,6 +195,11 @@ private struct SongsInteractionProbe: View {
                     _ = try library.database.createPlaylist(name: "Songs UI playlist")
                 }
                 library.reload()
+                guard library.songs.contains(where: { $0.title == "ZZZ offscreen song" }),
+                      library.songs.filter({ $0.title.hasPrefix("Y scroll fixture ") }).count == 32 else {
+                    failure = "Incomplete songs fixture after scan: \(library.songs.count) songs"
+                    return
+                }
                 router.select(.library)
                 router.open(.allSongs)
                 ready = true
