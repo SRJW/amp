@@ -1,5 +1,7 @@
 # Library y reproductor: movimientos de las referencias
 
+Entrega verificada: [amp 107](https://github.com/SRJW/amp/releases/download/v0.1.0-amp.107/amp.ipa), código `c4292102395a78d9f6013532d3a0319704d8f007`.
+
 Los videos `VIDEO-2026-11-15-09-17-35.mov` y `VIDEO-2026-11-15-09-17-36.mov` se usan como referencia de interacción, conservando las vistas y la estética de amp.
 
 - Índice alfabético: recorrido con el dedo, indicador grande junto al punto de contacto y desplazamiento breve hacia el grupo elegido. Las letras vacías llevan al siguiente grupo disponible; al final se usa el último grupo existente. El índice sigue respetando los filtros y el orden de los resultados. Mantiene ajuste mediante VoiceOver y evita animar el desplazamiento con Reducir movimiento.
@@ -15,3 +17,11 @@ Los videos `VIDEO-2026-11-15-09-17-35.mov` y `VIDEO-2026-11-15-09-17-36.mov` se 
 4. Revisar el margen de la carátula en el mini y comprobar arrastre de progreso, cambio de pista horizontal y apertura al tocar. Llegar a las últimas opciones de Settings y verificar que siguen siendo accesibles.
 
 La comprobación nativa existente de canción fuera de pantalla ahora también arrastra el índice en ambas direcciones y verifica la apertura directa desde una fila. Las pruebas de lógica cubren las letras vacías y una petición de regreso que se cancela al reabrir el player.
+
+## Validación de entrega
+
+[GitHub Actions 107](https://github.com/SRJW/amp/actions/runs/43725987040): compilación para iPhone, exportación/publicación del IPA y seis pruebas reales de interfaz correctas en simulador. Cubren desplazamiento alfabético y canción fuera de pantalla, título con filtros previos, personalización persistente de Library, gestos del mini, cierre por gesto, selección/listas/borrado, navegación, regreso de segundo plano y un único Menú accesible en el player y sus herramientas.
+
+La comprobación completa inicial de 105 pasó las pruebas de lógica, renderizado, transporte y ambos modos de waveform. Detectó una duplicación de controles de accesibilidad al mantener la barra de Library oculta debajo del player; 107 retira esa barra al abrir el player y la prueba de navegación vuelve a pasar. Los controles internos y la reproducción se conservan.
+
+SHA-256 del IPA descargado: `b87b8ad4b2bd3d077c0802b2d1896036e2e3b1522e5716d753d691536e32199b`.

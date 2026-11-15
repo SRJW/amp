@@ -1,5 +1,7 @@
 # Ajustes de Library y reproducción después de la compilación 91
 
+Actualización posterior: [movimientos de Library/player y mini reproductor de 88 pt, entregados en amp 107](library-motion.md).
+
 Entrega verificada: `v0.1.0-amp.103`, código `82627f628542f9432bfc4c576bfbd93e3cc9bd49`. Compilación, exportación y prueba del editor correctas. Incluye el mini reproductor de 72 pt.
 
 IPA: https://github.com/SRJW/amp/releases/download/v0.1.0-amp.103/amp.ipa
