@@ -110,7 +110,11 @@ struct SongList: View {
                         TrackRow(song: song, isCurrent: song.id == currentId, showTrackNumber: showTrackNumbers, displayTrackNumber: showTrackNumbers ? index + 1 : nil, showsFileDetails: showsFileDetails, actions: songActions) {
                             onPlay?()
                             onPlaySong?(song)
-                            actions.play(songs, startIndex: index, origin: origin, source: source)
+                            if player.state.currentSong?.id != song.id {
+                                actions.play(songs, startIndex: index, origin: origin, source: source)
+                            } else if !player.state.isPlaying {
+                                player.play()
+                            }
                             router.openPlayer()
                         }
                     }

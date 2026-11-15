@@ -7,6 +7,7 @@ struct ArtworkSlideLayer<Content: View>: View, Animatable {
     let incoming: Bool
     let reduceMotion: Bool
     let size: CGSize
+    var overscan: CGFloat = 1.10
     @ViewBuilder var content: () -> Content
 
     var animatableData: Double {
@@ -20,7 +21,7 @@ struct ArtworkSlideLayer<Content: View>: View, Animatable {
             : ArtworkSlidePose.sample(progress: progress, direction: direction, incoming: incoming)
         content()
             .frame(width: size.width, height: size.height).clipped()
-            .scaleEffect(CGFloat(1.10 * pose.scale))
+            .scaleEffect(overscan * CGFloat(pose.scale))
             // Move the overscanned image before clipping, so its edge never sweeps
             // across the dissolve as a visible vertical seam.
             .offset(x: size.width * CGFloat(pose.x))

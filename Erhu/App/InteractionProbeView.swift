@@ -145,6 +145,13 @@ private struct SongsInteractionProbe: View {
             }
             guard player.restoreFinished else { failure = "Playback restore did not finish"; return }
             player.pause()
+            // Finish the launch scan before constructing the complete owned-file fixture.
+            // Otherwise an older directory snapshot can overwrite the fixture's final scan.
+            for _ in 0..<200 {
+                if !library.isScanning { break }
+                try? await Task.sleep(for: .milliseconds(50))
+            }
+            guard !library.isScanning else { failure = "Initial library scan did not finish"; return }
             do {
                 let folder = LibraryPaths.musicFolder.appendingPathComponent("__songs-ui-fixture", isDirectory: true)
                 try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)

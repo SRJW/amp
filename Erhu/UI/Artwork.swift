@@ -6,6 +6,7 @@ struct SongArtworkView: View {
     var maxPixels = 300
     var placeholder = "music.note"
     var contentMode: ContentMode = .fill
+    var immersiveHero = false
     @Environment(\.palette) private var palette
     @State private var image: UIImage?
     @State private var artworkRevision = 0
@@ -17,7 +18,9 @@ struct SongArtworkView: View {
             : url.flatMap { ArtworkLoader.shared.cachedImage(for: $0, maxPixels: maxPixels, fallbackSizes: [1200, 600, 400, 300, 120]) }
         ZStack {
             if let displayed {
-                if contentMode == .fit {
+                if immersiveHero {
+                    PlayerAlbumArtwork(image: displayed)
+                } else if contentMode == .fit {
                     Image(uiImage: displayed).resizable().scaledToFit()
                 } else {
                     FillImage(image: displayed)
@@ -60,10 +63,11 @@ extension SongArtworkView {
 struct AlbumArtworkView: View {
     let albumId: Int64
     var maxPixels = 400
+    var immersiveHero = false
     @Environment(LibraryStore.self) private var library
 
     var body: some View {
-        SongArtworkView(url: library.albumCoverSong[albumId]?.url, maxPixels: maxPixels, placeholder: "square.stack")
+        SongArtworkView(url: library.albumCoverSong[albumId]?.url, maxPixels: maxPixels, placeholder: "square.stack", immersiveHero: immersiveHero)
     }
 }
 

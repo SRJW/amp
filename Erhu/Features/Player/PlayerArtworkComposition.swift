@@ -1,0 +1,245 @@
+import SwiftUI
+import UIKit
+
+enum PlayerArtworkComposition {
+    static let heightFraction: CGFloat = 0.55
+    static let transitionOverscan: CGFloat = 1.04
+    static let extensionBlurFraction: CGFloat = 0.055
+    static let sideFeather = 0.06
+    static let topFeather = 0.04
+    static let bottomFeather = 0.12
+
+    /// Preserve the original aspect ratio. Use available headroom, rather than shifting every cover.
+    static func mainFrame(image: CGSize, viewport: CGSize, safeAreaTop: CGFloat) -> CGRect {
+        guard image.width.isFinite, image.height.isFinite, image.width > 0, image.height > 0,
+              viewport.width > 0, viewport.height > 0 else { return .zero }
+        let scale = min(viewport.width / image.width, viewport.height / image.height)
+        let size = CGSize(width: image.width * scale, height: image.height * scale)
+        return CGRect(x: (viewport.width - size.width) / 2,
+                      y: min(max(safeAreaTop, 0), max(viewport.height - size.height, 0)),
+                      width: size.width, height: size.height)
+    }
+
+    static func extensionFrame(image: CGSize, viewport: CGSize) -> CGRect {
+        guard image.width > 0, image.height > 0 else { return .zero }
+        let scale = max(viewport.width / image.width, viewport.height / image.height) * transitionOverscan
+        let size = CGSize(width: image.width * scale, height: image.height * scale)
+        return CGRect(x: (viewport.width - size.width) / 2, y: (viewport.height - size.height) / 2,
+                      width: size.width, height: size.height)
+    }
+}
+
+/// Both layers reference the same decoded image. Only the soft extension fills and crops.
+struct PlayerAdaptiveArtwork: View {
+    let image: UIImage
+    let size: CGSize
+    let safeAreaTop: CGFloat
+
+    var body: some View {
+        let rect = PlayerArtworkComposition.mainFrame(image: image.size, viewport: size, safeAreaTop: safeAreaTop)
+        ZStack {
+            Image(uiImage: image).resizable().scaledToFill()
+                .frame(width: size.width, height: size.height).clipped()
+                .blur(radius: size.width * PlayerArtworkComposition.extensionBlurFraction, opaque: true)
+            ZStack {
+                Image(uiImage: image).resizable().scaledToFit()
+                    .frame(width: rect.width, height: rect.height)
+                    .mask(verticalBlend(hasHeadroom: rect.minY > 0))
+                    .mask {
+                        if rect.width < size.width - 0.5 {
+                            LinearGradient(stops: [.init(color: .clear, location: 0),
+                                                   .init(color: .white, location: PlayerArtworkComposition.sideFeather),
+                                                   .init(color: .white, location: 1 - PlayerArtworkComposition.sideFeather),
+                                                   .init(color: .clear, location: 1)], startPoint: .leading, endPoint: .trailing)
+                        } else { Color.white }
+                    }
+                    .position(x: rect.midX, y: rect.midY)
+            }
+            .frame(width: size.width, height: size.height)
+            // Cancel the transition's seam protection for the content-preserving main layer.
+            .scaleEffect(1 / PlayerArtworkComposition.transitionOverscan)
+        }
+        .frame(width: size.width, height: size.height)
+    }
+
+    private func verticalBlend(hasHeadroom: Bool) -> LinearGradient {
+        var stops: [Gradient.Stop] = [.init(color: hasHeadroom ? .clear : .white, location: 0)]
+        if hasHeadroom { stops.append(.init(color: .white, location: PlayerArtworkComposition.topFeather)) }
+        stops.append(.init(color: .white, location: 1 - PlayerArtworkComposition.bottomFeather))
+        stops.append(.init(color: .clear, location: 1))
+        return LinearGradient(stops: stops, startPoint: .top, endPoint: .bottom)
+    }
+}
+
+/// A tiny cached colour map is created on track load, never from a gesture or animation frame.
+struct PlayerArtworkStatusProfile {
+    private static let side = 16
+    private let imageSize: CGSize
+    private let pixels: [SIMD3<Double>]
+    private let dominant: SIMD3<Double>
+
+    init(image: UIImage, dominant argb: UInt32? = nil) {
+        imageSize = image.size
+        let base: SIMD3<Double> = argb.map {
+            SIMD3(Double(($0 >> 16) & 255), Double(($0 >> 8) & 255), Double($0 & 255)) / 255
+        } ?? SIMD3(repeating: 0.5)
+        var bytes = [UInt8](repeating: 0, count: Self.side * Self.side * 4)
+        let rendered = bytes.withUnsafeMutableBytes { buffer -> Bool in
+            guard let cgImage = image.cgImage,
+                  let context = CGContext(data: buffer.baseAddress, width: Self.side, height: Self.side,
+                                          bitsPerComponent: 8, bytesPerRow: Self.side * 4,
+                                          space: CGColorSpaceCreateDeviceRGB(),
+                                          bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue) else { return false }
+            context.interpolationQuality = .medium
+            context.draw(cgImage, in: CGRect(x: 0, y: 0, width: CGFloat(Self.side), height: CGFloat(Self.side)))
+            return true
+        }
+        let colors: [SIMD3<Double>] = (0..<(Self.side * Self.side)).map { index in
+            guard rendered else { return base }
+            let offset = index * 4
+            let rgb = SIMD3(Double(bytes[offset]), Double(bytes[offset + 1]), Double(bytes[offset + 2])) / 255
+            return rgb + base * (1 - Double(bytes[offset + 3]) / 255)
+        }
+        pixels = colors
+        if argb == nil {
+            var sum = SIMD3<Double>(repeating: 0)
+            for color in colors { sum += color }
+            dominant = sum / Double(colors.count)
+        } else { dominant = base }
+    }
+
+    init(solid color: UIColor) {
+        var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
+        color.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        let rgb = SIMD3(Double(red), Double(green), Double(blue))
+        dominant = rgb
+        imageSize = CGSize(width: 1, height: 1)
+        pixels = Array(repeating: rgb, count: Self.side * Self.side)
+    }
+
+    func protection(viewport: CGSize, safeAreaTop: CGFloat, scheme: ColorScheme,
+                    contentSafeAreaTop: CGFloat? = nil) -> PlayerArtworkStatusProtection {
+        let main = PlayerArtworkComposition.mainFrame(image: imageSize, viewport: viewport, safeAreaTop: contentSafeAreaTop ?? safeAreaTop)
+        let extended = PlayerArtworkComposition.extensionFrame(image: imageSize, viewport: viewport)
+        var samples: [SIMD3<Double>] = []
+        for x in [0.08, 0.18, 0.28, 0.72, 0.84, 0.94] {
+            for y in [0.35, 0.7] {
+                let point = CGPoint(x: viewport.width * x, y: safeAreaTop * y)
+                samples.append(sample(point, in: extended))
+                if main.contains(point) { samples.append(sample(point, in: main)) }
+            }
+        }
+        // Tint towards the artwork's hue, choosing light/dark for the existing system ink.
+        let tint = scheme == .dark ? dominant * 0.12 : dominant * 0.12 + SIMD3(repeating: 0.88)
+        func sufficient(_ opacity: Double) -> Bool {
+            samples.allSatisfy { sample in
+                let luminance = Self.luminance(sample * (1 - opacity) + tint * opacity)
+                return scheme == .dark ? 1.05 / (luminance + 0.05) >= 4.5 : (luminance + 0.05) / 0.05 >= 4.5
+            }
+        }
+        var low = 0.035, high = 0.72
+        if sufficient(low) { high = low }
+        else {
+            for _ in 0..<9 {
+                let middle = (low + high) / 2
+                if sufficient(middle) { high = middle } else { low = middle }
+            }
+        }
+        return PlayerArtworkStatusProtection(rgb: tint, opacity: high)
+    }
+
+    private func sample(_ point: CGPoint, in rect: CGRect) -> SIMD3<Double> {
+        guard rect.width > 0, rect.height > 0 else { return dominant }
+        let x = min(max(Int((point.x - rect.minX) / rect.width * CGFloat(Self.side)), 0), Self.side - 1)
+        let y = min(max(Int((point.y - rect.minY) / rect.height * CGFloat(Self.side)), 0), Self.side - 1)
+        return pixels[y * Self.side + x]
+    }
+
+    static func luminance(_ rgb: SIMD3<Double>) -> Double {
+        func linear(_ value: Double) -> Double { value <= 0.04045 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4) }
+        return linear(rgb.x) * 0.2126 + linear(rgb.y) * 0.7152 + linear(rgb.z) * 0.0722
+    }
+}
+
+struct PlayerArtworkStatusProtection {
+    let rgb: SIMD3<Double>
+    let opacity: Double
+}
+
+struct PlayerArtworkStatusGradient: View {
+    let current: PlayerArtworkStatusProfile
+    let next: PlayerArtworkStatusProfile?
+    let blend: Double
+    let size: CGSize
+    let safeAreaTop: CGFloat
+    var artworkHeightFraction: CGFloat = PlayerArtworkComposition.heightFraction
+    var contentSafeAreaTop: CGFloat? = nil
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        let band = max(safeAreaTop, size.height * 0.045)
+        let viewport = CGSize(width: size.width, height: size.height * artworkHeightFraction)
+        let first = current.protection(viewport: viewport, safeAreaTop: band, scheme: scheme, contentSafeAreaTop: contentSafeAreaTop)
+        let last = next?.protection(viewport: viewport, safeAreaTop: band, scheme: scheme, contentSafeAreaTop: contentSafeAreaTop) ?? first
+        let amount = blend.clamped(0, 1)
+        let rgb = first.rgb + (last.rgb - first.rgb) * amount
+        let opacity = first.opacity + (last.opacity - first.opacity) * amount
+        let color = Color(.sRGB, red: rgb.x, green: rgb.y, blue: rgb.z, opacity: opacity)
+        let height = min(band + size.width * 0.1, size.height * 0.18)
+        LinearGradient(stops: [.init(color: color, location: 0),
+                               .init(color: color, location: min(band / max(height, 1), 0.9)),
+                               .init(color: .clear, location: 1)], startPoint: .top, endPoint: .bottom)
+            .frame(height: height)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
+}
+
+/// The album hero uses the same composition, without changing other artwork thumbnails.
+struct PlayerAlbumArtwork: View {
+    let image: UIImage
+    @State private var safeAreaTop: CGFloat = 0
+    @State private var profile: PlayerArtworkStatusProfile?
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack(alignment: .top) {
+                ArtworkSlideLayer(progress: 1, direction: 1, incoming: false, reduceMotion: true,
+                                  size: geometry.size, overscan: PlayerArtworkComposition.transitionOverscan) {
+                    PlayerAdaptiveArtwork(image: image, size: geometry.size, safeAreaTop: 0)
+                }
+                if let profile {
+                    PlayerArtworkStatusGradient(current: profile, next: nil, blend: 0,
+                                                size: geometry.size, safeAreaTop: safeAreaTop,
+                                                artworkHeightFraction: 1, contentSafeAreaTop: 0)
+                }
+            }
+        }
+        .background { PlayerArtworkSafeAreaProbe { safeAreaTop = $0 }.frame(width: 0, height: 0) }
+        .task(id: ObjectIdentifier(image)) { profile = PlayerArtworkStatusProfile(image: image) }
+    }
+}
+
+/// Read the real window inset even when the artwork itself intentionally ignores safe areas.
+struct PlayerArtworkSafeAreaProbe: UIViewRepresentable {
+    let changed: (CGFloat) -> Void
+    func makeUIView(context: Context) -> Probe {
+        let view = Probe()
+        view.changed = changed
+        view.isUserInteractionEnabled = false
+        return view
+    }
+    func updateUIView(_ view: Probe, context: Context) { view.changed = changed; view.readInsets() }
+
+    final class Probe: UIView {
+        var changed: ((CGFloat) -> Void)?
+        private var last: CGFloat?
+        override func didMoveToWindow() { super.didMoveToWindow(); readInsets() }
+        override func safeAreaInsetsDidChange() { super.safeAreaInsetsDidChange(); readInsets() }
+        func readInsets() {
+            guard let window, last != window.safeAreaInsets.top else { return }
+            let value = window.safeAreaInsets.top
+            last = value
+            DispatchQueue.main.async { [weak self] in self?.changed?(value) }
+        }
+    }
+}

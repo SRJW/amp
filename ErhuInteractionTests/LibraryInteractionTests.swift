@@ -85,6 +85,20 @@ final class LibraryInteractionTests: XCTestCase {
         }, object: nil)
         XCTAssertEqual(XCTWaiter.wait(for: [revealed], timeout: 15), .completed,
                        "Opening All Songs must scroll down to the exact current file")
+        let miniProgress = app.otherElements["miniPlayerProgress"]
+        miniProgress.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.5))
+            .press(forDuration: 0.05, thenDragTo: miniProgress.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: 0.5)))
+        target.tap()
+        XCTAssertTrue(title.waitForExistence(timeout: 10))
+        let elapsed = app.staticTexts["nowPlayingElapsed"]
+        let uninterrupted = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            let parts = elapsed.label.split(separator: ":").compactMap { Int($0) }
+            return parts.count == 2 && parts[0] * 60 + parts[1] >= 65
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [uninterrupted], timeout: 10), .completed,
+                       "Opening the currently playing row must preserve its position instead of restarting")
+        title.tap()
+        XCTAssertTrue(page.waitForExistence(timeout: 10))
         let screenshot = XCTAttachment(screenshot: app.screenshot())
         screenshot.name = "all-songs-revealed-offscreen-track"; screenshot.lifetime = .keepAlways; add(screenshot)
 

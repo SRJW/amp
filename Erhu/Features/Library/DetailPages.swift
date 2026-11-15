@@ -76,9 +76,10 @@ struct AlbumDetailView: View {
                     let facts = collectionFacts(year: album.year, songs: songs)
                     VStack(spacing: 0) {
                         CollectionHeroHeader(title: album.title, subtitle: album.artist, facts: songs.contains(where: \.isLossless) ? "\(facts) · Lossless" : facts,
+                                         separatesMetadata: true,
                                          canPlay: !songs.isEmpty, onPlay: { actions.playInOrder(songs, origin: origin) },
                                          onShuffle: { actions.playShuffled(songs, origin: origin) }) {
-                            AlbumArtworkView(albumId: albumId, maxPixels: 1200)
+                            AlbumArtworkView(albumId: albumId, maxPixels: 1200, immersiveHero: true)
                         }
                         TransitionStudioRow(collection: origin).padding(.bottom, Spacing.sm)
                         ScopedTagRepairSummary(songs: songs)

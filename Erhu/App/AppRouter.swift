@@ -185,7 +185,9 @@ final class AppRouter {
         showsSearch = false
         songReveal = nil
         highlightedSongID = nil
-        select(.library)
+        var preparation = Transaction(animation: nil)
+        preparation.disablesAnimations = true
+        withTransaction(preparation) { select(.library) }
         guard let current = library.songs.first(where: { $0.id == song.id }),
               PreparedAudioShare.available(current.url) else {
             showsNowPlaying = false
@@ -202,7 +204,7 @@ final class AppRouter {
             destination = .songFolder((current.path as NSString).deletingLastPathComponent)
         }
         songReveal = SongRevealRequest(songID: current.id, destination: destination, dismissesPlayer: dismissesPlayer)
-        open(destination)
+        withTransaction(preparation) { open(destination) }
         return true
     }
 

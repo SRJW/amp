@@ -5,6 +5,7 @@ private struct ArtworkSlideFrame: Identifiable {
     let id: String
     let image: UIImage?
     let dominant: Color
+    let statusProfile: PlayerArtworkStatusProfile?
 }
 
 struct ReferencePlayerBackdrop: View {
@@ -21,6 +22,7 @@ struct ReferencePlayerBackdrop: View {
     @State private var previousCover: ArtworkSlideFrame?
     @State private var neighbourOwner: String?
     @State private var lastDragDirection = 1
+    @State private var safeAreaTop: CGFloat = 0
     private static let duration = 0.88
 
     private var dragDirection: Int { artworkDrag == 0 ? lastDragDirection : (artworkDrag < 0 ? 1 : -1) }
@@ -37,7 +39,9 @@ struct ReferencePlayerBackdrop: View {
     private var visibleDirection: Int { frames.moving ? frames.direction : dragDirection }
 
     var body: some View {
-        PlayerFullBleedBackground(dominant: base, secondaryDominant: target, blend: blend, appearance: settings.playerBackground) {
+        PlayerFullBleedBackground(dominant: base, secondaryDominant: target, blend: blend, appearance: settings.playerBackground,
+                                  statusProfile: outgoingCover?.statusProfile, secondaryStatusProfile: incomingCover?.statusProfile,
+                                  safeAreaTop: safeAreaTop) {
             GeometryReader { geometry in
                 ZStack {
                     // Keep the same two layer slots when a drag becomes a committed skip.
@@ -46,6 +50,10 @@ struct ReferencePlayerBackdrop: View {
                     if let incomingCover { cover(incomingCover, size: geometry.size, incoming: true, amount: blend, direction: visibleDirection) }
                 }.frame(width: geometry.size.width, height: geometry.size.height).clipped()
             }
+        }
+        .background {
+            PlayerArtworkSafeAreaProbe { safeAreaTop = $0 }.frame(width: 0, height: 0)
+                .allowsHitTesting(false).accessibilityHidden(true)
         }
         .onChange(of: artworkDrag) { _, value in
             if value != 0 { lastDragDirection = value < 0 ? 1 : -1 }
@@ -98,14 +106,16 @@ struct ReferencePlayerBackdrop: View {
         async let colors = LyricsPaletteCache.shared.palette(for: url)
         let (loaded, sampled) = await (image, colors)
         guard !Task.isCancelled, revision == ArtworkLoader.shared.revision(for: url.path) else { return nil }
-        return ArtworkSlideFrame(id: "\(url.path)|\(revision)", image: loaded, dominant: Color(argb: sampled.artworkDominant))
+        return ArtworkSlideFrame(id: "\(url.path)|\(revision)", image: loaded, dominant: Color(argb: sampled.artworkDominant),
+                                 statusProfile: loaded.map { PlayerArtworkStatusProfile(image: $0, dominant: sampled.artworkDominant) })
     }
 
     private func cover(_ frame: ArtworkSlideFrame, size: CGSize, incoming: Bool, amount: Double, direction: Int) -> some View {
         ArtworkSlideLayer(progress: amount, direction: direction, incoming: incoming,
-                          reduceMotion: reduceMotion, size: size) {
+                          reduceMotion: reduceMotion, size: size, overscan: PlayerArtworkComposition.transitionOverscan) {
             ZStack {
-                if let image = frame.image { Image(uiImage: image).resizable().scaledToFill() }
+                frame.dominant
+                if let image = frame.image { PlayerAdaptiveArtwork(image: image, size: size, safeAreaTop: safeAreaTop) }
                 else {
                     frame.dominant
                     Image(systemName: "music.note").font(.system(size: 20)).foregroundStyle(.white.opacity(0.2))

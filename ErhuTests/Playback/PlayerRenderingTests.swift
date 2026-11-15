@@ -12,7 +12,7 @@ final class PlayerRenderingTests: XCTestCase {
     private let blendRed = Color(.sRGB, red: 1, green: 0, blue: 0, opacity: 1)
     private let blendBlue = Color(.sRGB, red: 0, green: 0, blue: 1, opacity: 1)
     @MainActor
-    func testFullBleedCoverCropsEdgesAndDissolvesIntoMutedBackground() async throws {
+    func testFullBleedCoverPreservesEdgesAndDissolvesIntoMutedBackground() async throws {
         let url = TagFixtures.write(TagFixtures.mp3(v4: true), name: "player-cover-composition.mp3")
         defer { try? FileManager.default.removeItem(at: url) }
         let image = UIGraphicsImageRenderer(size: CGSize(width: 100, height: 100)).image { context in
@@ -25,14 +25,18 @@ final class PlayerRenderingTests: XCTestCase {
         try TagWriter.write(edit, to: url)
         ArtworkLoader.shared.forget(path: url.path)
         _ = await ArtworkLoader.shared.image(for: url, maxPixels: 600)
-        let backdrop = PlayerFullBleedBackground(dominant: Color(.sRGB, red: 0, green: 0, blue: 1)) {
-            SongArtworkView(url: url, maxPixels: 1200, contentMode: .fill).scaleEffect(1.10)
+        let backdrop = PlayerFullBleedBackground(dominant: Color(.sRGB, red: 0, green: 0, blue: 1),
+                                                statusProfile: PlayerArtworkStatusProfile(image: image, dominant: 0xFF0000FF)) {
+            GeometryReader { geometry in
+                ArtworkSlideLayer(progress: 1, direction: 1, incoming: false, reduceMotion: true,
+                                  size: geometry.size, overscan: PlayerArtworkComposition.transitionOverscan) {
+                    PlayerAdaptiveArtwork(image: image, size: geometry.size, safeAreaTop: 0)
+                }
+            }
         }
-        let rendered = try pixels(backdrop, size: CGSize(width: 200, height: 500))
-        // The 55%-height fill crop plus zoom removes the source's side stripes.
-        // Its visible image reaches both screen edges, without a card border.
-        assertColor(rendered, at: CGPoint(x: 8, y: 60), dominant: 2)
-        assertColor(rendered, at: CGPoint(x: 192, y: 60), dominant: 2)
+        let rendered = try pixels(backdrop.environment(\.colorScheme, .dark), size: CGSize(width: 200, height: 500))
+        assertColor(rendered, at: CGPoint(x: 8, y: 60), dominant: 0)
+        assertColor(rendered, at: CGPoint(x: 192, y: 60), dominant: 1)
         assertColor(rendered, at: CGPoint(x: 100, y: 60), dominant: 2)
         XCTAssertLessThan(rendered.color(x: 100, y: 10)[2], rendered.color(x: 100, y: 60)[2],
                           "The upper scrim must darken the image behind system status text")
@@ -43,6 +47,57 @@ final class PlayerRenderingTests: XCTestCase {
         XCTAssertLessThan(bottom.max() ?? 1, belowCover.max() ?? 0, "The background darkens towards the home indicator")
         XCTAssertLessThan(bottom.max() ?? 1, 0.30)
 
+    }
+
+    func testArtworkFramingPreservesEveryAspectRatioAndUsesOnlyAvailableHeadroom() {
+        for viewport in [CGSize(width: 375, height: 367), CGSize(width: 393, height: 469), CGSize(width: 430, height: 512)] {
+            for source in [CGSize(width: 500, height: 500), CGSize(width: 1000, height: 1000),
+                           CGSize(width: 2000, height: 2000), CGSize(width: 2000, height: 1000), CGSize(width: 1000, height: 1800)] {
+                let rect = PlayerArtworkComposition.mainFrame(image: source, viewport: viewport, safeAreaTop: 59)
+                XCTAssertEqual(rect.width / rect.height, source.width / source.height, accuracy: 0.0001)
+                XCTAssertGreaterThanOrEqual(rect.minX, -0.001)
+                XCTAssertGreaterThanOrEqual(rect.minY, -0.001)
+                XCTAssertLessThanOrEqual(rect.maxX, viewport.width + 0.001)
+                XCTAssertLessThanOrEqual(rect.maxY, viewport.height + 0.001)
+                XCTAssertTrue(abs(rect.width - viewport.width) < 0.001 || abs(rect.height - viewport.height) < 0.001)
+            }
+        }
+    }
+
+    @MainActor func testStatusProtectionSupportsWhiteInkOnWhiteArtAndBlackInkOnBlackArt() throws {
+        for (scheme, color) in [(ColorScheme.dark, UIColor.white), (.light, UIColor.black)] {
+            let source = UIGraphicsImageRenderer(size: CGSize(width: 100, height: 100)).image { context in
+                color.setFill(); context.fill(CGRect(x: 0, y: 0, width: 100, height: 100))
+                (scheme == .dark ? UIColor.black : UIColor.white).setFill()
+                context.fill(CGRect(x: 0, y: 50, width: 100, height: 50))
+            }
+            let profile = PlayerArtworkStatusProfile(image: source)
+            let view = ZStack(alignment: .top) {
+                Color(uiColor: color)
+                PlayerArtworkStatusGradient(current: profile, next: nil, blend: 0,
+                                            size: CGSize(width: 200, height: 500), safeAreaTop: 30)
+            }.environment(\.colorScheme, scheme)
+            let rendered = try pixels(view, size: CGSize(width: 200, height: 500))
+            let rgb = rendered.color(x: 100, y: 15)
+            let luminance = PlayerArtworkStatusProfile.luminance(SIMD3(rgb[0], rgb[1], rgb[2]))
+            let contrast = scheme == .dark ? 1.05 / (luminance + 0.05) : (luminance + 0.05) / 0.05
+            XCTAssertGreaterThanOrEqual(contrast, 4.4)
+            XCTAssertEqual(rendered.color(x: 100, y: 100)[0], scheme == .dark ? 1 : 0, accuracy: 0.02,
+                           "The status gradient must disappear before the main cover content")
+        }
+    }
+
+    @MainActor func testAlbumMetadataIsBelowTheImageAndEditionIsNotDuplicated() throws {
+        let title = "Georgia on My Mind (Remastered) (Remastered)"
+        XCTAssertEqual(CollectionDisplayTitle.normalized(title), "Georgia on My Mind (Remastered)")
+        XCTAssertEqual(CollectionDisplayTitle.normalized("Record (Deluxe) (Remastered)"), "Record (Deluxe) (Remastered)")
+        let view = CollectionHeroLayout(separatesMetadata: true) {
+            blendRed
+            blendBlue.frame(height: 80)
+        }
+        let rendered = try pixels(view, size: CGSize(width: 200, height: 360))
+        assertColor(rendered, at: CGPoint(x: 100, y: 100), dominant: 0)
+        assertColor(rendered, at: CGPoint(x: 100, y: 320), dominant: 2)
     }
 
     @MainActor
