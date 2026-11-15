@@ -94,9 +94,13 @@ struct SongAlphabetIndex: View {
             }
             .foregroundStyle(palette.primary)
             .contentShape(Rectangle())
-            .gesture(DragGesture(minimumDistance: 0)
+            .highPriorityGesture(DragGesture(minimumDistance: 0)
                 .onChanged { value in move(to: value.location.y, height: geometry.size.height, anchors: anchors) }
-                .onEnded { _ in scrubbing = false; active = nil })
+                .onEnded { value in
+                    move(to: value.location.y, height: geometry.size.height, anchors: anchors)
+                    scrubbing = false
+                    active = nil
+                })
             .overlay(alignment: .topLeading) {
                 if scrubbing, let active { bubble(active) }
             }
