@@ -36,6 +36,7 @@ struct SettingsView: View {
             }
             SettingsGroup("Library") {
                 SettingsLink("Music Library", subtitle: "Music folder, scanning and your collection", icon: "folder.fill", page: .library)
+                    .accessibilityIdentifier("settingsMusicLibrary")
                 SettingsLink("Metadata & Artwork", subtitle: "Tags, cover art and online sources", icon: "number", page: .metadata)
             }
             SettingsGroup("About") {
@@ -410,6 +411,7 @@ private struct VisualizerSettingsView: View {
 
 private struct LibrarySettingsView: View {
     @Environment(LibraryStore.self) private var library
+    @AppStorage(SongAlphabetPreferences.hapticsKey) private var alphabetHaptics = SongAlphabetPreferences.defaultHaptics
 
     var body: some View {
         SettingsPage {
@@ -422,6 +424,14 @@ private struct LibrarySettingsView: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }.padding(Spacing.lg)
+            }
+            SettingsGroup("Navigation") {
+                SettingsValueRow(title: SongAlphabetPreferences.hapticsTitle, icon: "hand.tap") {
+                    Toggle(SongAlphabetPreferences.hapticsTitle, isOn: $alphabetHaptics)
+                }
+                Text(SongAlphabetPreferences.hapticsDescription)
+                    .font(.footnote).foregroundStyle(.secondary)
+                    .padding([.horizontal, .bottom], Spacing.lg)
             }
             SettingsGroup("Scan") {
                 Button { library.scan() } label: {

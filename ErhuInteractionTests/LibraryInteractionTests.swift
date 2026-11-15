@@ -87,6 +87,31 @@ final class LibraryInteractionTests: XCTestCase {
                        "Opening All Songs must scroll down to the exact current file")
         let screenshot = XCTAttachment(screenshot: app.screenshot())
         screenshot.name = "all-songs-revealed-offscreen-track"; screenshot.lifetime = .keepAlways; add(screenshot)
+
+        func openLibrarySettings() {
+            app.buttons["appMenu"].tap()
+            app.buttons["appMenu.settings"].tap()
+            let librarySettings = app.buttons["settingsMusicLibrary"]
+            XCTAssertTrue(librarySettings.waitForExistence(timeout: 10))
+            for _ in 0..<5 {
+                if librarySettings.isHittable { break }
+                app.scrollViews.firstMatch.swipeUp()
+            }
+            librarySettings.tap()
+        }
+        openLibrarySettings()
+        let haptics = app.switches["Alphabet scrolling haptics"]
+        XCTAssertTrue(haptics.waitForExistence(timeout: 10))
+        if haptics.value as? String != "1" { haptics.tap() }
+        haptics.tap()
+        XCTAssertEqual(haptics.value as? String, "0")
+        app.terminate(); app.launch()
+        XCTAssertTrue(page.waitForExistence(timeout: 30))
+        openLibrarySettings()
+        XCTAssertTrue(haptics.waitForExistence(timeout: 10))
+        XCTAssertEqual(haptics.value as? String, "0", "Disabling alphabet haptics survives a full relaunch")
+        haptics.tap()
+        XCTAssertEqual(haptics.value as? String, "1")
     }
 
     @MainActor func testMiniPlayerScrubsAndSwipesWithoutOpeningThePlayer() {
@@ -95,6 +120,22 @@ final class LibraryInteractionTests: XCTestCase {
         XCTAssertTrue(mini.waitForExistence(timeout: 30))
         let progress = app.otherElements["miniPlayerProgress"]
         XCTAssertTrue(progress.waitForExistence(timeout: 10))
+        let artwork = app.buttons["openNowPlayingArtwork"]
+        let playPause = app.buttons["miniPlayerPlayPause"]
+        XCTAssertTrue(artwork.exists && playPause.exists)
+        XCTAssertGreaterThan(progress.frame.minX, artwork.frame.maxX, "Progress belongs under the text, beside the cover")
+        XCTAssertLessThan(progress.frame.maxX, playPause.frame.minX)
+        XCTAssertGreaterThanOrEqual(progress.frame.minY, mini.frame.maxY)
+        let initialPlayLabel = playPause.label
+        playPause.tap()
+        let toggled = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in playPause.label != initialPlayLabel }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [toggled], timeout: 10), .completed)
+        XCTAssertFalse(app.buttons["nowPlayingTitle"].exists, "Play/pause must not open the player")
+        playPause.tap()
+        let restored = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in playPause.label == initialPlayLabel }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [restored], timeout: 10), .completed)
+        let reference = XCTAttachment(screenshot: app.screenshot())
+        reference.name = "mini-player-reference-layout"; reference.lifetime = .keepAlways; add(reference)
         progress.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.5))
             .press(forDuration: 0.05, thenDragTo: progress.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: 0.5)))
         let sought = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
@@ -117,6 +158,15 @@ final class LibraryInteractionTests: XCTestCase {
         XCTAssertEqual(XCTWaiter.wait(for: [previous], timeout: 10), .completed)
         mini.tap()
         XCTAssertTrue(app.buttons["nowPlayingTitle"].waitForExistence(timeout: 10))
+        app.buttons["appSection.library"].tap()
+        XCTAssertTrue(artwork.waitForExistence(timeout: 10))
+        artwork.tap()
+        XCTAssertTrue(app.buttons["nowPlayingTitle"].waitForExistence(timeout: 10), "The cover opens the same player")
+        app.buttons["appSection.library"].tap()
+        XCTAssertTrue(mini.waitForExistence(timeout: 10))
+        let upwardStart = mini.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        upwardStart.press(forDuration: 0.05, thenDragTo: upwardStart.withOffset(CGVector(dx: 0, dy: -100)))
+        XCTAssertTrue(app.buttons["nowPlayingTitle"].waitForExistence(timeout: 10), "Swipe up still opens the player")
     }
 
     /// The fresh iOS simulator can show its one-time QuickPath introduction over the keyboard.

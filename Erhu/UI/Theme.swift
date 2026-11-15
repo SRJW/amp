@@ -23,7 +23,7 @@ enum Radius {
 enum ArtworkSize {
     static let compact: CGFloat = 40
     static let list: CGFloat = 48
-    static let miniPlayer: CGFloat = 44
+    static let miniPlayer: CGFloat = 64
     static let gridMin: CGFloat = 140
     static let shelf: CGFloat = 144
     static let heroMax: CGFloat = 480

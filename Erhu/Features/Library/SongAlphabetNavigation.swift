@@ -36,9 +36,17 @@ enum SongAlphabetMetrics {
     static let accessibilityLabel = "Song alphabet index"
 }
 
+enum SongAlphabetPreferences {
+    static let hapticsKey = "library.alphabet.haptics"
+    static let defaultHaptics = true
+    static let hapticsTitle = "Alphabet scrolling haptics"
+    static let hapticsDescription = "A brief tap when you move to another letter in the alphabet index."
+}
+
 struct SongAlphabetIndex: View {
     let songs: [Song]
     let scrollTo: (Int64) -> Void
+    @AppStorage(SongAlphabetPreferences.hapticsKey) private var hapticsEnabled = SongAlphabetPreferences.defaultHaptics
     @State private var active: String?
     @State private var scrubbing = false
     @State private var touchY: CGFloat = 0
@@ -96,6 +104,9 @@ struct SongAlphabetIndex: View {
                 .frame(width: SongAlphabetMetrics.width,
                        height: min(CGFloat(SongAlphabet.letters.count) * SongAlphabetMetrics.rowHeight, SongAlphabetMetrics.maximumHeight))
                 .animation(reduceMotion ? nil : .easeOut(duration: SongAlphabetMetrics.bubbleDuration), value: scrubbing)
+                .sensoryFeedback(.selection, trigger: active) { previous, next in
+                    hapticsEnabled && scrubbing && previous != nil && next != nil && previous != next
+                }
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(SongAlphabetMetrics.accessibilityLabel)
                 .accessibilityIdentifier("songAlphabetIndex")

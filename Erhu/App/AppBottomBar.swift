@@ -2,7 +2,7 @@ import SwiftUI
 
 enum AppNavigationMetrics {
     static let duration = 0.3
-    static let stripHeight: CGFloat = MiniPlayerMetrics.rowHeight + MiniPlayerMetrics.progressHeight
+    static let stripHeight: CGFloat = MiniPlayerMetrics.height
     static let buttonsHeight: CGFloat = 48
     static let reservedHeight: CGFloat = stripHeight + buttonsHeight + 28
     static let menuWidth: CGFloat = 320
@@ -30,8 +30,11 @@ struct AppBottomBar: View {
                 }
             }
             .frame(height: AppNavigationMetrics.stripHeight)
-            .background { Color.clear.chromeSurface(enabled: settings.glassEnabled).allowsHitTesting(false) }
-            .clipShape(Capsule())
+            .background {
+                Color.clear.glassSurface(cornerRadius: MiniPlayerMetrics.cornerRadius, enabled: settings.glassEnabled)
+                    .allowsHitTesting(false)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: MiniPlayerMetrics.cornerRadius, style: .continuous))
             GeometryReader { geometry in
                 AppNavigationButtons(width: geometry.size.width)
             }
