@@ -14,6 +14,8 @@ Settings → Music Library → Navigation → **Alphabet scrolling haptics** act
 
 El índice utiliza la respuesta de selección del sistema al cambiar de letra durante el arrastre. No repite pulsos mientras el dedo permanece en la misma letra ni al soltar. Tampoco añade pulsos al regreso programático desde el player ni a los ajustes de VoiceOver.
 
+El índice conserva la última letra como valor accesible. Cuando se recorren varias letras rápidamente, se vuelve a resolver el último destino después de que termine la animación corta: así la medición diferida de filas no deja la lista en una posición intermedia.
+
 ## Comprobación
 
 1. Comprobar portada completa dentro de su rectángulo, textos a la derecha y progreso debajo del texto. Revisar también otra portada con Colours from artwork y ambos modos del teléfono.
@@ -22,3 +24,7 @@ El índice utiliza la respuesta de selección del sistema al cambiar de letra du
 4. Desactivar Alphabet scrolling haptics, reiniciar amp y volver al índice: debe continuar desactivado y el desplazamiento debe seguir funcionando. Volver a activarlo.
 
 La prueba de interfaz del mini comprueba separación de las zonas de progreso/portada/play, play/pausa, búsqueda, cambio de pista y apertura por texto, portada y gesto vertical. La prueba del índice comprueba además desactivar/reactivar su preferencia y conservarla tras relanzar. La sensación física de la vibración se comprueba en el teléfono.
+
+La [prueba aislada del índice](https://github.com/SRJW/amp/actions/runs/43742376383) pasó completa en 93,548 s: arrastre de H a Z, regreso a la fila exacta desde el título, conservación del contador y desactivación persistente del ajuste háptico tras relanzar.
+
+La [IPA 122](https://github.com/SRJW/amp/actions/runs/43742522929) pasó después los seis flujos de interfaz de librería en conjunto, incluidos este recorrido y todos los gestos del mini reproductor.

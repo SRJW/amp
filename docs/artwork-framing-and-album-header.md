@@ -30,3 +30,11 @@ Preparar la ruta de All Songs bajo el player no inicia una segunda transición d
 4. Buscar una pista avanzada, tocar título para volver a su fila y tocar esa misma fila: el contador debe continuar, sin volver a cero. Repetir con la pista pausada y con otra canción.
 
 Las pruebas de renderizado comprueban proporciones y límites en distintos tamaños, conservación de los bordes, protección de status en fondos extremos y separación de foto/metadata. La prueba nativa de canción fuera de pantalla también verifica que reabrir la fila actual no reinicia el tiempo.
+
+## Validación de carátulas
+
+La ejecución [113](https://github.com/SRJW/amp/actions/runs/43734521563) completó 38 pruebas de lógica y 29 de renderizado sin fallos. Incluye el encuadre proporcional, los degradados de status y la separación de la metadata del álbum. También comprobó que reabrir la pista actual conserva el tiempo; su fallo de interfaz posterior fue el interruptor de respuesta háptica, corregido por separado.
+
+La ejecución final [122](https://github.com/SRJW/amp/actions/runs/43742522929), revisión `34c3e48`, terminó correctamente: exportación/publicación y los seis flujos de interfaz de librería. Incluye mini reproductor, índice alfabético, regreso a la pista exacta, contador sin reinicio, persistencia del ajuste háptico, selección/borrado y navegación al volver de segundo plano.
+
+IPA verificada: [v0.1.0-amp.122](https://github.com/SRJW/amp/releases/download/v0.1.0-amp.122/amp.ipa), versión `0.1.0`, compilación `122`, bundle ID `com.erhu`. SHA-256: `e759652353be4ae0dc622817419665e040c25455ea62a53da24fd963999cd279`.
