@@ -61,7 +61,7 @@ struct PlayerFullBleedBackground<Artwork: View>: View, Animatable {
                     Color.black.opacity(1 - appearance.intensity)
                 }.saturation(appearance.saturation)
                 artwork()
-                    .frame(width: geometry.size.width, height: geometry.size.height * PlayerArtworkComposition.heightFraction)
+                    .frame(width: geometry.size.width, height: PlayerArtworkComposition.artworkHeight(in: geometry.size))
                     .clipped()
                     .mask {
                         LinearGradient(stops: [.init(color: .white, location: 0),
@@ -71,7 +71,8 @@ struct PlayerFullBleedBackground<Artwork: View>: View, Animatable {
                     }
                 PlayerArtworkStatusGradient(current: statusProfile ?? PlayerArtworkStatusProfile(solid: UIColor(dominant)),
                                             next: secondaryStatusProfile, blend: blend, size: geometry.size,
-                                            safeAreaTop: max(safeAreaTop, geometry.safeAreaInsets.top))
+                                            safeAreaTop: max(safeAreaTop, geometry.safeAreaInsets.top),
+                                            contentSafeAreaTop: 0, localizedLightProtection: true)
             }
         }
         .allowsHitTesting(false)

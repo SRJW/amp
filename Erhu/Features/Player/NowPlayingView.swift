@@ -43,7 +43,7 @@ struct NowPlayingView: View {
                         .lineLimit(1).minimumScaleFactor(0.75)
                     }
                         .accessibilityIdentifier("nowPlayingTitle")
-                        .frame(width: width - 32).position(x: width / 2, y: height * 0.60)
+                        .frame(width: width - 32).position(x: width / 2, y: height * PlayerArtworkComposition.titleCentreH)
                     Button { reveal(song, album: true) } label: {
                         Text(song.artist + PlayerButtonConstants.metadataSeparator + song.album)
                         .font(.custom(PlayerButtonConstants.subtitleFont, size: PlayerButtonConstants.subtitleSize * PlayerLayoutMetrics.subtitleScale))

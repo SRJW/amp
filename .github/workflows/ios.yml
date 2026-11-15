@@ -239,6 +239,7 @@ jobs:
         default: full-player
         options:
         - full-player
+        - animation-only
         - waveforms-only
         - library-only
         - library-editor-only

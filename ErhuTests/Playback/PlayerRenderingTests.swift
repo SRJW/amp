@@ -64,6 +64,47 @@ final class PlayerRenderingTests: XCTestCase {
         }
     }
 
+    @MainActor func testNowPlayingKeepsArtworkBehindStatusWithoutAFullWidthLightStrip() throws {
+        let screen = CGSize(width: 200, height: 500)
+        let view = PlayerFullBleedBackground(dominant: blendBlue,
+                                            statusProfile: PlayerArtworkStatusProfile(solid: .black),
+                                            safeAreaTop: 30) { Color.black }
+            .environment(\.colorScheme, .light)
+        let rendered = try pixels(view, size: screen)
+        XCTAssertLessThan(rendered.color(x: 100, y: 15).max() ?? 1, 0.02,
+                          "The artwork between the system indicators must remain visible, without a gray band")
+        for x in [36, 168] {
+            let rgb = rendered.color(x: x, y: 15)
+            let luminance = PlayerArtworkStatusProfile.luminance(SIMD3(rgb[0], rgb[1], rgb[2]))
+            XCTAssertGreaterThanOrEqual((luminance + 0.05) / 0.05, 4.4,
+                                        "Local contrast protection must still support the existing black system ink")
+        }
+        let source = UIGraphicsImageRenderer(size: CGSize(width: 100, height: 100)).image { context in
+            UIColor.red.setFill(); context.fill(CGRect(x: 0, y: 0, width: 100, height: 100))
+            UIColor.blue.setFill(); context.fill(CGRect(x: 0, y: 0, width: 100, height: 20))
+        }
+        let cover = ArtworkSlideLayer(progress: 1, direction: 1, incoming: false, reduceMotion: true,
+                                      size: CGSize(width: 200, height: 280), overscan: PlayerArtworkComposition.transitionOverscan) {
+            PlayerAdaptiveArtwork(image: source, size: CGSize(width: 200, height: 280), safeAreaTop: 0)
+        }
+        let top = try pixels(cover, size: CGSize(width: 200, height: 280))
+        assertColor(top, at: CGPoint(x: 100, y: 5), dominant: 2)
+    }
+
+    @MainActor func testNowPlayingDissolveReachesTheTitleWithoutMovingTheContent() throws {
+        for screen in [CGSize(width: 200, height: 500), CGSize(width: 240, height: 460)] {
+            let view = PlayerFullBleedBackground(dominant: blendBlue,
+                                                statusProfile: PlayerArtworkStatusProfile(solid: .red)) { self.blendRed }
+                .environment(\.colorScheme, .dark)
+            let rendered = try pixels(view, size: screen)
+            let nearTitle = rendered.color(x: Int(screen.width / 2), y: Int(screen.height * 0.56))
+            let atTitle = rendered.color(x: Int(screen.width / 2), y: Int(screen.height * 0.60))
+            XCTAssertGreaterThan(nearTitle[0], atTitle[0] + 0.08,
+                                 "The cover must continue beyond its old 55% limit and finish beside the unchanged title")
+            XCTAssertLessThan(atTitle[0], 0.10, "The image must finish before it can obscure the title")
+        }
+    }
+
     @MainActor func testStatusProtectionSupportsWhiteInkOnWhiteArtAndBlackInkOnBlackArt() throws {
         for (scheme, color) in [(ColorScheme.dark, UIColor.white), (.light, UIColor.black)] {
             let source = UIGraphicsImageRenderer(size: CGSize(width: 100, height: 100)).image { context in

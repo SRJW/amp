@@ -2,12 +2,19 @@ import SwiftUI
 import UIKit
 
 enum PlayerArtworkComposition {
-    static let heightFraction: CGFloat = 0.55
+    static let titleCentreH: CGFloat = 0.60
+    static let titleClearanceW: CGFloat = 0.012
     static let transitionOverscan: CGFloat = 1.04
     static let extensionBlurFraction: CGFloat = 0.055
     static let sideFeather = 0.06
     static let topFeather = 0.04
     static let bottomFeather = 0.12
+
+    /// End the dissolve just before the existing title, including its text height.
+    static func artworkHeight(in screen: CGSize) -> CGFloat {
+        let halfTitle = PlayerButtonConstants.titleSize * PlayerLayoutMetrics.titleScale / 2
+        return max(screen.height * titleCentreH - halfTitle - screen.width * titleClearanceW, 0)
+    }
 
     /// Preserve the original aspect ratio. Use available headroom, rather than shifting every cover.
     static func mainFrame(image: CGSize, viewport: CGSize, safeAreaTop: CGFloat) -> CGRect {
@@ -172,13 +179,15 @@ struct PlayerArtworkStatusGradient: View {
     let blend: Double
     let size: CGSize
     let safeAreaTop: CGFloat
-    var artworkHeightFraction: CGFloat = PlayerArtworkComposition.heightFraction
+    var artworkHeightFraction: CGFloat? = nil
     var contentSafeAreaTop: CGFloat? = nil
+    var localizedLightProtection = false
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         let band = max(safeAreaTop, size.height * 0.045)
-        let viewport = CGSize(width: size.width, height: size.height * artworkHeightFraction)
+        let viewport = CGSize(width: size.width, height: artworkHeightFraction.map { size.height * $0 }
+                              ?? PlayerArtworkComposition.artworkHeight(in: size))
         let first = current.protection(viewport: viewport, safeAreaTop: band, scheme: scheme, contentSafeAreaTop: contentSafeAreaTop)
         let last = next?.protection(viewport: viewport, safeAreaTop: band, scheme: scheme, contentSafeAreaTop: contentSafeAreaTop) ?? first
         let amount = blend.clamped(0, 1)
@@ -190,6 +199,18 @@ struct PlayerArtworkStatusGradient: View {
                                .init(color: color, location: min(band / max(height, 1), 0.9)),
                                .init(color: .clear, location: 1)], startPoint: .top, endPoint: .bottom)
             .frame(height: height)
+            .mask {
+                if localizedLightProtection && scheme == .light {
+                    // Black system ink needs a lighter backing on dark covers, but a
+                    // full-width light wash looks like an empty strip above the image.
+                    LinearGradient(stops: [.init(color: .white, location: 0),
+                                           .init(color: .white, location: 0.30),
+                                           .init(color: .clear, location: 0.43),
+                                           .init(color: .clear, location: 0.57),
+                                           .init(color: .white, location: 0.70),
+                                           .init(color: .white, location: 1)], startPoint: .leading, endPoint: .trailing)
+                } else { Color.white }
+            }
             .allowsHitTesting(false)
             .accessibilityHidden(true)
     }
