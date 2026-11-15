@@ -2,13 +2,15 @@
 
 ## Now Playing
 
-`PlayerArtworkComposition` calcula un rectángulo proporcional que conserva la portada completa según sus dimensiones, el dispositivo y el espacio disponible. Solo utiliza el espacio vertical sobrante para dejar margen bajo la zona segura: no desplaza todas las imágenes una cantidad fija.
+`PlayerArtworkComposition` calcula un rectángulo proporcional que conserva la portada completa según sus dimensiones, el dispositivo y el espacio disponible. En Now Playing, `playerFrame` coloca la imagen nítida usando el 70 % del espacio vertical sobrante; la extensión de la misma portada cubre desde y=0, incluida la status bar. No hay margen vacío encima de la composición ni un desplazamiento fijo para todas las imágenes.
 
 `PlayerAdaptiveArtwork` combina la capa principal con una extensión desenfocada de la misma imagen. Sus bordes se fusionan cuando la proporción requiere espacio adicional. Ambas capas usan la misma imagen ya decodificada. El pequeño overscan que evita costuras durante los cambios de canción se compensa en la capa principal, de modo que no añade zoom permanente a la portada.
 
 `ReferencePlayerBackdrop` conserva la cola, precarga, caché y transiciones existentes. `PlayerFullBleedBackground` conserva la extracción de colores, el fundido inferior y sus ajustes guardados. NowPlayingView, sus textos, waveform y controles no cambian de distribución ni de tamaño.
 
-El degradado de status usa una pequeña muestra de colores calculada al cargar cada portada, el estilo claro/oscuro actual y la zona segura real de la ventana. Ajusta su intensidad al contraste necesario y desaparece gradualmente. No cambia el estilo, visibilidad ni posición de los indicadores de iOS.
+El área de portada termina justo antes del título: `artworkHeight(in:)` parte del centro del título (60 % H), resta media altura de su texto y un margen de 1,2 % W. Así el fundido llega más abajo que el límite anterior de 55 % H, sin mover título, metadata ni controles. El ajuste guardado Artwork fade conserva su valor y todo su rango dentro de esta nueva área.
+
+El degradado de status usa una pequeña muestra de colores calculada al cargar cada portada, el estilo claro/oscuro actual y la zona segura real de la ventana. Ajusta su intensidad al contraste necesario y desaparece gradualmente. En Now Playing, la protección clara para indicadores negros se limita horizontalmente a las zonas de reloj/señal; no aclara toda la anchura formando una franja gris. No cambia el estilo, visibilidad ni posición de los indicadores de iOS. El detalle de álbum conserva su tratamiento previo.
 
 ## Álbum
 

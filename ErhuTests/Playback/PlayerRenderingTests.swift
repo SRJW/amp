@@ -99,11 +99,17 @@ final class PlayerRenderingTests: XCTestCase {
                                                 statusProfile: PlayerArtworkStatusProfile(solid: .red)) { self.blendRed }
                 .environment(\.colorScheme, .dark)
             let rendered = try pixels(view, size: screen)
+            let background = try pixels(PlayerFullBleedBackground(dominant: blendBlue) { Color.clear }
+                .environment(\.colorScheme, .dark), size: screen)
             let nearTitle = rendered.color(x: Int(screen.width / 2), y: Int(screen.height * 0.56))
             let atTitle = rendered.color(x: Int(screen.width / 2), y: Int(screen.height * 0.60))
+            let titleBackground = background.color(x: Int(screen.width / 2), y: Int(screen.height * 0.60))
             XCTAssertGreaterThan(nearTitle[0], atTitle[0] + 0.08,
                                  "The cover must continue beyond its old 55% limit and finish beside the unchanged title")
-            XCTAssertLessThan(atTitle[0], 0.10, "The image must finish before it can obscure the title")
+            for channel in 0..<3 {
+                XCTAssertEqual(atTitle[channel], titleBackground[channel], accuracy: 0.02,
+                               "The image must finish before it can obscure the title")
+            }
         }
     }
 
