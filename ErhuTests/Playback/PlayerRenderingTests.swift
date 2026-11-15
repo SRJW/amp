@@ -30,7 +30,7 @@ final class PlayerRenderingTests: XCTestCase {
             GeometryReader { geometry in
                 ArtworkSlideLayer(progress: 1, direction: 1, incoming: false, reduceMotion: true,
                                   size: geometry.size, overscan: PlayerArtworkComposition.transitionOverscan) {
-                    PlayerAdaptiveArtwork(image: image, size: geometry.size, safeAreaTop: 0, immersive: true)
+                    PlayerAdaptiveArtwork(image: image, size: geometry.size, safeAreaTop: 0, immersive: true, upperColor: self.blendBlue)
                 }
             }
         }
@@ -87,7 +87,7 @@ final class PlayerRenderingTests: XCTestCase {
         }
         let cover = ArtworkSlideLayer(progress: 1, direction: 1, incoming: false, reduceMotion: true,
                                       size: CGSize(width: 200, height: 280), overscan: PlayerArtworkComposition.transitionOverscan) {
-            PlayerAdaptiveArtwork(image: source, size: CGSize(width: 200, height: 280), safeAreaTop: 0, immersive: true)
+            PlayerAdaptiveArtwork(image: source, size: CGSize(width: 200, height: 280), safeAreaTop: 0, immersive: true, upperColor: .blue)
         }
         let top = try pixels(cover, size: CGSize(width: 200, height: 280))
         assertColor(top, at: CGPoint(x: 100, y: 5), dominant: 2)
@@ -109,6 +109,42 @@ final class PlayerRenderingTests: XCTestCase {
             for channel in 0..<3 {
                 XCTAssertEqual(atTitle[channel], titleBackground[channel], accuracy: 0.02,
                                "The image must finish before it can obscure the title")
+            }
+        }
+    }
+
+    @MainActor func testUpperArtworkEdgeDissolvesWithoutAVisibleLineAcrossContrastingCovers() throws {
+        let size = CGSize(width: 200, height: 300)
+        let cases: [(UIColor, UIColor, [Double])] = [(.white, .black, [0, 0, 0]),
+                                                    (.black, .white, [1, 1, 1]),
+                                                    (.magenta, .blue, [0, 0, 1])]
+        for (edge, base, rgb) in cases {
+            let source = UIGraphicsImageRenderer(size: CGSize(width: 100, height: 100)).image { context in
+                base.setFill(); context.fill(CGRect(x: 0, y: 0, width: 100, height: 100))
+                edge.setFill(); context.fill(CGRect(x: 0, y: 0, width: 100, height: 8))
+            }
+            let view = ArtworkSlideLayer(progress: 1, direction: 1, incoming: false, reduceMotion: true,
+                                         size: size, overscan: PlayerArtworkComposition.transitionOverscan) {
+                PlayerAdaptiveArtwork(image: source, size: size, safeAreaTop: 0, immersive: true, upperColor: Color(uiColor: base))
+            }
+            let rendered = try pixels(view, size: size)
+            let frame = PlayerArtworkComposition.playerFrame(image: source.size, viewport: size)
+            var previous = rendered.color(x: 100, y: Int(frame.minY) - 3)
+            for y in (Int(frame.minY) - 2)...(Int(frame.minY) + 6) {
+                let current = rendered.color(x: 100, y: y)
+                for channel in 0..<3 {
+                    XCTAssertLessThan(abs(current[channel] - previous[channel]), 0.06,
+                                      "The sharp cover's upper edge must merge gradually into its own extension")
+                }
+                previous = current
+            }
+            let blended = rendered.color(x: 100, y: Int(frame.minY) + 8)
+            XCTAssertGreaterThan(zip(blended, rgb).map { abs($0 - $1) }.reduce(0, +), 0.05,
+                                 "The upper image must still be present inside the fade")
+            let interior = rendered.color(x: 100, y: Int(frame.midY))
+            for channel in 0..<3 {
+                XCTAssertEqual(interior[channel], rgb[channel], accuracy: 0.03,
+                               "The upper treatment must not tint the main image below the blend")
             }
         }
     }

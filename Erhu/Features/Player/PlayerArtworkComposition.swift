@@ -10,6 +10,18 @@ enum PlayerArtworkComposition {
     static let sideFeather = 0.06
     static let topFeather = 0.04
     static let bottomFeather = 0.12
+    static let upperBlendW: CGFloat = 0.14
+    static let upperBlendHeadroom: CGFloat = 0.75
+    static let upperBlendLimit: CGFloat = 0.22
+    static let upperTintOpacity = 0.20
+
+    static func upperBlendHeight(frame: CGRect, viewport: CGSize) -> CGFloat {
+        min(max(viewport.width * upperBlendW, frame.minY * upperBlendHeadroom), frame.height * upperBlendLimit)
+    }
+
+    static func upperTintHeight(frame: CGRect, viewport: CGSize) -> CGFloat {
+        min(frame.minY + upperBlendHeight(frame: frame, viewport: viewport), viewport.height)
+    }
 
     /// End the dissolve just before the existing title, including its text height.
     static func artworkHeight(in screen: CGSize) -> CGFloat {
@@ -50,6 +62,7 @@ struct PlayerAdaptiveArtwork: View {
     let size: CGSize
     let safeAreaTop: CGFloat
     var immersive = false
+    var upperColor: Color? = nil
 
     var body: some View {
         let rect = immersive ? PlayerArtworkComposition.playerFrame(image: image.size, viewport: size)
@@ -58,10 +71,17 @@ struct PlayerAdaptiveArtwork: View {
             Image(uiImage: image).resizable().scaledToFill()
                 .frame(width: size.width, height: size.height).clipped()
                 .blur(radius: size.width * PlayerArtworkComposition.extensionBlurFraction, opaque: true)
+                .overlay(alignment: .top) {
+                    if immersive, let upperColor {
+                        LinearGradient(colors: [upperColor.opacity(PlayerArtworkComposition.upperTintOpacity),
+                                                upperColor.opacity(0)], startPoint: .top, endPoint: .bottom)
+                            .frame(height: PlayerArtworkComposition.upperTintHeight(frame: rect, viewport: size))
+                    }
+                }
             ZStack {
                 Image(uiImage: image).resizable().scaledToFit()
                     .frame(width: rect.width, height: rect.height)
-                    .mask(verticalBlend(hasHeadroom: rect.minY > 0))
+                    .mask(verticalBlend(frame: rect))
                     .mask {
                         if rect.width < size.width - 0.5 {
                             LinearGradient(stops: [.init(color: .clear, location: 0),
@@ -79,9 +99,19 @@ struct PlayerAdaptiveArtwork: View {
         .frame(width: size.width, height: size.height)
     }
 
-    private func verticalBlend(hasHeadroom: Bool) -> LinearGradient {
-        var stops: [Gradient.Stop] = [.init(color: hasHeadroom ? .clear : .white, location: 0)]
-        if hasHeadroom { stops.append(.init(color: .white, location: PlayerArtworkComposition.topFeather)) }
+    private func verticalBlend(frame: CGRect) -> LinearGradient {
+        let hasHeadroom = frame.minY > 0
+        var stops: [Gradient.Stop] = [.init(color: immersive || hasHeadroom ? .clear : .white, location: 0)]
+        if immersive {
+            let end = PlayerArtworkComposition.upperBlendHeight(frame: frame, viewport: size) / max(frame.height, 1)
+            // Smoothstep samples ease into the image instead of revealing a short, linear edge.
+            stops.append(contentsOf: [.init(color: .white.opacity(0.15625), location: end * 0.25),
+                                      .init(color: .white.opacity(0.5), location: end * 0.5),
+                                      .init(color: .white.opacity(0.84375), location: end * 0.75),
+                                      .init(color: .white, location: end)])
+        } else if hasHeadroom {
+            stops.append(.init(color: .white, location: PlayerArtworkComposition.topFeather))
+        }
         stops.append(.init(color: .white, location: 1 - PlayerArtworkComposition.bottomFeather))
         stops.append(.init(color: .clear, location: 1))
         return LinearGradient(stops: stops, startPoint: .top, endPoint: .bottom)
@@ -143,7 +173,14 @@ struct PlayerArtworkStatusProfile {
         for x in [0.08, 0.18, 0.28, 0.72, 0.84, 0.94] {
             for y in [0.35, 0.7] {
                 let point = CGPoint(x: viewport.width * x, y: safeAreaTop * y)
-                samples.append(sample(point, in: extended))
+                var background = sample(point, in: extended)
+                if immersive {
+                    let height = PlayerArtworkComposition.upperTintHeight(frame: main, viewport: viewport)
+                    let localY = (point.y - viewport.height / 2) / PlayerArtworkComposition.transitionOverscan + viewport.height / 2
+                    let opacity = PlayerArtworkComposition.upperTintOpacity * Double((1 - localY / max(height, 1)).clamped(0, 1))
+                    background = background * (1 - opacity) + dominant * opacity
+                }
+                samples.append(background)
                 if main.contains(point) { samples.append(sample(point, in: main)) }
             }
         }

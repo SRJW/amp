@@ -115,7 +115,9 @@ struct ReferencePlayerBackdrop: View {
                           reduceMotion: reduceMotion, size: size, overscan: PlayerArtworkComposition.transitionOverscan) {
             ZStack {
                 frame.dominant
-                if let image = frame.image { PlayerAdaptiveArtwork(image: image, size: size, safeAreaTop: 0, immersive: true) }
+                if let image = frame.image {
+                    PlayerAdaptiveArtwork(image: image, size: size, safeAreaTop: 0, immersive: true, upperColor: frame.dominant)
+                }
                 else {
                     frame.dominant
                     Image(systemName: "music.note").font(.system(size: 20)).foregroundStyle(.white.opacity(0.2))

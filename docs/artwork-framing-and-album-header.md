@@ -12,6 +12,14 @@ El área de portada termina justo antes del título: `artworkHeight(in:)` parte 
 
 El degradado de status usa una pequeña muestra de colores calculada al cargar cada portada, el estilo claro/oscuro actual y la zona segura real de la ventana. Ajusta su intensidad al contraste necesario y desaparece gradualmente. En Now Playing, la protección clara para indicadores negros se limita horizontalmente a las zonas de reloj/señal; no aclara toda la anchura formando una franja gris. No cambia el estilo, visibilidad ni posición de los indicadores de iOS. El detalle de álbum conserva su tratamiento previo.
 
+### Unión superior
+
+La máscara anterior solo fundía el 4 % superior de la imagen nítida, y únicamente cuando había espacio encima. Ahora Now Playing usa una rampa gradual de transparencia con entrada y salida suaves, también cuando la imagen llega al borde superior. Su altura depende del ancho disponible y del espacio sobre la imagen, limitada al 22 % de su alto. No cambia su rectángulo, escala o posición.
+
+Debajo permanece la extensión difuminada de la misma portada. Un degradado del color dominante, con opacidad máxima del 20 %, la matiza en la zona superior y desaparece progresivamente al entrar en la imagen nítida. No añade una franja plana ni oscurece toda la portada. La protección de los indicadores incluye este matiz en su cálculo de contraste.
+
+Las constantes `upperBlendW`, `upperBlendHeadroom`, `upperBlendLimit` y `upperTintOpacity` se encuentran en PlayerArtworkComposition. ReferencePlayerBackdrop reutiliza el color y la imagen que ya carga para cada pista; no introduce otra decodificación, cambio de caché o animación. El fundido inferior y el encuadre permanecen como estaban tras el ajuste anterior. Artistas, álbumes y miniaturas no activan este tratamiento nuevo.
+
 ## Álbum
 
 Solo AlbumDetailView activa `separatesMetadata` en CollectionHeroHeader. El layout coloca primero el hero y después un bloque medido de título (máximo dos líneas), artista y datos. No superpone el nombre sobre la foto ni aplica offsets al bloque de texto. Artistas y playlists conservan su colocación anterior.

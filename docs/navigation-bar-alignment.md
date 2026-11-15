@@ -13,3 +13,5 @@ No se cambian animaciones, acciones de navegación, waveform ni controles. Los c
 La prueba nativa `testLibraryAndPlayerNavigationShareScreenCoordinates` mide los cuatro botones de Library, abre el player y compara centros X/Y y tamaños con tolerancia de medio punto. Después vuelve a Library y comprueba que sigue en su posición original.
 
 En el iPhone: alternar entre mini reproductor → Now Playing → Library y observar los cuatro centros. Revisar que solo Library tenga Liquid Glass, que el mini conserve su posición y que todos los botones mantengan sus acciones.
+
+Validación: la [ejecución 131](https://github.com/SRJW/amp/actions/runs/43761985931), revisión `6497499`, terminó correctamente. La prueba nativa de coordenadas pasó y también las 31 pruebas de renderizado existentes; el dispositivo compiló y exportó el IPA.
