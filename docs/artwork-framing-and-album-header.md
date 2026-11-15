@@ -48,3 +48,13 @@ La ejecución [113](https://github.com/SRJW/amp/actions/runs/43734521563) comple
 La ejecución final [122](https://github.com/SRJW/amp/actions/runs/43742522929), revisión `34c3e48`, terminó correctamente: exportación/publicación y los seis flujos de interfaz de librería. Incluye mini reproductor, índice alfabético, regreso a la pista exacta, contador sin reinicio, persistencia del ajuste háptico, selección/borrado y navegación al volver de segundo plano.
 
 IPA verificada: [v0.1.0-amp.122](https://github.com/SRJW/amp/releases/download/v0.1.0-amp.122/amp.ipa), versión `0.1.0`, compilación `122`, bundle ID `com.erhu`. SHA-256: `e759652353be4ae0dc622817419665e040c25455ea62a53da24fd963999cd279`.
+
+## Validación del fundido superior y composición actual
+
+La [ejecución 133](https://github.com/SRJW/amp/actions/runs/43763363708), revisión `c107a45`, terminó correctamente: compilación para iPhone, exportación/publicación y 32 pruebas de renderizado con cero fallos (23 del player y nueve de movimiento). La prueba nueva mide la transición de píxeles junto al borde superior en portadas claras, oscuras y de colores intensos, comprueba que la imagen sigue presente durante el fundido y que su interior conserva su color. También pasan las comprobaciones de contraste, composición y fundido inferior existentes.
+
+La alineación de navegación incluida mantiene el código verificado por la prueba nativa de la ejecución 131; este último cambio no modifica su geometría.
+
+IPA actual verificada: [v0.1.0-amp.133](https://github.com/SRJW/amp/releases/download/v0.1.0-amp.133/amp.ipa), versión `0.1.0`, compilación `133`, bundle ID `com.erhu`. SHA-256: `8a5f54dae3b50c05ab4ee4c8364307bb8729047aa8011a99e31f7893522abd30`.
+
+En el iPhone, revisar varias portadas con detalles próximos al borde superior, alternar modo claro/oscuro y cambiar de pista en ambas direcciones. Debe mantenerse una unión suave con la extensión superior, indicadores legibles y el mismo encuadre, controles y fundido inferior.
