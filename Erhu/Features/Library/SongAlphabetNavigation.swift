@@ -58,55 +58,10 @@ struct SongAlphabetIndex: View {
         let available = SongAlphabet.letters.filter { anchors[$0] != nil }
         Group {
             if available.count > 1 {
-                GeometryReader { geometry in
-                    let rowHeight = geometry.size.height / CGFloat(SongAlphabet.letters.count)
-                    VStack(spacing: 0) {
-                        ForEach(SongAlphabet.letters, id: \.self) { letter in
-                            Text(letter).font(.system(size: SongAlphabetMetrics.letterSize, weight: .bold))
-                                .opacity(anchors[letter] == nil ? 0.25 : 1)
-                                .frame(width: SongAlphabetMetrics.width, height: rowHeight)
-                                .background {
-                                    if scrubbing && active == letter {
-                                        Capsule().fill(palette.primary.opacity(0.16))
-                                    }
-                                }
-                        }
-                    }
-                    .foregroundStyle(palette.primary)
-                    .contentShape(Rectangle())
-                    .gesture(DragGesture(minimumDistance: 0).onChanged { value in
-                        let index = min(max(Int(value.location.y / max(rowHeight, 1)), 0), SongAlphabet.letters.count - 1)
-                        touchY = min(max(value.location.y, SongAlphabetMetrics.bubbleSize / 2),
-                                     geometry.size.height - SongAlphabetMetrics.bubbleSize / 2)
-                        scrubbing = true
-                        let letter = SongAlphabet.letters[index]
-                        if active != letter, let id = SongAlphabet.target(for: letter, anchors: anchors) {
-                            active = letter
-                            scrollTo(id)
-                        }
-                    }.onEnded { _ in
-                        scrubbing = false
-                        active = nil
-                    })
-                    .overlay(alignment: .topLeading) {
-                        if scrubbing, let active {
-                            Text(active).font(.system(size: SongAlphabetMetrics.bubbleTextSize, weight: .bold))
-                                .foregroundStyle(palette.onSurface)
-                                .frame(width: SongAlphabetMetrics.bubbleSize, height: SongAlphabetMetrics.bubbleSize)
-                                .background(palette.surface, in: RoundedRectangle(cornerRadius: Radius.medium))
-                                .position(x: -SongAlphabetMetrics.bubbleSize / 2 - SongAlphabetMetrics.bubbleGap, y: touchY)
-                                .transition(.opacity)
-                                .allowsHitTesting(false)
-                                .accessibilityHidden(true)
-                        }
-                    }
-                }
+                index(anchors: anchors)
                 .frame(width: SongAlphabetMetrics.width,
                        height: min(CGFloat(SongAlphabet.letters.count) * SongAlphabetMetrics.rowHeight, SongAlphabetMetrics.maximumHeight))
                 .animation(reduceMotion ? nil : .easeOut(duration: SongAlphabetMetrics.bubbleDuration), value: scrubbing)
-                .sensoryFeedback(.selection, trigger: active) { previous, next in
-                    hapticsEnabled && scrubbing && previous != nil && next != nil && previous != next
-                }
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(SongAlphabetMetrics.accessibilityLabel)
                 .accessibilityIdentifier("songAlphabetIndex")
@@ -119,5 +74,59 @@ struct SongAlphabetIndex: View {
                 }
             }
         }
+        .sensoryFeedback(.selection, trigger: active, condition: shouldPlaySelection)
+    }
+
+    private func index(anchors: [String: Int64]) -> some View {
+        GeometryReader { geometry in
+            let rowHeight = geometry.size.height / CGFloat(SongAlphabet.letters.count)
+            VStack(spacing: 0) {
+                ForEach(SongAlphabet.letters, id: \.self) { letter in
+                    Text(letter).font(.system(size: SongAlphabetMetrics.letterSize, weight: .bold))
+                        .opacity(anchors[letter] == nil ? 0.25 : 1)
+                        .frame(width: SongAlphabetMetrics.width, height: rowHeight)
+                        .background {
+                            if scrubbing && active == letter {
+                                Capsule().fill(palette.primary.opacity(0.16))
+                            }
+                        }
+                }
+            }
+            .foregroundStyle(palette.primary)
+            .contentShape(Rectangle())
+            .gesture(DragGesture(minimumDistance: 0)
+                .onChanged { value in move(to: value.location.y, height: geometry.size.height, anchors: anchors) }
+                .onEnded { _ in scrubbing = false; active = nil })
+            .overlay(alignment: .topLeading) {
+                if scrubbing, let active { bubble(active) }
+            }
+        }
+    }
+
+    private func bubble(_ letter: String) -> some View {
+        Text(letter).font(.system(size: SongAlphabetMetrics.bubbleTextSize, weight: .bold))
+            .foregroundStyle(palette.onSurface)
+            .frame(width: SongAlphabetMetrics.bubbleSize, height: SongAlphabetMetrics.bubbleSize)
+            .background(palette.surface, in: RoundedRectangle(cornerRadius: Radius.medium))
+            .position(x: -SongAlphabetMetrics.bubbleSize / 2 - SongAlphabetMetrics.bubbleGap, y: touchY)
+            .transition(.opacity)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
+
+    private func move(to y: CGFloat, height: CGFloat, anchors: [String: Int64]) {
+        let rowHeight = height / CGFloat(SongAlphabet.letters.count)
+        let index = min(max(Int(y / max(rowHeight, 1)), 0), SongAlphabet.letters.count - 1)
+        touchY = min(max(y, SongAlphabetMetrics.bubbleSize / 2), height - SongAlphabetMetrics.bubbleSize / 2)
+        scrubbing = true
+        let letter = SongAlphabet.letters[index]
+        if active != letter, let id = SongAlphabet.target(for: letter, anchors: anchors) {
+            active = letter
+            scrollTo(id)
+        }
+    }
+
+    private func shouldPlaySelection(_ previous: String?, _ next: String?) -> Bool {
+        hapticsEnabled && scrubbing && previous != nil && next != nil && previous != next
     }
 }
