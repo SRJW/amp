@@ -30,15 +30,15 @@ final class PlayerRenderingTests: XCTestCase {
             GeometryReader { geometry in
                 ArtworkSlideLayer(progress: 1, direction: 1, incoming: false, reduceMotion: true,
                                   size: geometry.size, overscan: PlayerArtworkComposition.transitionOverscan) {
-                    PlayerAdaptiveArtwork(image: image, size: geometry.size, safeAreaTop: 0)
+                    PlayerAdaptiveArtwork(image: image, size: geometry.size, safeAreaTop: 0, immersive: true)
                 }
             }
         }
         let rendered = try pixels(backdrop.environment(\.colorScheme, .dark), size: CGSize(width: 200, height: 500))
-        assertColor(rendered, at: CGPoint(x: 8, y: 60), dominant: 0)
-        assertColor(rendered, at: CGPoint(x: 192, y: 60), dominant: 1)
-        assertColor(rendered, at: CGPoint(x: 100, y: 60), dominant: 2)
-        XCTAssertLessThan(rendered.color(x: 100, y: 10)[2], rendered.color(x: 100, y: 60)[2],
+        assertColor(rendered, at: CGPoint(x: 8, y: 100), dominant: 0)
+        assertColor(rendered, at: CGPoint(x: 192, y: 100), dominant: 1)
+        assertColor(rendered, at: CGPoint(x: 100, y: 100), dominant: 2)
+        XCTAssertLessThan(rendered.color(x: 100, y: 10)[2], rendered.color(x: 100, y: 100)[2],
                           "The upper scrim must darken the image behind system status text")
         let belowCover = rendered.color(x: 100, y: 300)
         let bottom = rendered.color(x: 100, y: 480)
@@ -53,13 +53,15 @@ final class PlayerRenderingTests: XCTestCase {
         for viewport in [CGSize(width: 375, height: 367), CGSize(width: 393, height: 469), CGSize(width: 430, height: 512)] {
             for source in [CGSize(width: 500, height: 500), CGSize(width: 1000, height: 1000),
                            CGSize(width: 2000, height: 2000), CGSize(width: 2000, height: 1000), CGSize(width: 1000, height: 1800)] {
-                let rect = PlayerArtworkComposition.mainFrame(image: source, viewport: viewport, safeAreaTop: 59)
+                for rect in [PlayerArtworkComposition.mainFrame(image: source, viewport: viewport, safeAreaTop: 59),
+                             PlayerArtworkComposition.playerFrame(image: source, viewport: viewport)] {
                 XCTAssertEqual(rect.width / rect.height, source.width / source.height, accuracy: 0.0001)
                 XCTAssertGreaterThanOrEqual(rect.minX, -0.001)
                 XCTAssertGreaterThanOrEqual(rect.minY, -0.001)
                 XCTAssertLessThanOrEqual(rect.maxX, viewport.width + 0.001)
                 XCTAssertLessThanOrEqual(rect.maxY, viewport.height + 0.001)
                 XCTAssertTrue(abs(rect.width - viewport.width) < 0.001 || abs(rect.height - viewport.height) < 0.001)
+                }
             }
         }
     }
@@ -85,7 +87,7 @@ final class PlayerRenderingTests: XCTestCase {
         }
         let cover = ArtworkSlideLayer(progress: 1, direction: 1, incoming: false, reduceMotion: true,
                                       size: CGSize(width: 200, height: 280), overscan: PlayerArtworkComposition.transitionOverscan) {
-            PlayerAdaptiveArtwork(image: source, size: CGSize(width: 200, height: 280), safeAreaTop: 0)
+            PlayerAdaptiveArtwork(image: source, size: CGSize(width: 200, height: 280), safeAreaTop: 0, immersive: true)
         }
         let top = try pixels(cover, size: CGSize(width: 200, height: 280))
         assertColor(top, at: CGPoint(x: 100, y: 5), dominant: 2)

@@ -4,6 +4,7 @@ import UIKit
 enum PlayerArtworkComposition {
     static let titleCentreH: CGFloat = 0.60
     static let titleClearanceW: CGFloat = 0.012
+    static let contentAlignment: CGFloat = 0.70
     static let transitionOverscan: CGFloat = 1.04
     static let extensionBlurFraction: CGFloat = 0.055
     static let sideFeather = 0.06
@@ -27,6 +28,13 @@ enum PlayerArtworkComposition {
                       width: size.width, height: size.height)
     }
 
+    /// The extension covers y=0; use spare space to lower the sharp image proportionally.
+    static func playerFrame(image: CGSize, viewport: CGSize) -> CGRect {
+        var rect = mainFrame(image: image, viewport: viewport, safeAreaTop: 0)
+        rect.origin.y = max(viewport.height - rect.height, 0) * contentAlignment
+        return rect
+    }
+
     static func extensionFrame(image: CGSize, viewport: CGSize) -> CGRect {
         guard image.width > 0, image.height > 0 else { return .zero }
         let scale = max(viewport.width / image.width, viewport.height / image.height) * transitionOverscan
@@ -41,9 +49,11 @@ struct PlayerAdaptiveArtwork: View {
     let image: UIImage
     let size: CGSize
     let safeAreaTop: CGFloat
+    var immersive = false
 
     var body: some View {
-        let rect = PlayerArtworkComposition.mainFrame(image: image.size, viewport: size, safeAreaTop: safeAreaTop)
+        let rect = immersive ? PlayerArtworkComposition.playerFrame(image: image.size, viewport: size)
+            : PlayerArtworkComposition.mainFrame(image: image.size, viewport: size, safeAreaTop: safeAreaTop)
         ZStack {
             Image(uiImage: image).resizable().scaledToFill()
                 .frame(width: size.width, height: size.height).clipped()
@@ -125,8 +135,9 @@ struct PlayerArtworkStatusProfile {
     }
 
     func protection(viewport: CGSize, safeAreaTop: CGFloat, scheme: ColorScheme,
-                    contentSafeAreaTop: CGFloat? = nil) -> PlayerArtworkStatusProtection {
-        let main = PlayerArtworkComposition.mainFrame(image: imageSize, viewport: viewport, safeAreaTop: contentSafeAreaTop ?? safeAreaTop)
+                    contentSafeAreaTop: CGFloat? = nil, immersive: Bool = false) -> PlayerArtworkStatusProtection {
+        let main = immersive ? PlayerArtworkComposition.playerFrame(image: imageSize, viewport: viewport)
+            : PlayerArtworkComposition.mainFrame(image: imageSize, viewport: viewport, safeAreaTop: contentSafeAreaTop ?? safeAreaTop)
         let extended = PlayerArtworkComposition.extensionFrame(image: imageSize, viewport: viewport)
         var samples: [SIMD3<Double>] = []
         for x in [0.08, 0.18, 0.28, 0.72, 0.84, 0.94] {
@@ -182,14 +193,15 @@ struct PlayerArtworkStatusGradient: View {
     var artworkHeightFraction: CGFloat? = nil
     var contentSafeAreaTop: CGFloat? = nil
     var localizedLightProtection = false
+    var immersive = false
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         let band = max(safeAreaTop, size.height * 0.045)
         let viewport = CGSize(width: size.width, height: artworkHeightFraction.map { size.height * $0 }
                               ?? PlayerArtworkComposition.artworkHeight(in: size))
-        let first = current.protection(viewport: viewport, safeAreaTop: band, scheme: scheme, contentSafeAreaTop: contentSafeAreaTop)
-        let last = next?.protection(viewport: viewport, safeAreaTop: band, scheme: scheme, contentSafeAreaTop: contentSafeAreaTop) ?? first
+        let first = current.protection(viewport: viewport, safeAreaTop: band, scheme: scheme, contentSafeAreaTop: contentSafeAreaTop, immersive: immersive)
+        let last = next?.protection(viewport: viewport, safeAreaTop: band, scheme: scheme, contentSafeAreaTop: contentSafeAreaTop, immersive: immersive) ?? first
         let amount = blend.clamped(0, 1)
         let rgb = first.rgb + (last.rgb - first.rgb) * amount
         let opacity = first.opacity + (last.opacity - first.opacity) * amount
