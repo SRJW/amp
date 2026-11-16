@@ -116,7 +116,8 @@ struct ReferencePlayerBackdrop: View {
             ZStack {
                 frame.dominant
                 if let image = frame.image {
-                    PlayerAdaptiveArtwork(image: image, size: size, safeAreaTop: 0, immersive: true)
+                    PlayerAdaptiveArtwork(image: image, size: size, safeAreaTop: 0, immersive: true,
+                                          upperPalette: frame.statusProfile?.upperPalette)
                 }
                 else {
                     frame.dominant

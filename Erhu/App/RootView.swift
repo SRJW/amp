@@ -28,15 +28,16 @@ struct RootView: View {
                     .id(router.section)
                     .allowsHitTesting(!router.showsNowPlaying && router.presentedTool == nil)
                     .accessibilityHidden(router.showsNowPlaying || router.presentedTool != nil)
-                if !router.showsNowPlaying && router.presentedTool == nil {
-                    AppBottomBar().zIndex(2)
+                if router.presentedTool == nil {
+                    AppBottomBar(showsButtons: false).zIndex(2)
+                        .allowsHitTesting(!router.showsNowPlaying)
+                        .accessibilityHidden(router.showsNowPlaying)
                 }
                 if let message = actions.message, !router.showsNowPlaying {
                     LibraryChromeToast(text: message, id: actions.messageID, hasSong: player.state.currentSong != nil)
                         .zIndex(2)
                 }
             }
-            .modifier(PlayerLibraryMotion(progress: playerMotion.isPresented ? playerMotion.progress : 0, reduceMotion: reduceMotion))
         }
         .overlay {
             GeometryReader { geometry in
@@ -59,6 +60,7 @@ struct RootView: View {
         .overlay {
             if let tool = router.presentedTool { toolScreen(tool).transition(.opacity) }
         }
+        .overlay(alignment: .bottom) { AppFixedNavigation() }
         .overlay { if router.showsDrawer { AppMenu().transition(.opacity) } }
         .animation(reduceMotion ? nil : .easeInOut(duration: AppNavigationMetrics.duration), value: router.presentedTool)
         .animation(reduceMotion ? .linear(duration: 0.12) : .easeInOut(duration: 0.28), value: router.section)
@@ -70,6 +72,7 @@ struct RootView: View {
         .animation(.easeInOut(duration: 0.2), value: actions.message)
         .environment(chrome)
         .environment(playerMotion)
+        .environment(\.appNavigationIsShared, true)
         .modifier(AppNavigationSafeArea())
         .environment(\.visualWorkBudget, visualBudget)
         .onReceive(NotificationCenter.default.publisher(for: .NSProcessInfoPowerStateDidChange).receive(on: RunLoop.main)) { _ in visualBudget = .current }
@@ -184,7 +187,7 @@ struct RootView: View {
                 }
                 .toolbar { closeTool }
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) { AppBottomBar() }
+        .safeAreaInset(edge: .bottom, spacing: 0) { AppBottomBar(showsButtons: false) }
         .background(palette.background.ignoresSafeArea())
     }
 

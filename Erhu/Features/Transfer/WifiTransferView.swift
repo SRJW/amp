@@ -39,7 +39,7 @@ struct WifiTransferView: View {
                 help("1. Put the phone and the computer on the same Wi-Fi network.")
                 help("2. Tap Start transfer, then scan the QR code or type the address in the computer's browser.")
                 help("3. Choose files or a folder (or drag them in) and press Send to phone.")
-                help("Music is saved to Erhu's folder (Files › On My iPhone › Erhu) and appears in your library shortly after.")
+                help("Music is saved to amp's folder (Files › On My iPhone › amp) and appears in your library shortly after.")
                 help("Keep Erhu open while sending: iOS pauses the transfer when the app is in the background.")
             }.toolSectionAppearance()
             Section("If the page does not load") {

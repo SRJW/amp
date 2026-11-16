@@ -18,6 +18,7 @@ enum AppNavigationMetrics {
 
 /// The same song strip and navigation controls are used by every app section and tool.
 struct AppBottomBar: View {
+    var showsButtons = true
     @Environment(PlayerController.self) private var player
     @Environment(AppRouter.self) private var router
     @Environment(AppSettings.self) private var settings
@@ -41,13 +42,31 @@ struct AppBottomBar: View {
             }
             .clipShape(RoundedRectangle(cornerRadius: MiniPlayerMetrics.cornerRadius, style: .continuous))
             GeometryReader { geometry in
-                AppNavigationButtons(width: geometry.size.width)
+                if showsButtons { AppNavigationButtons(width: geometry.size.width) }
             }
             .frame(height: AppNavigationMetrics.buttonsHeight)
             .background { Color.clear.chromeSurface(enabled: settings.glassEnabled).allowsHitTesting(false) }
             .clipShape(Capsule())
         }
         .padding(.horizontal, AppNavigationMetrics.horizontalInset).padding(.bottom, AppNavigationMetrics.bottomPadding)
+    }
+}
+
+/// One persistent row, outside both fading screens. Only the surfaces behind it change.
+struct AppFixedNavigation: View {
+    @Environment(AppRouter.self) private var router
+    @Environment(\.appNavigationBottomInset) private var bottomInset
+
+    var body: some View {
+        GeometryReader { geometry in
+            AppNavigationButtons(width: max(geometry.size.width - 2 * AppNavigationMetrics.horizontalInset, 0),
+                                 inPlayer: router.showsNowPlaying && router.presentedTool == nil)
+                .frame(width: geometry.size.width, height: AppNavigationMetrics.buttonsHeight)
+                .position(x: geometry.size.width / 2,
+                          y: AppNavigationMetrics.centreY(height: geometry.size.height, safeAreaBottom: bottomInset))
+        }
+        .ignoresSafeArea()
+        .accessibilityIdentifier("fixedAppNavigation")
     }
 }
 

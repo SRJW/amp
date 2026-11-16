@@ -419,7 +419,7 @@ private struct LibrarySettingsView: View {
                 HStack(spacing: Spacing.lg) {
                     SettingsIcon(symbol: "folder.fill")
                     VStack(alignment: .leading, spacing: Spacing.xs) {
-                        Text("On My iPhone › Erhu").font(.headline)
+                        Text("On My iPhone › amp").font(.headline)
                         Text("Add music with Files, the + button, or Wi-Fi Transfer.").font(.subheadline).foregroundStyle(.secondary)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)

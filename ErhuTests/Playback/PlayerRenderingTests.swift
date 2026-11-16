@@ -25,12 +25,13 @@ final class PlayerRenderingTests: XCTestCase {
         try TagWriter.write(edit, to: url)
         ArtworkLoader.shared.forget(path: url.path)
         _ = await ArtworkLoader.shared.image(for: url, maxPixels: 600)
+        let upperPalette = PlayerArtworkChromaticEdge(image: image)
         let backdrop = PlayerFullBleedBackground(dominant: Color(.sRGB, red: 0, green: 0, blue: 1),
                                                 statusProfile: PlayerArtworkStatusProfile(image: image, dominant: 0xFF0000FF)) {
             GeometryReader { geometry in
                 ArtworkSlideLayer(progress: 1, direction: 1, incoming: false, reduceMotion: true,
                                   size: geometry.size, overscan: PlayerArtworkComposition.transitionOverscan) {
-                    PlayerAdaptiveArtwork(image: image, size: geometry.size, safeAreaTop: 0, immersive: true)
+                    PlayerAdaptiveArtwork(image: image, size: geometry.size, safeAreaTop: 0, immersive: true, upperPalette: upperPalette)
                 }
             }
         }
@@ -89,7 +90,8 @@ final class PlayerRenderingTests: XCTestCase {
         }
         let cover = ArtworkSlideLayer(progress: 1, direction: 1, incoming: false, reduceMotion: true,
                                       size: CGSize(width: 200, height: 280), overscan: PlayerArtworkComposition.transitionOverscan) {
-            PlayerAdaptiveArtwork(image: source, size: CGSize(width: 200, height: 280), safeAreaTop: 0, immersive: true)
+            PlayerAdaptiveArtwork(image: source, size: CGSize(width: 200, height: 280), safeAreaTop: 0, immersive: true,
+                                  upperPalette: PlayerArtworkChromaticEdge(image: source))
         }
         let top = try pixels(cover, size: CGSize(width: 200, height: 280))
         let edge = PlayerArtworkComposition.playerFrame(image: source.size, viewport: CGSize(width: 200, height: 280)).minY
@@ -128,7 +130,8 @@ final class PlayerRenderingTests: XCTestCase {
             }
             let view = ArtworkSlideLayer(progress: 1, direction: 1, incoming: false, reduceMotion: true,
                                          size: size, overscan: PlayerArtworkComposition.transitionOverscan) {
-                PlayerAdaptiveArtwork(image: source, size: size, safeAreaTop: 0, immersive: true)
+                PlayerAdaptiveArtwork(image: source, size: size, safeAreaTop: 0, immersive: true,
+                                      upperPalette: PlayerArtworkChromaticEdge(image: source))
             }
             let rendered = try pixels(view, size: size)
             let frame = PlayerArtworkComposition.playerFrame(image: source.size, viewport: size)
@@ -175,69 +178,106 @@ final class PlayerRenderingTests: XCTestCase {
         }
     }
 
-    @MainActor func testUpperExtensionKeepsPatternRegistrationAndTopTextDetail() throws {
+    @MainActor func testChromaticUpperFieldRejectsForegroundFlowersAndPreservesThePhoto() throws {
         let size = CGSize(width: 200, height: 300)
-        let palettes: [(UIColor, UIColor)] = [(.yellow, .black), (.black, .white), (.magenta, .cyan)]
-        for sourceSize in [CGSize(width: 128, height: 128), CGSize(width: 400, height: 40), CGSize(width: 100, height: 250)] {
-            for (first, second) in palettes {
-                let source = UIGraphicsImageRenderer(size: sourceSize).image { context in
-                    first.setFill(); context.fill(CGRect(origin: .zero, size: sourceSize))
-                    second.setFill()
-                    for x in stride(from: 0, to: Int(sourceSize.width), by: 16) {
-                        context.fill(CGRect(x: x, y: 0, width: 8, height: Int(sourceSize.height)))
-                    }
-                    ("TOP" as NSString).draw(at: CGPoint(x: 4, y: 3), withAttributes: [
-                        .font: UIFont.boldSystemFont(ofSize: 12), .foregroundColor: UIColor.white
-                    ])
+        let cream = UIColor(red: 0.93, green: 0.91, blue: 0.80, alpha: 1)
+        let source = UIGraphicsImageRenderer(size: CGSize(width: 160, height: 160)).image { context in
+            cream.setFill(); context.fill(CGRect(x: 0, y: 0, width: 160, height: 160))
+            UIColor(red: 0.65, green: 0.18, blue: 0.36, alpha: 1).setFill()
+            for x in [50, 68, 86] { context.cgContext.fillEllipse(in: CGRect(x: x, y: -6, width: 24, height: 24)) }
+            UIColor(red: 0.96, green: 0.73, blue: 0.62, alpha: 1).setFill()
+            context.cgContext.fillEllipse(in: CGRect(x: 48, y: 40, width: 70, height: 100))
+            ("ALBUM" as NSString).draw(at: CGPoint(x: 4, y: 24), withAttributes: [
+                .font: UIFont.boldSystemFont(ofSize: 14), .foregroundColor: UIColor.black
+            ])
+        }
+        let palette = PlayerArtworkChromaticEdge(image: source)
+        let frame = PlayerArtworkComposition.playerFrame(image: source.size, viewport: size)
+        let view = ArtworkSlideLayer(progress: 1, direction: 1, incoming: false, reduceMotion: true,
+                                     size: size, overscan: PlayerArtworkComposition.transitionOverscan) {
+            PlayerAdaptiveArtwork(image: source, size: size, safeAreaTop: 0, immersive: true, upperPalette: palette)
+        }
+        let actual = try pixels(view, size: size)
+        for x in [20, 100, 180] {
+            for y in [8, 30, 55] {
+                let value = actual.color(x: x, y: y)
+                for (channel, expected) in [0.93, 0.91, 0.80].enumerated() {
+                    XCTAssertEqual(value[channel], expected, accuracy: 0.065,
+                                   "The cream background must continue above the flowers without a pink reflected object")
                 }
-                let frame = PlayerArtworkComposition.playerFrame(image: source.size, viewport: size)
-                let view = ArtworkSlideLayer(progress: 1, direction: 1, incoming: false, reduceMotion: true,
-                                             size: size, overscan: PlayerArtworkComposition.transitionOverscan) {
-                    PlayerAdaptiveArtwork(image: source, size: size, safeAreaTop: 0, immersive: true)
+            }
+        }
+        let detail = actual.color(x: 100, y: Int(frame.minY + PlayerArtworkTopExtension.blendHeight(frame: frame)) + 2)
+        XCTAssertLessThan(detail[1], 0.35, "The original flowers must remain visible inside the photograph")
+        let legacy = ArtworkSlideLayer(progress: 1, direction: 1, incoming: false, reduceMotion: true,
+                                       size: size, overscan: PlayerArtworkComposition.transitionOverscan) {
+            PlayerAdaptiveArtwork(image: source, size: size, safeAreaTop: frame.minY)
+        }
+        let before = try pixels(legacy, size: size)
+        for fraction in [0.4, 0.7, 0.9, 0.98] {
+            let y = Int(frame.minY + frame.height * fraction)
+            for x in [30, 100, 170] {
+                for channel in 0..<3 {
+                    XCTAssertEqual(actual.color(x: x, y: y)[channel], before.color(x: x, y: y)[channel], accuracy: 0.025,
+                                   "The lower artwork and its existing dissolve must remain unchanged")
                 }
-                let reference = Image(uiImage: source).resizable().interpolation(.high)
-                    .frame(width: frame.width, height: frame.height)
-                    .position(x: frame.midX, y: frame.midY).frame(width: size.width, height: size.height)
-                let actual = try pixels(view, size: size)
-                let expected = try pixels(reference, size: size)
-                if sourceSize.width == 128 && first.isEqual(UIColor.yellow) {
-                    func rowContrast(_ y: Int) -> Double {
-                        let values = stride(from: 32, through: 168, by: 4).map { actual.color(x: $0, y: y)[0] }
-                        return (values.max() ?? 0) - (values.min() ?? 0)
-                    }
-                    XCTAssertLessThanOrEqual(rowContrast(0), rowContrast(20) + 0.06,
-                                             "Clipping the blur must not reveal sharp streaks again at the screen's top edge")
-                    for y in stride(from: 4, to: Int(frame.minY) - 3, by: 4) {
-                        for x in stride(from: 8, to: Int(size.width) - 8, by: 8) {
-                            XCTAssertLessThan(actual.color(x: x, y: y)[2], 0.5,
-                                              "The extension must not retain sharp, duplicated white lettering")
-                        }
-                    }
-                    let renderer = ImageRenderer(content: view.frame(width: size.width, height: size.height))
-                    renderer.scale = 2
-                    let attachment = XCTAttachment(image: try XCTUnwrap(renderer.uiImage))
-                    attachment.name = "registered-yellow-pattern-upper-extension"
-                    attachment.lifetime = .keepAlways
-                    add(attachment)
-                }
-                for column in [0.15, 0.5, 0.85] {
-                    let x = Int(frame.minX + frame.width * column)
-                    for row in [0.01, 0.04, 0.12] {
-                        let y = Int(frame.minY + frame.height * row)
-                        for channel in 0..<3 {
-                            XCTAssertEqual(actual.color(x: x, y: y)[channel], expected.color(x: x, y: y)[channel], accuracy: 0.035,
-                                           "The source's upper pattern and text must stay sharp, in their original coordinates")
-                        }
-                    }
-                    if frame.minY >= 4 {
-                        let above = actual.color(x: x, y: Int(frame.minY) - 2)
-                        let below = actual.color(x: x, y: Int(frame.minY) + 1)
-                        for channel in 0..<3 {
-                            XCTAssertEqual(above[channel], below[channel], accuracy: 0.04,
-                                           "The extension must meet the same source pixels instead of a differently scaled cover")
-                        }
-                    }
-                }
+            }
+        }
+        let renderer = ImageRenderer(content: view.frame(width: size.width, height: size.height))
+        renderer.scale = 2
+        let attachment = XCTAttachment(image: try XCTUnwrap(renderer.uiImage))
+        attachment.name = "chromatic-cream-edge-without-flower-duplication"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
+    @MainActor func testChromaticEdgeRetainsDarkBackgroundsAndMultipleEdgeColours() throws {
+        let dark = UIGraphicsImageRenderer(size: CGSize(width: 160, height: 160)).image { context in
+            UIColor(white: 0.02, alpha: 1).setFill(); context.fill(CGRect(x: 0, y: 0, width: 160, height: 160))
+            ("GOLD" as NSString).draw(at: CGPoint(x: 12, y: -6), withAttributes: [
+                .font: UIFont.boldSystemFont(ofSize: 32), .foregroundColor: UIColor.yellow
+            ])
+        }
+        let darkPalette = PlayerArtworkChromaticEdge(image: dark)
+        for value in darkPalette.rgb {
+            XCTAssertLessThan(max(value.x, value.y, value.z), 0.10, "Gold lettering must not turn a dark upper edge into a gold band")
+        }
+        let multicolour = UIGraphicsImageRenderer(size: CGSize(width: 150, height: 150)).image { context in
+            for (index, colour) in [UIColor.red, .green, .blue].enumerated() {
+                colour.setFill(); context.fill(CGRect(x: index * 50, y: 0, width: 50, height: 150))
+            }
+        }
+        let palette = PlayerArtworkChromaticEdge(image: multicolour)
+        let left = palette.sample(x: 0.05, y: 0.8)
+        let middle = palette.sample(x: 0.5, y: 0.8)
+        let right = palette.sample(x: 0.95, y: 0.8)
+        XCTAssertGreaterThan(left.x, left.z + 0.4)
+        XCTAssertGreaterThan(middle.y, max(middle.x, middle.z) + 0.3)
+        XCTAssertGreaterThan(right.z, right.x + 0.4)
+        let portrait = UIGraphicsImageRenderer(size: CGSize(width: 80, height: 200)).image { context in
+            UIColor.green.setFill(); context.fill(CGRect(x: 0, y: 0, width: 80, height: 200))
+            UIColor.red.setFill(); context.fill(CGRect(x: 0, y: 0, width: 80, height: 20))
+        }
+        let covered = PlayerAdaptiveArtwork(image: portrait, size: CGSize(width: 200, height: 300), safeAreaTop: 0,
+                                            immersive: true, upperPalette: PlayerArtworkChromaticEdge(solid: SIMD3(0, 0, 1)))
+        let image = try pixels(covered, size: CGSize(width: 200, height: 300))
+        assertColor(image, at: CGPoint(x: 100, y: 2), dominant: 0)
+    }
+
+    @MainActor func testPlayerSurfaceDissolvesWithoutScalingOrExposingScreenEdges() throws {
+        let size = CGSize(width: 200, height: 300)
+        for progress in [CGFloat(0), 0.25, 0.5, 0.75, 1] {
+            let view = ZStack {
+                blendRed
+                blendBlue.modifier(PlayerPresentationOpacity(progress: progress, meter: PlayerProgressMeter()))
+            }
+            let image = try pixels(view, size: size)
+            let expected = PlayerCoverGeometry.chromeOpacity(progress)
+            for point in [CGPoint(x: 1, y: 1), CGPoint(x: 100, y: 150), CGPoint(x: 198, y: 298)] {
+                let value = image.color(x: Int(point.x), y: Int(point.y))
+                XCTAssertEqual(value[2], expected, accuracy: 0.025)
+                XCTAssertEqual(value[0] + value[2], 1, accuracy: 0.025,
+                               "The two stationary surfaces must blend across the whole screen without an exposed border")
             }
         }
     }
@@ -255,7 +295,8 @@ final class PlayerRenderingTests: XCTestCase {
             let frame = PlayerArtworkComposition.playerFrame(image: source.size, viewport: size)
             let view = ArtworkSlideLayer(progress: 1, direction: 1, incoming: false, reduceMotion: true,
                                          size: size, overscan: PlayerArtworkComposition.transitionOverscan) {
-                PlayerAdaptiveArtwork(image: source, size: size, safeAreaTop: 0, immersive: true)
+                PlayerAdaptiveArtwork(image: source, size: size, safeAreaTop: 0, immersive: true,
+                                      upperPalette: PlayerArtworkChromaticEdge(image: source))
             }
             let actual = try pixels(view, size: size)
             let base = background.isEqual(UIColor.black) ? 0.0 : 1.0
@@ -266,7 +307,7 @@ final class PlayerRenderingTests: XCTestCase {
                                        "A small detail at the edge must not become a column reaching the status bar")
                     }
                 }
-                let detail = actual.color(x: x, y: Int(frame.minY) + 3)
+                let detail = actual.color(x: x, y: Int(frame.minY + PlayerArtworkTopExtension.blendHeight(frame: frame)) + 1)
                 XCTAssertGreaterThan(detail.map { abs($0 - base) }.max() ?? 0, 0.8,
                                      "The original localized detail must remain intact inside the cover")
             }

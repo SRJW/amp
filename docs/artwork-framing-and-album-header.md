@@ -1,5 +1,7 @@
 # Encuadre de carátulas y cabecera de álbum
 
+El tratamiento superior vigente sustituye las extensiones fotográficas descritas en las etapas anteriores por un [borde cromático y navegación fija](chromatic-artwork-and-fixed-navigation.md). Las validaciones de cada etapa se conservan como historial.
+
 ## Now Playing
 
 `PlayerArtworkComposition` calcula un rectángulo proporcional que conserva la portada completa según sus dimensiones, el dispositivo y el espacio disponible. En Now Playing, `playerFrame` coloca la imagen nítida usando el 70 % del espacio vertical sobrante; la extensión de la misma portada cubre desde y=0, incluida la status bar. No hay margen vacío encima de la composición ni un desplazamiento fijo para todas las imágenes.

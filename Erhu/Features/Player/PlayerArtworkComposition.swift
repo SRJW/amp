@@ -10,12 +10,6 @@ enum PlayerArtworkComposition {
     static let sideFeather = 0.06
     static let topFeather = 0.04
     static let bottomFeather = 0.12
-    static func registeredPoint(_ point: CGPoint, frame: CGRect) -> CGPoint {
-        guard point.y < frame.minY, frame.height > 0 else { return point }
-        let distance = (frame.minY - point.y).truncatingRemainder(dividingBy: frame.height * 2)
-        let sourceY = distance <= frame.height ? distance : frame.height * 2 - distance
-        return CGPoint(x: point.x, y: frame.minY + sourceY)
-    }
 
     /// End the dissolve just before the existing title, including its text height.
     static func artworkHeight(in screen: CGSize) -> CGFloat {
@@ -56,6 +50,7 @@ struct PlayerAdaptiveArtwork: View {
     let size: CGSize
     let safeAreaTop: CGFloat
     var immersive = false
+    var upperPalette: PlayerArtworkChromaticEdge? = nil
 
     var body: some View {
         let rect = immersive ? PlayerArtworkComposition.playerFrame(image: image.size, viewport: size)
@@ -66,7 +61,8 @@ struct PlayerAdaptiveArtwork: View {
                 .blur(radius: size.width * PlayerArtworkComposition.extensionBlurFraction, opaque: true)
             ZStack {
                 if immersive {
-                    PlayerArtworkTopExtension(image: image, size: size, frame: rect)
+                    PlayerArtworkTopExtension(image: image, palette: upperPalette ?? PlayerArtworkChromaticEdge(solid: SIMD3(repeating: 0.5)),
+                                              size: size, frame: rect)
                         .mask {
                             LinearGradient(stops: [.init(color: .white, location: 0),
                                                    .init(color: .white, location: (rect.minY + rect.height * (1 - PlayerArtworkComposition.bottomFeather)) / max(size.height, 1)),
@@ -119,6 +115,7 @@ struct PlayerAdaptiveArtwork: View {
 
 /// A tiny cached colour map is created on track load, never from a gesture or animation frame.
 struct PlayerArtworkStatusProfile {
+    let upperPalette: PlayerArtworkChromaticEdge
     private static let side = 16
     private let imageSize: CGSize
     private let pixels: [SIMD3<Double>]
@@ -129,6 +126,7 @@ struct PlayerArtworkStatusProfile {
         let base: SIMD3<Double> = argb.map {
             SIMD3(Double(($0 >> 16) & 255), Double(($0 >> 8) & 255), Double($0 & 255)) / 255
         } ?? SIMD3(repeating: 0.5)
+        upperPalette = PlayerArtworkChromaticEdge(image: image, fallback: base)
         var bytes = [UInt8](repeating: 0, count: Self.side * Self.side * 4)
         let rendered = bytes.withUnsafeMutableBytes { buffer -> Bool in
             guard let cgImage = image.cgImage,
@@ -159,6 +157,7 @@ struct PlayerArtworkStatusProfile {
         color.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
         let rgb = SIMD3(Double(red), Double(green), Double(blue))
         dominant = rgb
+        upperPalette = PlayerArtworkChromaticEdge(solid: rgb)
         imageSize = CGSize(width: 1, height: 1)
         pixels = Array(repeating: rgb, count: Self.side * Self.side)
     }
@@ -174,15 +173,13 @@ struct PlayerArtworkStatusProfile {
                 let point = CGPoint(x: viewport.width * x, y: safeAreaTop * y)
                 let coverage = falloffHeight.map { PlayerStatusFalloff.coverage(y: point.y, band: safeAreaTop, height: $0) } ?? 1
                 if immersive {
-                    let registered = PlayerArtworkComposition.registeredPoint(point, frame: main)
-                    samples.append((sample(registered, in: main), coverage))
-                    if point.y < main.minY {
-                        let radius = viewport.width * PlayerArtworkComposition.extensionBlurFraction
-                        for (dx, dy) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
-                            let nearby = CGPoint(x: point.x + CGFloat(dx) * radius, y: point.y + CGFloat(dy) * radius)
-                            samples.append((sample(PlayerArtworkComposition.registeredPoint(nearby, frame: main), in: main), coverage))
-                        }
-                    }
+                    let depth = PlayerArtworkTopExtension.blendHeight(frame: main)
+                    if PlayerArtworkTopExtension.needsExtension(frame: main) && point.y < main.minY + depth {
+                        let field = upperPalette.sample(x: point.x / max(viewport.width, 1), y: point.y / max(main.minY + depth, 1))
+                        let fraction = Double(((point.y - main.minY) / max(depth, 1)).clamped(0, 1))
+                        let alpha = fraction * fraction * (3 - 2 * fraction)
+                        samples.append((field * (1 - alpha) + sample(point, in: main) * alpha, coverage))
+                    } else { samples.append((sample(point, in: main), coverage)) }
                     let side = main.width * PlayerArtworkComposition.sideFeather
                     if main.width < viewport.width - 0.5 && (point.x < main.minX + side || point.x > main.maxX - side) {
                         samples.append((sample(point, in: extended), coverage))

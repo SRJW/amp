@@ -7,6 +7,7 @@ final class LibraryInteractionTests: XCTestCase {
         XCTAssertTrue(mini.waitForExistence(timeout: 30))
         let identifiers = ["appSection.library", "appSection.equalizer", "appSection.search", "appMenu"]
         let libraryFrames = identifiers.map { app.buttons[$0].frame }
+        for identifier in identifiers { XCTAssertEqual(app.buttons.matching(identifier: identifier).count, 1) }
         func navigationMatchesLibrary() -> Bool {
             zip(identifiers, libraryFrames).allSatisfy { identifier, expected in
                 let button = app.buttons[identifier]
@@ -18,6 +19,8 @@ final class LibraryInteractionTests: XCTestCase {
         }
         mini.tap()
         XCTAssertTrue(app.buttons["nowPlayingTitle"].waitForExistence(timeout: 10))
+        for identifier in identifiers { XCTAssertEqual(app.buttons.matching(identifier: identifier).count, 1,
+                                                       "The transition must reuse one persistent navigation row") }
         let aligned = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in navigationMatchesLibrary() }, object: nil)
         XCTAssertEqual(XCTWaiter.wait(for: [aligned], timeout: 10), .completed,
                        "The full player must preserve every Library navigation button's screen coordinates and size")
@@ -29,6 +32,17 @@ final class LibraryInteractionTests: XCTestCase {
         app.buttons["appSection.library"].tap()
         XCTAssertTrue(mini.waitForExistence(timeout: 10))
         XCTAssertTrue(navigationMatchesLibrary(), "Returning to Library must leave its capsule and mini player in place")
+        app.buttons["appMenu"].tap()
+        app.buttons["appMenu.settings"].tap()
+        let librarySettings = app.buttons["settingsMusicLibrary"]
+        XCTAssertTrue(librarySettings.waitForExistence(timeout: 10))
+        for _ in 0..<5 {
+            if librarySettings.isHittable { break }
+            app.scrollViews.firstMatch.swipeUp()
+        }
+        librarySettings.tap()
+        XCTAssertTrue(app.staticTexts["On My iPhone › amp"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.staticTexts["On My iPhone › Erhu"].exists)
     }
 
     @MainActor func testLibraryVisibilityPersistsAndPlayerTitleRevealsUnfilteredAllSongs() {

@@ -12,6 +12,7 @@ struct NowPlayingView: View {
     @Environment(\.palette) private var palette
     @Environment(\.playerReduceMotion) private var reduceMotion
     @Environment(\.appNavigationBottomInset) private var navigationBottomInset
+    @Environment(\.appNavigationIsShared) private var sharedNavigation
     @State private var artworkDrag = 0.0
     @State private var artworkGestureMode = 0
     @State private var artworkGestureEntry: UUID?
@@ -64,17 +65,21 @@ struct NowPlayingView: View {
                             .lineLimit(1).minimumScaleFactor(0.75)
                     }
                     .frame(width: width - 24).position(x: width / 2, y: height * 0.895)
-                    referenceNavigation(width: width)
-                        .position(x: width / 2, y: AppNavigationMetrics.centreY(height: height, safeAreaBottom: navigationBottomInset))
+                    if !sharedNavigation {
+                        referenceNavigation(width: width)
+                            .position(x: width / 2, y: AppNavigationMetrics.centreY(height: height, safeAreaBottom: navigationBottomInset))
+                    }
                 }
                 .foregroundStyle(.white)
             } else {
                 ZStack {
                     EmptyState(message: "Nothing is playing. Pick a song from your library.", systemImage: "music.note")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    referenceNavigation(width: geometry.size.width)
-                        .position(x: geometry.size.width / 2,
-                                  y: AppNavigationMetrics.centreY(height: geometry.size.height, safeAreaBottom: navigationBottomInset))
+                    if !sharedNavigation {
+                        referenceNavigation(width: geometry.size.width)
+                            .position(x: geometry.size.width / 2,
+                                      y: AppNavigationMetrics.centreY(height: geometry.size.height, safeAreaBottom: navigationBottomInset))
+                    }
                 }
             }
         }
@@ -82,8 +87,7 @@ struct NowPlayingView: View {
         .persistentSystemOverlays(.visible)
         .buttonStyle(.plain)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .modifier(PlayerForegroundMotion(drag: drag))
-        .modifier(PlayerChromeOpacity(progress: drag.progress))
+        .modifier(PlayerForegroundMotion(drag: drag, externallyFaded: true))
         .onChange(of: artworkGestureActive) { _, active in
             guard !active else { return }
             Task { @MainActor in
@@ -100,7 +104,7 @@ struct NowPlayingView: View {
             player.setVisualMotion(.presentation, active: false)
             player.setVisualMotion(.carousel, active: false)
         }
-        .background(backdrop(state.currentSong).ignoresSafeArea().modifier(PlayerBackdropFade(drag: drag)))
+        .background(backdrop(state.currentSong).ignoresSafeArea())
         .contentShape(Rectangle())
         .overlay(alignment: .bottom) { toast }
         .animation(.easeInOut(duration: 0.2), value: actions.message)

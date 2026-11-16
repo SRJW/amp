@@ -4,8 +4,13 @@ import UIKit
 private struct AppNavigationBottomInsetKey: EnvironmentKey {
     static let defaultValue: CGFloat = 0
 }
+private struct AppNavigationSharedKey: EnvironmentKey { static let defaultValue = false }
 
 extension EnvironmentValues {
+    var appNavigationIsShared: Bool {
+        get { self[AppNavigationSharedKey.self] }
+        set { self[AppNavigationSharedKey.self] = newValue }
+    }
     var appNavigationBottomInset: CGFloat {
         get { self[AppNavigationBottomInsetKey.self] }
         set { self[AppNavigationBottomInsetKey.self] = newValue }

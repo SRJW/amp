@@ -75,43 +75,22 @@ struct PlayerPresentation: View {
 
     var body: some View {
         NowPlayingView(drag: drag)
-            .modifier(PlayerScreenScale(progress: drag.progress, reduceMotion: reduceMotion, meter: drag.meter))
+            .modifier(PlayerPresentationOpacity(progress: drag.progress, meter: drag.meter))
             .environment(\.playerInMotion, drag.isMoving)
             .onAppear { drag.finishEntrance(reduceMotion: reduceMotion) }
     }
 }
 
-enum PlayerNavigationMotion {
-    static let libraryZoom: CGFloat = 0.55
-    static let playerZoom: CGFloat = 0.10
-}
-
-/// Native interpolation paints both screens without rebuilding the song list each frame.
-struct PlayerLibraryMotion: AnimatableModifier {
+/// The player dissolves over the stationary library; no screen edge or navigation row scales.
+struct PlayerPresentationOpacity: AnimatableModifier {
     var progress: CGFloat
-    let reduceMotion: Bool
-    var animatableData: CGFloat {
-        get { progress }
-        set { progress = newValue }
-    }
-    func body(content: Content) -> some View {
-        let amount = progress.clamped(0, 1)
-        content
-            .scaleEffect(reduceMotion ? 1 : 1 + PlayerNavigationMotion.libraryZoom * amount)
-            .opacity(1 - PlayerCoverGeometry.chromeOpacity(amount))
-    }
-}
-
-struct PlayerScreenScale: AnimatableModifier {
-    var progress: CGFloat
-    let reduceMotion: Bool
     let meter: PlayerProgressMeter
     var animatableData: CGFloat {
         get { progress }
         set { progress = newValue; meter.record(progress) }
     }
     func body(content: Content) -> some View {
-        content.scaleEffect(reduceMotion ? 1 : 1 - PlayerNavigationMotion.playerZoom * (1 - progress.clamped(0, 1)))
+        content.opacity(PlayerCoverGeometry.chromeOpacity(progress))
     }
 }
 
@@ -127,6 +106,7 @@ extension EnvironmentValues {
 /// Keeping this named space outside the art slot lets an untransformed placeholder measure it.
 struct PlayerForegroundMotion: ViewModifier {
     let drag: PlayerDragState
+    var externallyFaded = false
     @Environment(\.playerReduceMotion) private var reduceMotion
 
     func body(content: Content) -> some View {
@@ -134,7 +114,7 @@ struct PlayerForegroundMotion: ViewModifier {
             .environment(\.playerCoverProgress, drag.progress)
             .environment(\.playerArtworkInFlight, drag.isMoving && drag.isReady && !reduceMotion)
             .coordinateSpace(name: PlayerArtworkSpace.expanded)
-            .opacity(reduceMotion ? Double(drag.progress) : 1)
+            .opacity(!externallyFaded && reduceMotion ? Double(drag.progress) : 1)
     }
 }
 
