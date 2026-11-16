@@ -25,3 +25,11 @@ Los iconos estaban alineados en reposo, pero existían en dos vistas que recibí
 5. Abrir Settings → Music Library y revisar el nombre de la carpeta. Las rutas visibles de Wi-Fi Transfer también deben decir amp.
 
 Las pruebas comprueban el fondo crema sin duplicar flores, la conservación de fondos oscuros y de múltiples colores, la invariancia del fundido inferior, la cobertura de toda la pantalla durante la fusión, las coordenadas de navegación y el nombre visible de la carpeta.
+
+## Estado de validación
+
+Código: `6007e400770a10dbe7921e456ab3d01047730c73` en `without-animated-art`.
+
+La ejecución [149](https://github.com/SRJW/amp/actions/runs/43903193501) solicita compilación del dispositivo y la suite `full-player`, incluidas las pruebas de render y navegación. Está pendiente de asignación de ejecutores de macOS. Se probó también la cola Apple Silicon; GitHub Status informa `Actions: degraded_performance` el 16 de noviembre de 2026. No hay todavía resultados nativos ni una nueva IPA verificada de este cambio. Las comprobaciones locales de diferencias (`git diff --check`) pasan; el entorno Linux no ejecuta SwiftUI/UIKit.
+
+La publicación de IPA y las pruebas nativas son trabajos separados: una exportación por sí sola no acredita que las pruebas hayan pasado. Las capturas sintéticas cubren los casos de borde descritos; la apariencia de las canciones concretas debe revisarse en la nueva app cuando esté disponible.
