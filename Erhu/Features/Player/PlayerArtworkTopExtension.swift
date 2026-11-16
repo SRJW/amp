@@ -23,7 +23,7 @@ struct PlayerArtworkTopExtension: View {
                     ZStack {
                         ForEach(Self.levels.indices, id: \.self) { index in
                             plate
-                                .blur(radius: size.width * Self.levels[index].radiusW)
+                                .blur(radius: size.width * Self.levels[index].radiusW, opaque: true)
                                 .mask(blurMask(index: index))
                         }
                     }
@@ -53,7 +53,8 @@ struct PlayerArtworkTopExtension: View {
 
     private func blurMask(index: Int) -> LinearGradient {
         let start = size.width * (index == 0 ? Self.sharpEdgeW : Self.levels[index - 1].endW)
-        let end = size.width * Self.levels[index].endW
+        let nominalEnd = size.width * Self.levels[index].endW
+        let end = index == Self.levels.count - 1 ? max(nominalEnd, frame.minY) : nominalEnd
         let range: CGFloat = end - start
         var points: [CGFloat] = [0, size.height]
         for step in 0...8 {

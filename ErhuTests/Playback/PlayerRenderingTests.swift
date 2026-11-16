@@ -201,6 +201,12 @@ final class PlayerRenderingTests: XCTestCase {
                 let actual = try pixels(view, size: size)
                 let expected = try pixels(reference, size: size)
                 if sourceSize.width == 128 && first.isEqual(UIColor.yellow) {
+                    func rowContrast(_ y: Int) -> Double {
+                        let values = stride(from: 32, through: 168, by: 4).map { actual.color(x: $0, y: y)[0] }
+                        return (values.max() ?? 0) - (values.min() ?? 0)
+                    }
+                    XCTAssertLessThanOrEqual(rowContrast(0), rowContrast(20) + 0.06,
+                                             "Clipping the blur must not reveal sharp streaks again at the screen's top edge")
                     for y in stride(from: 4, to: Int(frame.minY) - 3, by: 4) {
                         for x in stride(from: 8, to: Int(size.width) - 8, by: 8) {
                             XCTAssertLessThan(actual.color(x: x, y: y)[2], 0.5,
