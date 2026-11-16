@@ -55,6 +55,14 @@ La [ejecución 133](https://github.com/SRJW/amp/actions/runs/43763363708), revis
 
 La alineación de navegación incluida mantiene el código verificado por la prueba nativa de la ejecución 131; este último cambio no modifica su geometría.
 
-IPA actual verificada: [v0.1.0-amp.133](https://github.com/SRJW/amp/releases/download/v0.1.0-amp.133/amp.ipa), versión `0.1.0`, compilación `133`, bundle ID `com.erhu`. SHA-256: `8a5f54dae3b50c05ab4ee4c8364307bb8729047aa8011a99e31f7893522abd30`.
+IPA 133 verificada en esa etapa: [v0.1.0-amp.133](https://github.com/SRJW/amp/releases/download/v0.1.0-amp.133/amp.ipa), versión `0.1.0`, compilación `133`, bundle ID `com.erhu`. SHA-256: `8a5f54dae3b50c05ab4ee4c8364307bb8729047aa8011a99e31f7893522abd30`.
 
 En el iPhone, revisar varias portadas con detalles próximos al borde superior, alternar modo claro/oscuro y cambiar de pista en ambas direcciones. Debe mantenerse una unión suave con la extensión superior, indicadores legibles y el mismo encuadre, controles y fundido inferior.
+
+## Corrección de la costura entre encuadres
+
+La [ejecución 137](https://github.com/SRJW/amp/actions/runs/43790122300), revisión `c282d02`, terminó correctamente: compilación para iPhone, exportación/publicación y 33 pruebas de renderizado con cero fallos (24 del player y nueve de movimiento).
+
+La prueba de registro compara píxeles del patrón y de los textos con la portada original en encuadres cuadrados, verticales y muy horizontales. Comprueba la continuidad junto al borde y que el texto no se refleje de nuevo en la extensión. La prueba de contraste verifica ambos modos del teléfono sin una banda de ancho completo. También se revisó la captura nativa de franjas amarillas y negras: patrón alineado y texto presente una sola vez. Los controles, el layout, la navegación y el fundido inferior conservan su código y geometría.
+
+IPA actual verificada: [v0.1.0-amp.137](https://github.com/SRJW/amp/releases/download/v0.1.0-amp.137/amp.ipa), versión `0.1.0`, compilación `137`, bundle ID `com.erhu`. SHA-256: `a9871965eab38d5e61ef228d6b02f7746b8fb6cc0869ef87593f7d1980cbfec6`.
