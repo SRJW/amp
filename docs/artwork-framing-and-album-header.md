@@ -67,4 +67,14 @@ La [ejecución 137](https://github.com/SRJW/amp/actions/runs/43790122300), revis
 
 La prueba de registro compara píxeles del patrón y de los textos con la portada original en encuadres cuadrados, verticales y muy horizontales. Comprueba la continuidad junto al borde y que el texto no se refleje de nuevo en la extensión. La prueba de contraste verifica ambos modos del teléfono sin una banda de ancho completo. También se revisó la captura nativa de franjas amarillas y negras: patrón alineado y texto presente una sola vez. Los controles, el layout, la navegación y el fundido inferior conservan su código y geometría.
 
-IPA actual verificada: [v0.1.0-amp.137](https://github.com/SRJW/amp/releases/download/v0.1.0-amp.137/amp.ipa), versión `0.1.0`, compilación `137`, bundle ID `com.erhu`. SHA-256: `a9871965eab38d5e61ef228d6b02f7746b8fb6cc0869ef87593f7d1980cbfec6`.
+IPA 137 correspondiente a esa etapa, sustituida por la 144 tras observar las estelas: [v0.1.0-amp.137](https://github.com/SRJW/amp/releases/download/v0.1.0-amp.137/amp.ipa), versión `0.1.0`, compilación `137`, bundle ID `com.erhu`. SHA-256: `a9871965eab38d5e61ef228d6b02f7746b8fb6cc0869ef87593f7d1980cbfec6`.
+
+## Corrección de las estelas verticales
+
+Las capturas del iPhone mostraron que ampliar verticalmente una tira del 2 % convertía flores, pelo y detalles pequeños en columnas. Las pruebas anteriores de franjas verticales no detectaban esa deformación, porque no tenían suficiente variación en el eje Y. Se elimina por completo el recorte, su caché y la ampliación desigual. Todas las copias de extensión conservan el mismo ancho y alto proporcionales de la portada original.
+
+La [ejecución 144](https://github.com/SRJW/amp/actions/runs/43794981546), revisión `8b8c66b`, terminó correctamente: compilación para iPhone, exportación/publicación y 34 pruebas de renderizado con cero fallos (25 del player y nueve de movimiento). La nueva prueba utiliza detalles compactos rojos, verdes y azules sobre fondos claros y oscuros y comprueba que no se extiendan hasta la status bar. Otra comprobación evita que el recorte del filtro revele de nuevo franjas nítidas en el borde físico de pantalla.
+
+Se revisaron las capturas exportadas de los detalles compactos y los patrones con texto. Los detalles permanecen localizados, las proporciones se conservan y el desenfoque varía a través de toda la extensión. El Canvas se amplía con textura proporcional antes de desenfocarlo y se recorta después, evitando bordes transparentes en el filtro. No se cambia el layout, los controles, los colores de sus botones, la navegación ni el fundido inferior.
+
+IPA actual verificada: [v0.1.0-amp.144](https://github.com/SRJW/amp/releases/download/v0.1.0-amp.144/amp.ipa), versión `0.1.0`, compilación `144`, bundle ID `com.erhu`. SHA-256: `8e0021f994b6c9db78a3770368d080e801bc368ba7febacdda4f554d38be71d8`.
