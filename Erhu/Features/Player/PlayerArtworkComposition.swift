@@ -163,7 +163,40 @@ struct PlayerArtworkStatusProfile {
     }
 
     func protection(viewport: CGSize, safeAreaTop: CGFloat, scheme: ColorScheme,
-                    contentSafeAreaTop: CGFloat? = nil, immersive: Bool = false, falloffHeight: CGFloat? = nil) -> PlayerArtworkStatusProtection {
+                    contentSafeAreaTop: CGFloat? = nil, immersive: Bool = false, falloffHeight: CGFloat? = nil,
+                    secondary: PlayerArtworkStatusProfile? = nil, blend: Double = 0) -> PlayerArtworkStatusProtection {
+        var samples = statusSamples(viewport: viewport, safeAreaTop: safeAreaTop, contentSafeAreaTop: contentSafeAreaTop,
+                                    immersive: immersive, falloffHeight: falloffHeight)
+        if let secondary {
+            let other = secondary.statusSamples(viewport: viewport, safeAreaTop: safeAreaTop, contentSafeAreaTop: contentSafeAreaTop,
+                                                immersive: immersive, falloffHeight: falloffHeight)
+            let amount = blend.clamped(0, 1)
+            samples = zip(samples, other).map { first, last in
+                (first.color + (last.color - first.color) * amount, first.coverage)
+            }
+        }
+        // Tint towards the artwork's hue, choosing light/dark for the existing system ink.
+        let tint = scheme == .dark ? dominant * 0.12 : dominant * 0.12 + SIMD3(repeating: 0.88)
+        func sufficient(_ opacity: Double) -> Bool {
+            samples.allSatisfy { sample in
+                let alpha = opacity * sample.coverage
+                let luminance = Self.luminance(sample.color * (1 - alpha) + tint * alpha)
+                return scheme == .dark ? 1.05 / (luminance + 0.05) >= 4.5 : (luminance + 0.05) / 0.05 >= 4.5
+            }
+        }
+        var low = 0.0, high = 0.72
+        if sufficient(low) { high = low }
+        else {
+            for _ in 0..<9 {
+                let middle = (low + high) / 2
+                if sufficient(middle) { high = middle } else { low = middle }
+            }
+        }
+        return PlayerArtworkStatusProtection(rgb: tint, opacity: high)
+    }
+
+    private func statusSamples(viewport: CGSize, safeAreaTop: CGFloat, contentSafeAreaTop: CGFloat?,
+                               immersive: Bool, falloffHeight: CGFloat?) -> [(color: SIMD3<Double>, coverage: Double)] {
         let main = immersive ? PlayerArtworkComposition.playerFrame(image: imageSize, viewport: viewport)
             : PlayerArtworkComposition.mainFrame(image: imageSize, viewport: viewport, safeAreaTop: contentSafeAreaTop ?? safeAreaTop)
         let extended = PlayerArtworkComposition.extensionFrame(image: imageSize, viewport: viewport)
@@ -183,31 +216,14 @@ struct PlayerArtworkStatusProfile {
                     let side = main.width * PlayerArtworkComposition.sideFeather
                     if main.width < viewport.width - 0.5 && (point.x < main.minX + side || point.x > main.maxX - side) {
                         samples.append((sample(point, in: extended), coverage))
-                    }
+                    } else if let last = samples.last { samples.append(last) }
                 } else {
                     samples.append((sample(point, in: extended), coverage))
-                    if main.contains(point) { samples.append((sample(point, in: main), coverage)) }
+                    samples.append((main.contains(point) ? sample(point, in: main) : sample(point, in: extended), coverage))
                 }
             }
         }
-        // Tint towards the artwork's hue, choosing light/dark for the existing system ink.
-        let tint = scheme == .dark ? dominant * 0.12 : dominant * 0.12 + SIMD3(repeating: 0.88)
-        func sufficient(_ opacity: Double) -> Bool {
-            samples.allSatisfy { sample in
-                let alpha = opacity * sample.coverage
-                let luminance = Self.luminance(sample.color * (1 - alpha) + tint * alpha)
-                return scheme == .dark ? 1.05 / (luminance + 0.05) >= 4.5 : (luminance + 0.05) / 0.05 >= 4.5
-            }
-        }
-        var low = 0.035, high = 0.72
-        if sufficient(low) { high = low }
-        else {
-            for _ in 0..<9 {
-                let middle = (low + high) / 2
-                if sufficient(middle) { high = middle } else { low = middle }
-            }
-        }
-        return PlayerArtworkStatusProtection(rgb: tint, opacity: high)
+        return samples
     }
 
     private func sample(_ point: CGPoint, in rect: CGRect) -> SIMD3<Double> {
@@ -289,6 +305,41 @@ struct PlayerArtworkStatusGradient: View {
             }
             .allowsHitTesting(false)
             .accessibilityHidden(true)
+    }
+}
+
+/// Pick native ink first. Only mixed edges that defeat both ink colours need a scrim.
+struct PlayerAdaptiveStatusBar: View {
+    let current: PlayerArtworkStatusProfile
+    let next: PlayerArtworkStatusProfile?
+    let blend: Double
+    let size: CGSize
+    let safeAreaTop: CGFloat
+
+    static func selection(current: PlayerArtworkStatusProfile, next: PlayerArtworkStatusProfile?,
+                          blend: Double, size: CGSize, safeAreaTop: CGFloat) -> (scheme: ColorScheme, opacity: Double) {
+        let band = max(safeAreaTop, size.height * 0.045)
+        let viewport = CGSize(width: size.width, height: PlayerArtworkComposition.artworkHeight(in: size))
+        let height = min(band + size.width * PlayerStatusFalloff.reachW, size.height * 0.18)
+        let white = current.protection(viewport: viewport, safeAreaTop: band, scheme: .dark,
+                                       immersive: true, falloffHeight: height, secondary: next, blend: blend).opacity
+        let black = current.protection(viewport: viewport, safeAreaTop: band, scheme: .light,
+                                       immersive: true, falloffHeight: height, secondary: next, blend: blend).opacity
+        if white == 0 { return (.dark, 0) }
+        if black == 0 { return (.light, 0) }
+        // Never brighten dark artwork to accommodate dark status text.
+        return (.dark, white)
+    }
+
+    var body: some View {
+        let choice = Self.selection(current: current, next: next, blend: blend, size: size, safeAreaTop: safeAreaTop)
+        let band = max(safeAreaTop, size.height * 0.045)
+        let height = min(band + size.width * PlayerStatusFalloff.reachW, size.height * 0.18)
+        LinearGradient(stops: PlayerStatusFalloff.stops(color: .black.opacity(choice.opacity), band: band, height: height),
+                       startPoint: .top, endPoint: .bottom)
+            .frame(height: height)
+            .preference(key: PlayerStatusBarSchemeKey.self, value: choice.scheme)
+            .allowsHitTesting(false).accessibilityHidden(true)
     }
 }
 

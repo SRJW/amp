@@ -69,10 +69,9 @@ struct PlayerFullBleedBackground<Artwork: View>: View, Animatable {
                                                .init(color: .clear, location: 1)],
                                        startPoint: .top, endPoint: .bottom)
                     }
-                PlayerArtworkStatusGradient(current: statusProfile ?? PlayerArtworkStatusProfile(solid: UIColor(dominant)),
+                PlayerAdaptiveStatusBar(current: statusProfile ?? PlayerArtworkStatusProfile(solid: UIColor(dominant)),
                                             next: secondaryStatusProfile, blend: blend, size: geometry.size,
-                                            safeAreaTop: max(safeAreaTop, geometry.safeAreaInsets.top),
-                                            contentSafeAreaTop: 0, localizedProtection: true, immersive: true)
+                                            safeAreaTop: max(safeAreaTop, geometry.safeAreaInsets.top))
             }
         }
         .allowsHitTesting(false)

@@ -69,20 +69,25 @@ final class PlayerRenderingTests: XCTestCase {
 
     @MainActor func testNowPlayingKeepsArtworkBehindStatusWithoutAFullWidthStripInEitherAppearance() throws {
         let screen = CGSize(width: 200, height: 500)
-        for (scheme, color) in [(ColorScheme.light, UIColor.black), (.dark, .white)] {
-        let view = PlayerFullBleedBackground(dominant: blendBlue,
-                                            statusProfile: PlayerArtworkStatusProfile(solid: color),
-                                            safeAreaTop: 30) { Color(uiColor: color) }
-            .environment(\.colorScheme, scheme)
-        let rendered = try pixels(view, size: screen)
-        XCTAssertEqual(rendered.color(x: 100, y: 15)[0], scheme == .light ? 0 : 1, accuracy: 0.02,
-                       "The artwork between the system indicators must remain visible without a full-width tint")
-        for x in [36, 168] {
-            let rgb = rendered.color(x: x, y: 15)
-            let luminance = PlayerArtworkStatusProfile.luminance(SIMD3(rgb[0], rgb[1], rgb[2]))
-            let contrast = scheme == .light ? (luminance + 0.05) / 0.05 : 1.05 / (luminance + 0.05)
-            XCTAssertGreaterThanOrEqual(contrast, 4.4, "Local protection must keep either system ink legible")
-        }
+        for (expectedScheme, color) in [(ColorScheme.dark, UIColor.black), (.light, .white), (.light, UIColor(red: 0.93, green: 0.91, blue: 0.80, alpha: 1))] {
+            let profile = PlayerArtworkStatusProfile(solid: color)
+            let choice = PlayerAdaptiveStatusBar.selection(current: profile, next: nil, blend: 0, size: screen, safeAreaTop: 30)
+            XCTAssertEqual(choice.scheme, expectedScheme)
+            XCTAssertEqual(choice.opacity, 0, "Uniform artwork must use native ink instead of a grey halo")
+            for phoneScheme in [ColorScheme.light, .dark] {
+                let view = PlayerFullBleedBackground(dominant: Color(uiColor: color), statusProfile: profile,
+                                                    safeAreaTop: 30) { Color(uiColor: color) }
+                    .environment(\.colorScheme, phoneScheme)
+                let rendered = try pixels(view, size: screen)
+                var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, alpha: CGFloat = 0
+                color.getRed(&r, green: &g, blue: &b, alpha: &alpha)
+                for x in [15, 36, 100, 168, 185] {
+                    for (channel, expected) in [r, g, b].enumerated() {
+                        XCTAssertEqual(rendered.color(x: x, y: 15)[channel], Double(expected), accuracy: 0.02,
+                                       "Neither side of the status bar may brighten or obscure the artwork")
+                    }
+                }
+            }
         }
         let source = UIGraphicsImageRenderer(size: CGSize(width: 100, height: 100)).image { context in
             UIColor.red.setFill(); context.fill(CGRect(x: 0, y: 0, width: 100, height: 100))
@@ -178,6 +183,26 @@ final class PlayerRenderingTests: XCTestCase {
         }
     }
 
+    @MainActor func testAdaptiveStatusInkKeepsContrastThroughoutLightDarkTrackChanges() throws {
+        let size = CGSize(width: 200, height: 500)
+        let dark = PlayerArtworkStatusProfile(solid: .black)
+        let light = PlayerArtworkStatusProfile(solid: .white)
+        for progress in [0.0, 0.25, 0.5, 0.75, 1.0] {
+            let choice = PlayerAdaptiveStatusBar.selection(current: dark, next: light, blend: progress, size: size, safeAreaTop: 30)
+            let view = ZStack(alignment: .top) {
+                Color(.sRGB, white: progress, opacity: 1)
+                PlayerAdaptiveStatusBar(current: dark, next: light, blend: progress, size: size, safeAreaTop: 30)
+            }
+            let rendered = try pixels(view, size: size)
+            for x in [36, 100, 168] {
+                let rgb = rendered.color(x: x, y: 15)
+                let luminance = PlayerArtworkStatusProfile.luminance(SIMD3(rgb[0], rgb[1], rgb[2]))
+                let contrast = choice.scheme == .dark ? 1.05 / (luminance + 0.05) : (luminance + 0.05) / 0.05
+                XCTAssertGreaterThanOrEqual(contrast, 4.4)
+            }
+        }
+    }
+
     @MainActor func testChromaticUpperFieldRejectsForegroundFlowersAndPreservesThePhoto() throws {
         let size = CGSize(width: 200, height: 300)
         let cream = UIColor(red: 0.93, green: 0.91, blue: 0.80, alpha: 1)
@@ -258,8 +283,11 @@ final class PlayerRenderingTests: XCTestCase {
             UIColor.green.setFill(); context.fill(CGRect(x: 0, y: 0, width: 80, height: 200))
             UIColor.red.setFill(); context.fill(CGRect(x: 0, y: 0, width: 80, height: 20))
         }
-        let covered = PlayerAdaptiveArtwork(image: portrait, size: CGSize(width: 200, height: 300), safeAreaTop: 0,
-                                            immersive: true, upperPalette: PlayerArtworkChromaticEdge(solid: SIMD3(0, 0, 1)))
+        let covered = ArtworkSlideLayer(progress: 1, direction: 1, incoming: false, reduceMotion: true,
+                                        size: CGSize(width: 200, height: 300), overscan: PlayerArtworkComposition.transitionOverscan) {
+            PlayerAdaptiveArtwork(image: portrait, size: CGSize(width: 200, height: 300), safeAreaTop: 0,
+                                  immersive: true, upperPalette: PlayerArtworkChromaticEdge(solid: SIMD3(0, 0, 1)))
+        }
         let image = try pixels(covered, size: CGSize(width: 200, height: 300))
         assertColor(image, at: CGPoint(x: 100, y: 2), dominant: 0)
     }
@@ -289,7 +317,7 @@ final class PlayerRenderingTests: XCTestCase {
                 background.setFill(); context.fill(CGRect(x: 0, y: 0, width: 128, height: 128))
                 for (index, color) in [UIColor.red, .green, .blue].enumerated() {
                     color.setFill()
-                    context.cgContext.fillEllipse(in: CGRect(x: 25 + index * 32, y: -7, width: 14, height: 14))
+                    context.cgContext.fillEllipse(in: CGRect(x: 25 + index * 32, y: -7, width: 14, height: 24))
                 }
             }
             let frame = PlayerArtworkComposition.playerFrame(image: source.size, viewport: size)

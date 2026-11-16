@@ -9,6 +9,7 @@ struct NowPlayingView: View {
     @Environment(AppRouter.self) private var router
     @Environment(LibraryStore.self) private var library
     @Environment(AppSettings.self) private var settings
+    @Environment(\.colorScheme) private var themeScheme
     @Environment(\.palette) private var palette
     @Environment(\.playerReduceMotion) private var reduceMotion
     @Environment(\.appNavigationBottomInset) private var navigationBottomInset
@@ -108,18 +109,17 @@ struct NowPlayingView: View {
         .contentShape(Rectangle())
         .overlay(alignment: .bottom) { toast }
         .animation(.easeInOut(duration: 0.2), value: actions.message)
-        .preferredColorScheme(artworkControls ? nil : .dark)
         .routerSheets(active: true)
-        .sheet(isPresented: $showsQueue) { QueueSheet() }
-        .sheet(item: $artworkTarget) { ArtworkPickerSheet(target: $0) }
-        .sheet(isPresented: $showsMarks) { MarksSheet() }
-        .sheet(isPresented: $showsAudioDetails) { AudioDetailsView() }
-        .fullScreenCover(isPresented: $showsVisualizer) { VisualizerView() }
-        .fullScreenCover(isPresented: $showsLyrics) { ExpandedLyrics(previous: previous, next: next) }
+        .sheet(isPresented: $showsQueue) { QueueSheet().preferredColorScheme(themeScheme) }
+        .sheet(item: $artworkTarget) { ArtworkPickerSheet(target: $0).preferredColorScheme(themeScheme) }
+        .sheet(isPresented: $showsMarks) { MarksSheet().preferredColorScheme(themeScheme) }
+        .sheet(isPresented: $showsAudioDetails) { AudioDetailsView().preferredColorScheme(themeScheme) }
+        .fullScreenCover(isPresented: $showsVisualizer) { VisualizerView().preferredColorScheme(themeScheme) }
+        .fullScreenCover(isPresented: $showsLyrics) { ExpandedLyrics(previous: previous, next: next).preferredColorScheme(themeScheme) }
         .sheet(isPresented: $showsEqualizer) {
             NavigationStack {
                 EqualizerView().toolbar { Button("Done") { showsEqualizer = false } }
-            }
+            }.preferredColorScheme(themeScheme)
         }
     }
 

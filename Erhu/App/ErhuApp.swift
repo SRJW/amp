@@ -23,7 +23,7 @@ struct ErhuApp: App {
                 .environment(services.fixTags)
                 .environment(services.artwork)
                 .environment(services.transitions)
-                .preferredColorScheme(services.settings.colorScheme)
+                .modifier(AppStatusBarAppearance(settings: services.settings, router: services.router))
                 .onOpenURL { url in
                     logLifecycle("onOpenURL scheme=\(url.scheme ?? "nil") accepted=\(PlayerLaunchRequest(url: url) != nil)")
                     guard let request = PlayerLaunchRequest(url: url) else { return }

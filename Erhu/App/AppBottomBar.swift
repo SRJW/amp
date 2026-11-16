@@ -66,7 +66,6 @@ struct AppFixedNavigation: View {
                           y: AppNavigationMetrics.centreY(height: geometry.size.height, safeAreaBottom: bottomInset))
         }
         .ignoresSafeArea()
-        .accessibilityIdentifier("fixedAppNavigation")
     }
 }
 
