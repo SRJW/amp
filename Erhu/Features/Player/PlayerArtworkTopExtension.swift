@@ -54,12 +54,23 @@ struct PlayerArtworkTopExtension: View {
     private func blurMask(index: Int) -> LinearGradient {
         let start = size.width * (index == 0 ? Self.sharpEdgeW : Self.levels[index - 1].endW)
         let end = size.width * Self.levels[index].endW
-        let points = ([CGFloat(0), size.height] + (0...8).map {
-            (frame.minY - start - (end - start) * CGFloat($0) / 8).clamped(0, size.height)
-        }).sorted()
-        let stops = points.map { y in
-            let amount = Double(((frame.minY - y - start) / max(end - start, 1)).clamped(0, 1))
-            return Gradient.Stop(color: .white.opacity(Self.smoothstep(amount)), location: y / max(size.height, 1))
+        let range: CGFloat = end - start
+        var points: [CGFloat] = [0, size.height]
+        for step in 0...8 {
+            let fraction: CGFloat = CGFloat(step) / 8
+            let distance: CGFloat = start + range * fraction
+            let y: CGFloat = (frame.minY - distance).clamped(0, size.height)
+            points.append(y)
+        }
+        points.sort()
+        var stops: [Gradient.Stop] = []
+        for y in points {
+            let distance: CGFloat = frame.minY - y - start
+            let fraction: CGFloat = (distance / max(range, 1)).clamped(0, 1)
+            let opacity: Double = Self.smoothstep(Double(fraction))
+            let color: Color = Color.white.opacity(opacity)
+            let location: CGFloat = y / max(size.height, 1)
+            stops.append(Gradient.Stop(color: color, location: location))
         }
         return LinearGradient(stops: stops, startPoint: .top, endPoint: .bottom)
     }
