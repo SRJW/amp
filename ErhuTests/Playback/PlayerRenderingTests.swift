@@ -25,13 +25,12 @@ final class PlayerRenderingTests: XCTestCase {
         try TagWriter.write(edit, to: url)
         ArtworkLoader.shared.forget(path: url.path)
         _ = await ArtworkLoader.shared.image(for: url, maxPixels: 600)
-        let upperEdge = try XCTUnwrap(PlayerArtworkUpperEdge.make(from: image))
         let backdrop = PlayerFullBleedBackground(dominant: Color(.sRGB, red: 0, green: 0, blue: 1),
                                                 statusProfile: PlayerArtworkStatusProfile(image: image, dominant: 0xFF0000FF)) {
             GeometryReader { geometry in
                 ArtworkSlideLayer(progress: 1, direction: 1, incoming: false, reduceMotion: true,
                                   size: geometry.size, overscan: PlayerArtworkComposition.transitionOverscan) {
-                    PlayerAdaptiveArtwork(image: image, size: geometry.size, safeAreaTop: 0, immersive: true, upperEdge: upperEdge)
+                    PlayerAdaptiveArtwork(image: image, size: geometry.size, safeAreaTop: 0, immersive: true)
                 }
             }
         }
@@ -90,8 +89,7 @@ final class PlayerRenderingTests: XCTestCase {
         }
         let cover = ArtworkSlideLayer(progress: 1, direction: 1, incoming: false, reduceMotion: true,
                                       size: CGSize(width: 200, height: 280), overscan: PlayerArtworkComposition.transitionOverscan) {
-            PlayerAdaptiveArtwork(image: source, size: CGSize(width: 200, height: 280), safeAreaTop: 0, immersive: true,
-                                  upperEdge: PlayerArtworkUpperEdge.make(from: source))
+            PlayerAdaptiveArtwork(image: source, size: CGSize(width: 200, height: 280), safeAreaTop: 0, immersive: true)
         }
         let top = try pixels(cover, size: CGSize(width: 200, height: 280))
         let edge = PlayerArtworkComposition.playerFrame(image: source.size, viewport: CGSize(width: 200, height: 280)).minY
@@ -130,8 +128,7 @@ final class PlayerRenderingTests: XCTestCase {
             }
             let view = ArtworkSlideLayer(progress: 1, direction: 1, incoming: false, reduceMotion: true,
                                          size: size, overscan: PlayerArtworkComposition.transitionOverscan) {
-                PlayerAdaptiveArtwork(image: source, size: size, safeAreaTop: 0, immersive: true,
-                                      upperEdge: PlayerArtworkUpperEdge.make(from: source))
+                PlayerAdaptiveArtwork(image: source, size: size, safeAreaTop: 0, immersive: true)
             }
             let rendered = try pixels(view, size: size)
             let frame = PlayerArtworkComposition.playerFrame(image: source.size, viewport: size)
@@ -194,10 +191,9 @@ final class PlayerRenderingTests: XCTestCase {
                     ])
                 }
                 let frame = PlayerArtworkComposition.playerFrame(image: source.size, viewport: size)
-                let upperEdge = try XCTUnwrap(PlayerArtworkUpperEdge.make(from: source))
                 let view = ArtworkSlideLayer(progress: 1, direction: 1, incoming: false, reduceMotion: true,
                                              size: size, overscan: PlayerArtworkComposition.transitionOverscan) {
-                    PlayerAdaptiveArtwork(image: source, size: size, safeAreaTop: 0, immersive: true, upperEdge: upperEdge)
+                    PlayerAdaptiveArtwork(image: source, size: size, safeAreaTop: 0, immersive: true)
                 }
                 let reference = Image(uiImage: source).resizable().interpolation(.high)
                     .frame(width: frame.width, height: frame.height)
@@ -207,8 +203,8 @@ final class PlayerRenderingTests: XCTestCase {
                 if sourceSize.width == 128 && first.isEqual(UIColor.yellow) {
                     for y in stride(from: 4, to: Int(frame.minY) - 3, by: 4) {
                         for x in stride(from: 8, to: Int(size.width) - 8, by: 8) {
-                            XCTAssertLessThan(actual.color(x: x, y: y)[2], 0.035,
-                                              "The extension must not reflect a duplicate of the white TOP lettering")
+                            XCTAssertLessThan(actual.color(x: x, y: y)[2], 0.5,
+                                              "The extension must not retain sharp, duplicated white lettering")
                         }
                     }
                     let renderer = ImageRenderer(content: view.frame(width: size.width, height: size.height))
@@ -237,6 +233,43 @@ final class PlayerRenderingTests: XCTestCase {
                     }
                 }
             }
+        }
+    }
+
+    @MainActor func testUpperExtensionDoesNotStretchLocalizedFeaturesIntoVerticalTrails() throws {
+        let size = CGSize(width: 200, height: 300)
+        for background in [UIColor.black, .white] {
+            let source = UIGraphicsImageRenderer(size: CGSize(width: 128, height: 128)).image { context in
+                background.setFill(); context.fill(CGRect(x: 0, y: 0, width: 128, height: 128))
+                for (index, color) in [UIColor.red, .green, .blue].enumerated() {
+                    color.setFill()
+                    context.cgContext.fillEllipse(in: CGRect(x: 25 + index * 32, y: -7, width: 14, height: 14))
+                }
+            }
+            let frame = PlayerArtworkComposition.playerFrame(image: source.size, viewport: size)
+            let view = ArtworkSlideLayer(progress: 1, direction: 1, incoming: false, reduceMotion: true,
+                                         size: size, overscan: PlayerArtworkComposition.transitionOverscan) {
+                PlayerAdaptiveArtwork(image: source, size: size, safeAreaTop: 0, immersive: true)
+            }
+            let actual = try pixels(view, size: size)
+            let base = background.isEqual(UIColor.black) ? 0.0 : 1.0
+            for x in [50, 100, 150] {
+                for y in [4, 12, 20] {
+                    for channel in 0..<3 {
+                        XCTAssertEqual(actual.color(x: x, y: y)[channel], base, accuracy: 0.06,
+                                       "A small detail at the edge must not become a column reaching the status bar")
+                    }
+                }
+                let detail = actual.color(x: x, y: Int(frame.minY) + 3)
+                XCTAssertGreaterThan(detail.map { abs($0 - base) }.max() ?? 0, 0.8,
+                                     "The original localized detail must remain intact inside the cover")
+            }
+            let renderer = ImageRenderer(content: view.frame(width: size.width, height: size.height))
+            renderer.scale = 2
+            let attachment = XCTAttachment(image: try XCTUnwrap(renderer.uiImage))
+            attachment.name = base == 0 ? "upper-localized-details-dark" : "upper-localized-details-light"
+            attachment.lifetime = .keepAlways
+            add(attachment)
         }
     }
 

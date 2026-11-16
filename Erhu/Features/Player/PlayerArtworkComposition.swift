@@ -12,9 +12,9 @@ enum PlayerArtworkComposition {
     static let bottomFeather = 0.12
     static func registeredPoint(_ point: CGPoint, frame: CGRect) -> CGPoint {
         guard point.y < frame.minY, frame.height > 0 else { return point }
-        let fraction = ((frame.minY - point.y) / max(frame.minY, 1)).clamped(0, 1)
-        let depth = min(frame.width * PlayerArtworkUpperEdge.depthW, frame.height)
-        return CGPoint(x: point.x, y: frame.minY + fraction * depth)
+        let distance = (frame.minY - point.y).truncatingRemainder(dividingBy: frame.height * 2)
+        let sourceY = distance <= frame.height ? distance : frame.height * 2 - distance
+        return CGPoint(x: point.x, y: frame.minY + sourceY)
     }
 
     /// End the dissolve just before the existing title, including its text height.
@@ -56,7 +56,6 @@ struct PlayerAdaptiveArtwork: View {
     let size: CGSize
     let safeAreaTop: CGFloat
     var immersive = false
-    var upperEdge: UIImage? = nil
 
     var body: some View {
         let rect = immersive ? PlayerArtworkComposition.playerFrame(image: image.size, viewport: size)
@@ -67,7 +66,7 @@ struct PlayerAdaptiveArtwork: View {
                 .blur(radius: size.width * PlayerArtworkComposition.extensionBlurFraction, opaque: true)
             ZStack {
                 if immersive {
-                    PlayerArtworkTopExtension(image: image, upperEdge: upperEdge, size: size, frame: rect)
+                    PlayerArtworkTopExtension(image: image, size: size, frame: rect)
                         .mask {
                             LinearGradient(stops: [.init(color: .white, location: 0),
                                                    .init(color: .white, location: (rect.minY + rect.height * (1 - PlayerArtworkComposition.bottomFeather)) / max(size.height, 1)),
