@@ -17,13 +17,16 @@ struct PlayerArtworkTopExtension: View {
                                  BlurLevel(radiusW: PlayerArtworkComposition.extensionBlurFraction, endW: 0.08)]
 
     var body: some View {
-        plate
+        plate(padding: 0)
             .overlay {
                 if frame.minY > 0 {
                     ZStack {
                         ForEach(Self.levels.indices, id: \.self) { index in
-                            plate
-                                .blur(radius: size.width * Self.levels[index].radiusW, opaque: true)
+                            let radius = size.width * Self.levels[index].radiusW
+                            plate(padding: radius * 3)
+                                .blur(radius: radius)
+                                .frame(width: size.width, height: size.height)
+                                .clipped()
                                 .mask(blurMask(index: index))
                         }
                     }
@@ -31,24 +34,34 @@ struct PlayerArtworkTopExtension: View {
             }
     }
 
-    private var plate: some View {
-        Canvas { context, _ in
+    private func plate(padding: CGFloat) -> some View {
+        let canvasSize = CGSize(width: size.width + padding * 2, height: size.height + padding * 2)
+        let origin = frame.offsetBy(dx: padding, dy: padding)
+        return Canvas { context, _ in
             guard frame.width > 0, frame.height > 0 else { return }
             let source = context.resolve(Image(uiImage: image).interpolation(.high))
-            context.clip(to: Path(CGRect(origin: .zero, size: size)))
-            let count = Int(ceil(max(frame.minY, 0) / frame.height))
-            for index in (0..<count).reversed() {
-                let tile = frame.offsetBy(dx: 0, dy: -frame.height * CGFloat(index + 1))
-                var reflected = context
-                if index.isMultiple(of: 2) {
-                    reflected.translateBy(x: 0, y: tile.minY + tile.maxY)
-                    reflected.scaleBy(x: 1, y: -1)
+            context.clip(to: Path(CGRect(origin: .zero, size: canvasSize)))
+            let firstColumn = Int(floor(-origin.minX / frame.width))
+            let lastColumn = Int(ceil((canvasSize.width - origin.minX) / frame.width)) - 1
+            let firstRow = Int(floor(-origin.minY / frame.height))
+            let lastRow = Int(ceil((canvasSize.height - origin.minY) / frame.height)) - 1
+            for row in firstRow...lastRow {
+                for column in firstColumn...lastColumn {
+                    let tile = origin.offsetBy(dx: frame.width * CGFloat(column), dy: frame.height * CGFloat(row))
+                    var reflected = context
+                    if !column.isMultiple(of: 2) {
+                        reflected.translateBy(x: tile.minX + tile.maxX, y: 0)
+                        reflected.scaleBy(x: -1, y: 1)
+                    }
+                    if !row.isMultiple(of: 2) {
+                        reflected.translateBy(x: 0, y: tile.minY + tile.maxY)
+                        reflected.scaleBy(x: 1, y: -1)
+                    }
+                    reflected.draw(source, in: tile)
                 }
-                reflected.draw(source, in: tile)
             }
-            context.draw(source, in: frame)
         }
-        .frame(width: size.width, height: size.height)
+        .frame(width: canvasSize.width, height: canvasSize.height)
     }
 
     private func blurMask(index: Int) -> LinearGradient {
