@@ -1,10 +1,23 @@
 import SwiftUI
 import UIKit
 
-/// One coordinate system for the source and its reflected upper edge. The texture
+enum PlayerArtworkUpperEdge {
+    static let depthW: CGFloat = 0.02
+
+    /// Crop once on track load. Keeping only the real edge avoids reflecting a second logo.
+    static func make(from image: UIImage) -> UIImage? {
+        guard let source = image.cgImage else { return nil }
+        let height = min(max(Int(ceil(CGFloat(source.width) * depthW)), 1), source.height)
+        guard let edge = source.cropping(to: CGRect(x: 0, y: 0, width: source.width, height: height)) else { return nil }
+        return UIImage(cgImage: edge, scale: image.scale, orientation: image.imageOrientation)
+    }
+}
+
+/// One coordinate system for the source and its extended upper edge. The texture
 /// matches at the join; blur only increases as it travels away from the real image.
 struct PlayerArtworkTopExtension: View {
     let image: UIImage
+    let upperEdge: UIImage?
     let size: CGSize
     let frame: CGRect
 
@@ -31,15 +44,12 @@ struct PlayerArtworkTopExtension: View {
             guard frame.width > 0, frame.height > 0 else { return }
             let source = context.resolve(Image(uiImage: image).interpolation(.high))
             context.clip(to: Path(CGRect(origin: .zero, size: size)))
-            let count = min(Int(ceil(max(frame.minY, 0) / frame.height)), PlayerArtworkComposition.maximumUpperReflections)
-            for index in (0..<count).reversed() {
-                let tile = PlayerArtworkComposition.upperTile(index: index, frame: frame)
+            if frame.minY > 0, let upperEdge {
+                let edge = context.resolve(Image(uiImage: upperEdge).interpolation(.high))
                 var reflected = context
-                if index.isMultiple(of: 2) {
-                    reflected.translateBy(x: 0, y: tile.minY + tile.maxY)
-                    reflected.scaleBy(x: 1, y: -1)
-                }
-                reflected.draw(source, in: tile)
+                reflected.translateBy(x: 0, y: frame.minY)
+                reflected.scaleBy(x: 1, y: -1)
+                reflected.draw(edge, in: CGRect(x: frame.minX, y: 0, width: frame.width, height: frame.minY))
             }
             context.draw(source, in: frame)
         }

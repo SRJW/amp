@@ -4,6 +4,7 @@ import UIKit
 private struct ArtworkSlideFrame: Identifiable {
     let id: String
     let image: UIImage?
+    let upperEdge: UIImage?
     let dominant: Color
     let statusProfile: PlayerArtworkStatusProfile?
 }
@@ -106,7 +107,9 @@ struct ReferencePlayerBackdrop: View {
         async let colors = LyricsPaletteCache.shared.palette(for: url)
         let (loaded, sampled) = await (image, colors)
         guard !Task.isCancelled, revision == ArtworkLoader.shared.revision(for: url.path) else { return nil }
-        return ArtworkSlideFrame(id: "\(url.path)|\(revision)", image: loaded, dominant: Color(argb: sampled.artworkDominant),
+        return ArtworkSlideFrame(id: "\(url.path)|\(revision)", image: loaded,
+                                 upperEdge: loaded.flatMap { PlayerArtworkUpperEdge.make(from: $0) },
+                                 dominant: Color(argb: sampled.artworkDominant),
                                  statusProfile: loaded.map { PlayerArtworkStatusProfile(image: $0, dominant: sampled.artworkDominant) })
     }
 
@@ -116,7 +119,7 @@ struct ReferencePlayerBackdrop: View {
             ZStack {
                 frame.dominant
                 if let image = frame.image {
-                    PlayerAdaptiveArtwork(image: image, size: size, safeAreaTop: 0, immersive: true)
+                    PlayerAdaptiveArtwork(image: image, size: size, safeAreaTop: 0, immersive: true, upperEdge: frame.upperEdge)
                 }
                 else {
                     frame.dominant

@@ -25,12 +25,13 @@ final class PlayerRenderingTests: XCTestCase {
         try TagWriter.write(edit, to: url)
         ArtworkLoader.shared.forget(path: url.path)
         _ = await ArtworkLoader.shared.image(for: url, maxPixels: 600)
+        let upperEdge = try XCTUnwrap(PlayerArtworkUpperEdge.make(from: image))
         let backdrop = PlayerFullBleedBackground(dominant: Color(.sRGB, red: 0, green: 0, blue: 1),
                                                 statusProfile: PlayerArtworkStatusProfile(image: image, dominant: 0xFF0000FF)) {
             GeometryReader { geometry in
                 ArtworkSlideLayer(progress: 1, direction: 1, incoming: false, reduceMotion: true,
                                   size: geometry.size, overscan: PlayerArtworkComposition.transitionOverscan) {
-                    PlayerAdaptiveArtwork(image: image, size: geometry.size, safeAreaTop: 0, immersive: true)
+                    PlayerAdaptiveArtwork(image: image, size: geometry.size, safeAreaTop: 0, immersive: true, upperEdge: upperEdge)
                 }
             }
         }
@@ -89,7 +90,8 @@ final class PlayerRenderingTests: XCTestCase {
         }
         let cover = ArtworkSlideLayer(progress: 1, direction: 1, incoming: false, reduceMotion: true,
                                       size: CGSize(width: 200, height: 280), overscan: PlayerArtworkComposition.transitionOverscan) {
-            PlayerAdaptiveArtwork(image: source, size: CGSize(width: 200, height: 280), safeAreaTop: 0, immersive: true)
+            PlayerAdaptiveArtwork(image: source, size: CGSize(width: 200, height: 280), safeAreaTop: 0, immersive: true,
+                                  upperEdge: PlayerArtworkUpperEdge.make(from: source))
         }
         let top = try pixels(cover, size: CGSize(width: 200, height: 280))
         let edge = PlayerArtworkComposition.playerFrame(image: source.size, viewport: CGSize(width: 200, height: 280)).minY
@@ -128,7 +130,8 @@ final class PlayerRenderingTests: XCTestCase {
             }
             let view = ArtworkSlideLayer(progress: 1, direction: 1, incoming: false, reduceMotion: true,
                                          size: size, overscan: PlayerArtworkComposition.transitionOverscan) {
-                PlayerAdaptiveArtwork(image: source, size: size, safeAreaTop: 0, immersive: true)
+                PlayerAdaptiveArtwork(image: source, size: size, safeAreaTop: 0, immersive: true,
+                                      upperEdge: PlayerArtworkUpperEdge.make(from: source))
             }
             let rendered = try pixels(view, size: size)
             let frame = PlayerArtworkComposition.playerFrame(image: source.size, viewport: size)
@@ -191,9 +194,10 @@ final class PlayerRenderingTests: XCTestCase {
                     ])
                 }
                 let frame = PlayerArtworkComposition.playerFrame(image: source.size, viewport: size)
+                let upperEdge = try XCTUnwrap(PlayerArtworkUpperEdge.make(from: source))
                 let view = ArtworkSlideLayer(progress: 1, direction: 1, incoming: false, reduceMotion: true,
                                              size: size, overscan: PlayerArtworkComposition.transitionOverscan) {
-                    PlayerAdaptiveArtwork(image: source, size: size, safeAreaTop: 0, immersive: true)
+                    PlayerAdaptiveArtwork(image: source, size: size, safeAreaTop: 0, immersive: true, upperEdge: upperEdge)
                 }
                 let reference = Image(uiImage: source).resizable().interpolation(.high)
                     .frame(width: frame.width, height: frame.height)
@@ -201,6 +205,12 @@ final class PlayerRenderingTests: XCTestCase {
                 let actual = try pixels(view, size: size)
                 let expected = try pixels(reference, size: size)
                 if sourceSize.width == 128 && first.isEqual(UIColor.yellow) {
+                    for y in stride(from: 4, to: Int(frame.minY) - 3, by: 4) {
+                        for x in stride(from: 8, to: Int(size.width) - 8, by: 8) {
+                            XCTAssertLessThan(actual.color(x: x, y: y)[2], 0.035,
+                                              "The extension must not reflect a duplicate of the white TOP lettering")
+                        }
+                    }
                     let renderer = ImageRenderer(content: view.frame(width: size.width, height: size.height))
                     renderer.scale = 2
                     let attachment = XCTAttachment(image: try XCTUnwrap(renderer.uiImage))

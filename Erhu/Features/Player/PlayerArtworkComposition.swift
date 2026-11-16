@@ -10,21 +10,11 @@ enum PlayerArtworkComposition {
     static let sideFeather = 0.06
     static let topFeather = 0.04
     static let bottomFeather = 0.12
-    static let maximumUpperReflections = 8
-
-    static func upperTile(index: Int, frame: CGRect) -> CGRect {
-        let bottom = frame.minY - CGFloat(index) * frame.height
-        let height = index == maximumUpperReflections - 1 ? max(frame.height, bottom) : frame.height
-        return CGRect(x: frame.minX, y: bottom - height, width: frame.width, height: height)
-    }
-
     static func registeredPoint(_ point: CGPoint, frame: CGRect) -> CGPoint {
         guard point.y < frame.minY, frame.height > 0 else { return point }
-        let index = min(Int((frame.minY - point.y) / frame.height), maximumUpperReflections - 1)
-        let tile = upperTile(index: index, frame: frame)
-        let fraction = ((tile.maxY - point.y) / max(tile.height, 1)).clamped(0, 1)
-        let sourceY = index.isMultiple(of: 2) ? fraction : 1 - fraction
-        return CGPoint(x: point.x, y: frame.minY + sourceY * frame.height)
+        let fraction = ((frame.minY - point.y) / max(frame.minY, 1)).clamped(0, 1)
+        let depth = min(frame.width * PlayerArtworkUpperEdge.depthW, frame.height)
+        return CGPoint(x: point.x, y: frame.minY + fraction * depth)
     }
 
     /// End the dissolve just before the existing title, including its text height.
@@ -66,6 +56,7 @@ struct PlayerAdaptiveArtwork: View {
     let size: CGSize
     let safeAreaTop: CGFloat
     var immersive = false
+    var upperEdge: UIImage? = nil
 
     var body: some View {
         let rect = immersive ? PlayerArtworkComposition.playerFrame(image: image.size, viewport: size)
@@ -76,7 +67,7 @@ struct PlayerAdaptiveArtwork: View {
                 .blur(radius: size.width * PlayerArtworkComposition.extensionBlurFraction, opaque: true)
             ZStack {
                 if immersive {
-                    PlayerArtworkTopExtension(image: image, size: size, frame: rect)
+                    PlayerArtworkTopExtension(image: image, upperEdge: upperEdge, size: size, frame: rect)
                         .mask {
                             LinearGradient(stops: [.init(color: .white, location: 0),
                                                    .init(color: .white, location: (rect.minY + rect.height * (1 - PlayerArtworkComposition.bottomFeather)) / max(size.height, 1)),
