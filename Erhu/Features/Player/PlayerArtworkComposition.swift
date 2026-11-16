@@ -10,17 +10,21 @@ enum PlayerArtworkComposition {
     static let sideFeather = 0.06
     static let topFeather = 0.04
     static let bottomFeather = 0.12
-    static let upperBlendW: CGFloat = 0.14
-    static let upperBlendHeadroom: CGFloat = 0.75
-    static let upperBlendLimit: CGFloat = 0.22
-    static let upperTintOpacity = 0.20
+    static let maximumUpperReflections = 8
 
-    static func upperBlendHeight(frame: CGRect, viewport: CGSize) -> CGFloat {
-        min(max(viewport.width * upperBlendW, frame.minY * upperBlendHeadroom), frame.height * upperBlendLimit)
+    static func upperTile(index: Int, frame: CGRect) -> CGRect {
+        let bottom = frame.minY - CGFloat(index) * frame.height
+        let height = index == maximumUpperReflections - 1 ? max(frame.height, bottom) : frame.height
+        return CGRect(x: frame.minX, y: bottom - height, width: frame.width, height: height)
     }
 
-    static func upperTintHeight(frame: CGRect, viewport: CGSize) -> CGFloat {
-        min(frame.minY + upperBlendHeight(frame: frame, viewport: viewport), viewport.height)
+    static func registeredPoint(_ point: CGPoint, frame: CGRect) -> CGPoint {
+        guard point.y < frame.minY, frame.height > 0 else { return point }
+        let index = min(Int((frame.minY - point.y) / frame.height), maximumUpperReflections - 1)
+        let tile = upperTile(index: index, frame: frame)
+        let fraction = ((tile.maxY - point.y) / max(tile.height, 1)).clamped(0, 1)
+        let sourceY = index.isMultiple(of: 2) ? fraction : 1 - fraction
+        return CGPoint(x: point.x, y: frame.minY + sourceY * frame.height)
     }
 
     /// End the dissolve just before the existing title, including its text height.
@@ -62,7 +66,6 @@ struct PlayerAdaptiveArtwork: View {
     let size: CGSize
     let safeAreaTop: CGFloat
     var immersive = false
-    var upperColor: Color? = nil
 
     var body: some View {
         let rect = immersive ? PlayerArtworkComposition.playerFrame(image: image.size, viewport: size)
@@ -71,26 +74,39 @@ struct PlayerAdaptiveArtwork: View {
             Image(uiImage: image).resizable().scaledToFill()
                 .frame(width: size.width, height: size.height).clipped()
                 .blur(radius: size.width * PlayerArtworkComposition.extensionBlurFraction, opaque: true)
-                .overlay(alignment: .top) {
-                    if immersive, let upperColor {
-                        LinearGradient(colors: [upperColor.opacity(PlayerArtworkComposition.upperTintOpacity),
-                                                upperColor.opacity(0)], startPoint: .top, endPoint: .bottom)
-                            .frame(height: PlayerArtworkComposition.upperTintHeight(frame: rect, viewport: size))
-                    }
-                }
             ZStack {
-                Image(uiImage: image).resizable().scaledToFit()
-                    .frame(width: rect.width, height: rect.height)
-                    .mask(verticalBlend(frame: rect))
-                    .mask {
-                        if rect.width < size.width - 0.5 {
-                            LinearGradient(stops: [.init(color: .clear, location: 0),
-                                                   .init(color: .white, location: PlayerArtworkComposition.sideFeather),
-                                                   .init(color: .white, location: 1 - PlayerArtworkComposition.sideFeather),
-                                                   .init(color: .clear, location: 1)], startPoint: .leading, endPoint: .trailing)
-                        } else { Color.white }
-                    }
-                    .position(x: rect.midX, y: rect.midY)
+                if immersive {
+                    PlayerArtworkTopExtension(image: image, size: size, frame: rect)
+                        .mask {
+                            LinearGradient(stops: [.init(color: .white, location: 0),
+                                                   .init(color: .white, location: (rect.minY + rect.height * (1 - PlayerArtworkComposition.bottomFeather)) / max(size.height, 1)),
+                                                   .init(color: .clear, location: rect.maxY / max(size.height, 1)),
+                                                   .init(color: .clear, location: 1)], startPoint: .top, endPoint: .bottom)
+                        }
+                        .mask {
+                            if rect.width < size.width - 0.5 {
+                                LinearGradient(stops: [.init(color: .clear, location: 0),
+                                                       .init(color: .clear, location: rect.minX / size.width),
+                                                       .init(color: .white, location: (rect.minX + rect.width * PlayerArtworkComposition.sideFeather) / size.width),
+                                                       .init(color: .white, location: (rect.maxX - rect.width * PlayerArtworkComposition.sideFeather) / size.width),
+                                                       .init(color: .clear, location: rect.maxX / size.width),
+                                                       .init(color: .clear, location: 1)], startPoint: .leading, endPoint: .trailing)
+                            } else { Color.white }
+                        }
+                } else {
+                    Image(uiImage: image).resizable().scaledToFit()
+                        .frame(width: rect.width, height: rect.height)
+                        .mask(verticalBlend(frame: rect))
+                        .mask {
+                            if rect.width < size.width - 0.5 {
+                                LinearGradient(stops: [.init(color: .clear, location: 0),
+                                                       .init(color: .white, location: PlayerArtworkComposition.sideFeather),
+                                                       .init(color: .white, location: 1 - PlayerArtworkComposition.sideFeather),
+                                                       .init(color: .clear, location: 1)], startPoint: .leading, endPoint: .trailing)
+                            } else { Color.white }
+                        }
+                        .position(x: rect.midX, y: rect.midY)
+                }
             }
             .frame(width: size.width, height: size.height)
             // Cancel the transition's seam protection for the content-preserving main layer.
@@ -101,15 +117,8 @@ struct PlayerAdaptiveArtwork: View {
 
     private func verticalBlend(frame: CGRect) -> LinearGradient {
         let hasHeadroom = frame.minY > 0
-        var stops: [Gradient.Stop] = [.init(color: immersive || hasHeadroom ? .clear : .white, location: 0)]
-        if immersive {
-            let end = PlayerArtworkComposition.upperBlendHeight(frame: frame, viewport: size) / max(frame.height, 1)
-            // Smoothstep samples ease into the image instead of revealing a short, linear edge.
-            stops.append(contentsOf: [.init(color: .white.opacity(0.15625), location: end * 0.25),
-                                      .init(color: .white.opacity(0.5), location: end * 0.5),
-                                      .init(color: .white.opacity(0.84375), location: end * 0.75),
-                                      .init(color: .white, location: end)])
-        } else if hasHeadroom {
+        var stops: [Gradient.Stop] = [.init(color: hasHeadroom ? .clear : .white, location: 0)]
+        if hasHeadroom {
             stops.append(.init(color: .white, location: PlayerArtworkComposition.topFeather))
         }
         stops.append(.init(color: .white, location: 1 - PlayerArtworkComposition.bottomFeather))
@@ -165,30 +174,41 @@ struct PlayerArtworkStatusProfile {
     }
 
     func protection(viewport: CGSize, safeAreaTop: CGFloat, scheme: ColorScheme,
-                    contentSafeAreaTop: CGFloat? = nil, immersive: Bool = false) -> PlayerArtworkStatusProtection {
+                    contentSafeAreaTop: CGFloat? = nil, immersive: Bool = false, falloffHeight: CGFloat? = nil) -> PlayerArtworkStatusProtection {
         let main = immersive ? PlayerArtworkComposition.playerFrame(image: imageSize, viewport: viewport)
             : PlayerArtworkComposition.mainFrame(image: imageSize, viewport: viewport, safeAreaTop: contentSafeAreaTop ?? safeAreaTop)
         let extended = PlayerArtworkComposition.extensionFrame(image: imageSize, viewport: viewport)
-        var samples: [SIMD3<Double>] = []
+        var samples: [(color: SIMD3<Double>, coverage: Double)] = []
         for x in [0.08, 0.18, 0.28, 0.72, 0.84, 0.94] {
             for y in [0.35, 0.7] {
                 let point = CGPoint(x: viewport.width * x, y: safeAreaTop * y)
-                var background = sample(point, in: extended)
+                let coverage = falloffHeight.map { PlayerStatusFalloff.coverage(y: point.y, band: safeAreaTop, height: $0) } ?? 1
                 if immersive {
-                    let height = PlayerArtworkComposition.upperTintHeight(frame: main, viewport: viewport)
-                    let localY = (point.y - viewport.height / 2) / PlayerArtworkComposition.transitionOverscan + viewport.height / 2
-                    let opacity = PlayerArtworkComposition.upperTintOpacity * Double((1 - localY / max(height, 1)).clamped(0, 1))
-                    background = background * (1 - opacity) + dominant * opacity
+                    let registered = PlayerArtworkComposition.registeredPoint(point, frame: main)
+                    samples.append((sample(registered, in: main), coverage))
+                    if point.y < main.minY {
+                        let radius = viewport.width * PlayerArtworkComposition.extensionBlurFraction
+                        for (dx, dy) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
+                            let nearby = CGPoint(x: point.x + CGFloat(dx) * radius, y: point.y + CGFloat(dy) * radius)
+                            samples.append((sample(PlayerArtworkComposition.registeredPoint(nearby, frame: main), in: main), coverage))
+                        }
+                    }
+                    let side = main.width * PlayerArtworkComposition.sideFeather
+                    if main.width < viewport.width - 0.5 && (point.x < main.minX + side || point.x > main.maxX - side) {
+                        samples.append((sample(point, in: extended), coverage))
+                    }
+                } else {
+                    samples.append((sample(point, in: extended), coverage))
+                    if main.contains(point) { samples.append((sample(point, in: main), coverage)) }
                 }
-                samples.append(background)
-                if main.contains(point) { samples.append(sample(point, in: main)) }
             }
         }
         // Tint towards the artwork's hue, choosing light/dark for the existing system ink.
         let tint = scheme == .dark ? dominant * 0.12 : dominant * 0.12 + SIMD3(repeating: 0.88)
         func sufficient(_ opacity: Double) -> Bool {
             samples.allSatisfy { sample in
-                let luminance = Self.luminance(sample * (1 - opacity) + tint * opacity)
+                let alpha = opacity * sample.coverage
+                let luminance = Self.luminance(sample.color * (1 - alpha) + tint * alpha)
                 return scheme == .dark ? 1.05 / (luminance + 0.05) >= 4.5 : (luminance + 0.05) / 0.05 >= 4.5
             }
         }
@@ -221,6 +241,25 @@ struct PlayerArtworkStatusProtection {
     let opacity: Double
 }
 
+enum PlayerStatusFalloff {
+    static let holdBand: CGFloat = 0.55
+    static let reachW: CGFloat = 0.22
+
+    static func coverage(y: CGFloat, band: CGFloat, height: CGFloat) -> Double {
+        let start = band * holdBand
+        let fraction = Double(((y - start) / max(height - start, 1)).clamped(0, 1))
+        return 1 - fraction * fraction * (3 - 2 * fraction)
+    }
+
+    static func stops(color: Color, band: CGFloat, height: CGFloat) -> [Gradient.Stop] {
+        let start = band * holdBand
+        return [.init(color: color, location: 0)] + (0...8).map { step in
+            let y = start + (height - start) * CGFloat(step) / 8
+            return .init(color: color.opacity(coverage(y: y, band: band, height: height)), location: y / max(height, 1))
+        }
+    }
+}
+
 struct PlayerArtworkStatusGradient: View {
     let current: PlayerArtworkStatusProfile
     let next: PlayerArtworkStatusProfile?
@@ -229,7 +268,7 @@ struct PlayerArtworkStatusGradient: View {
     let safeAreaTop: CGFloat
     var artworkHeightFraction: CGFloat? = nil
     var contentSafeAreaTop: CGFloat? = nil
-    var localizedLightProtection = false
+    var localizedProtection = false
     var immersive = false
     @Environment(\.colorScheme) private var scheme
 
@@ -237,21 +276,22 @@ struct PlayerArtworkStatusGradient: View {
         let band = max(safeAreaTop, size.height * 0.045)
         let viewport = CGSize(width: size.width, height: artworkHeightFraction.map { size.height * $0 }
                               ?? PlayerArtworkComposition.artworkHeight(in: size))
-        let first = current.protection(viewport: viewport, safeAreaTop: band, scheme: scheme, contentSafeAreaTop: contentSafeAreaTop, immersive: immersive)
-        let last = next?.protection(viewport: viewport, safeAreaTop: band, scheme: scheme, contentSafeAreaTop: contentSafeAreaTop, immersive: immersive) ?? first
+        let height = min(band + size.width * (localizedProtection ? PlayerStatusFalloff.reachW : 0.1), size.height * 0.18)
+        let falloffHeight = localizedProtection ? height : nil
+        let first = current.protection(viewport: viewport, safeAreaTop: band, scheme: scheme, contentSafeAreaTop: contentSafeAreaTop, immersive: immersive, falloffHeight: falloffHeight)
+        let last = next?.protection(viewport: viewport, safeAreaTop: band, scheme: scheme, contentSafeAreaTop: contentSafeAreaTop, immersive: immersive, falloffHeight: falloffHeight) ?? first
         let amount = blend.clamped(0, 1)
         let rgb = first.rgb + (last.rgb - first.rgb) * amount
         let opacity = first.opacity + (last.opacity - first.opacity) * amount
         let color = Color(.sRGB, red: rgb.x, green: rgb.y, blue: rgb.z, opacity: opacity)
-        let height = min(band + size.width * 0.1, size.height * 0.18)
-        LinearGradient(stops: [.init(color: color, location: 0),
+        LinearGradient(stops: localizedProtection ? PlayerStatusFalloff.stops(color: color, band: band, height: height) : [.init(color: color, location: 0),
                                .init(color: color, location: min(band / max(height, 1), 0.9)),
                                .init(color: .clear, location: 1)], startPoint: .top, endPoint: .bottom)
             .frame(height: height)
             .mask {
-                if localizedLightProtection && scheme == .light {
-                    // Black system ink needs a lighter backing on dark covers, but a
-                    // full-width light wash looks like an empty strip above the image.
+                if localizedProtection {
+                    // Protect the system ink locally in either appearance, without a
+                    // full-width tint that reads as a horizontal band on patterned art.
                     LinearGradient(stops: [.init(color: .white, location: 0),
                                            .init(color: .white, location: 0.30),
                                            .init(color: .clear, location: 0.43),

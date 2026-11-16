@@ -30,7 +30,7 @@ final class PlayerRenderingTests: XCTestCase {
             GeometryReader { geometry in
                 ArtworkSlideLayer(progress: 1, direction: 1, incoming: false, reduceMotion: true,
                                   size: geometry.size, overscan: PlayerArtworkComposition.transitionOverscan) {
-                    PlayerAdaptiveArtwork(image: image, size: geometry.size, safeAreaTop: 0, immersive: true, upperColor: self.blendBlue)
+                    PlayerAdaptiveArtwork(image: image, size: geometry.size, safeAreaTop: 0, immersive: true)
                 }
             }
         }
@@ -38,7 +38,7 @@ final class PlayerRenderingTests: XCTestCase {
         assertColor(rendered, at: CGPoint(x: 8, y: 100), dominant: 0)
         assertColor(rendered, at: CGPoint(x: 192, y: 100), dominant: 1)
         assertColor(rendered, at: CGPoint(x: 100, y: 100), dominant: 2)
-        XCTAssertLessThan(rendered.color(x: 100, y: 10)[2], rendered.color(x: 100, y: 100)[2],
+        XCTAssertLessThan(rendered.color(x: 36, y: 10)[2], rendered.color(x: 36, y: 100)[2],
                           "The upper scrim must darken the image behind system status text")
         let belowCover = rendered.color(x: 100, y: 300)
         let bottom = rendered.color(x: 100, y: 480)
@@ -66,20 +66,22 @@ final class PlayerRenderingTests: XCTestCase {
         }
     }
 
-    @MainActor func testNowPlayingKeepsArtworkBehindStatusWithoutAFullWidthLightStrip() throws {
+    @MainActor func testNowPlayingKeepsArtworkBehindStatusWithoutAFullWidthStripInEitherAppearance() throws {
         let screen = CGSize(width: 200, height: 500)
+        for (scheme, color) in [(ColorScheme.light, UIColor.black), (.dark, .white)] {
         let view = PlayerFullBleedBackground(dominant: blendBlue,
-                                            statusProfile: PlayerArtworkStatusProfile(solid: .black),
-                                            safeAreaTop: 30) { Color.black }
-            .environment(\.colorScheme, .light)
+                                            statusProfile: PlayerArtworkStatusProfile(solid: color),
+                                            safeAreaTop: 30) { Color(uiColor: color) }
+            .environment(\.colorScheme, scheme)
         let rendered = try pixels(view, size: screen)
-        XCTAssertLessThan(rendered.color(x: 100, y: 15).max() ?? 1, 0.02,
-                          "The artwork between the system indicators must remain visible, without a gray band")
+        XCTAssertEqual(rendered.color(x: 100, y: 15)[0], scheme == .light ? 0 : 1, accuracy: 0.02,
+                       "The artwork between the system indicators must remain visible without a full-width tint")
         for x in [36, 168] {
             let rgb = rendered.color(x: x, y: 15)
             let luminance = PlayerArtworkStatusProfile.luminance(SIMD3(rgb[0], rgb[1], rgb[2]))
-            XCTAssertGreaterThanOrEqual((luminance + 0.05) / 0.05, 4.4,
-                                        "Local contrast protection must still support the existing black system ink")
+            let contrast = scheme == .light ? (luminance + 0.05) / 0.05 : 1.05 / (luminance + 0.05)
+            XCTAssertGreaterThanOrEqual(contrast, 4.4, "Local protection must keep either system ink legible")
+        }
         }
         let source = UIGraphicsImageRenderer(size: CGSize(width: 100, height: 100)).image { context in
             UIColor.red.setFill(); context.fill(CGRect(x: 0, y: 0, width: 100, height: 100))
@@ -87,10 +89,11 @@ final class PlayerRenderingTests: XCTestCase {
         }
         let cover = ArtworkSlideLayer(progress: 1, direction: 1, incoming: false, reduceMotion: true,
                                       size: CGSize(width: 200, height: 280), overscan: PlayerArtworkComposition.transitionOverscan) {
-            PlayerAdaptiveArtwork(image: source, size: CGSize(width: 200, height: 280), safeAreaTop: 0, immersive: true, upperColor: .blue)
+            PlayerAdaptiveArtwork(image: source, size: CGSize(width: 200, height: 280), safeAreaTop: 0, immersive: true)
         }
         let top = try pixels(cover, size: CGSize(width: 200, height: 280))
-        assertColor(top, at: CGPoint(x: 100, y: 5), dominant: 2)
+        let edge = PlayerArtworkComposition.playerFrame(image: source.size, viewport: CGSize(width: 200, height: 280)).minY
+        assertColor(top, at: CGPoint(x: 100, y: edge - 1), dominant: 2)
     }
 
     @MainActor func testNowPlayingDissolveReachesTheTitleWithoutMovingTheContent() throws {
@@ -125,7 +128,7 @@ final class PlayerRenderingTests: XCTestCase {
             }
             let view = ArtworkSlideLayer(progress: 1, direction: 1, incoming: false, reduceMotion: true,
                                          size: size, overscan: PlayerArtworkComposition.transitionOverscan) {
-                PlayerAdaptiveArtwork(image: source, size: size, safeAreaTop: 0, immersive: true, upperColor: Color(uiColor: base))
+                PlayerAdaptiveArtwork(image: source, size: size, safeAreaTop: 0, immersive: true)
             }
             let rendered = try pixels(view, size: size)
             let frame = PlayerArtworkComposition.playerFrame(image: source.size, viewport: size)
@@ -169,6 +172,61 @@ final class PlayerRenderingTests: XCTestCase {
             XCTAssertGreaterThanOrEqual(contrast, 4.4)
             XCTAssertEqual(rendered.color(x: 100, y: 100)[0], scheme == .dark ? 1 : 0, accuracy: 0.02,
                            "The status gradient must disappear before the main cover content")
+        }
+    }
+
+    @MainActor func testUpperExtensionKeepsPatternRegistrationAndTopTextDetail() throws {
+        let size = CGSize(width: 200, height: 300)
+        let palettes: [(UIColor, UIColor)] = [(.yellow, .black), (.black, .white), (.magenta, .cyan)]
+        for sourceSize in [CGSize(width: 128, height: 128), CGSize(width: 400, height: 40), CGSize(width: 100, height: 250)] {
+            for (first, second) in palettes {
+                let source = UIGraphicsImageRenderer(size: sourceSize).image { context in
+                    first.setFill(); context.fill(CGRect(origin: .zero, size: sourceSize))
+                    second.setFill()
+                    for x in stride(from: 0, to: Int(sourceSize.width), by: 16) {
+                        context.fill(CGRect(x: x, y: 0, width: 8, height: Int(sourceSize.height)))
+                    }
+                    ("TOP" as NSString).draw(at: CGPoint(x: 4, y: 3), withAttributes: [
+                        .font: UIFont.boldSystemFont(ofSize: 12), .foregroundColor: UIColor.white
+                    ])
+                }
+                let frame = PlayerArtworkComposition.playerFrame(image: source.size, viewport: size)
+                let view = ArtworkSlideLayer(progress: 1, direction: 1, incoming: false, reduceMotion: true,
+                                             size: size, overscan: PlayerArtworkComposition.transitionOverscan) {
+                    PlayerAdaptiveArtwork(image: source, size: size, safeAreaTop: 0, immersive: true)
+                }
+                let reference = Image(uiImage: source).resizable().interpolation(.high)
+                    .frame(width: frame.width, height: frame.height)
+                    .position(x: frame.midX, y: frame.midY).frame(width: size.width, height: size.height)
+                let actual = try pixels(view, size: size)
+                let expected = try pixels(reference, size: size)
+                if sourceSize.width == 128 && first.isEqual(UIColor.yellow) {
+                    let renderer = ImageRenderer(content: view.frame(width: size.width, height: size.height))
+                    renderer.scale = 2
+                    let attachment = XCTAttachment(image: try XCTUnwrap(renderer.uiImage))
+                    attachment.name = "registered-yellow-pattern-upper-extension"
+                    attachment.lifetime = .keepAlways
+                    add(attachment)
+                }
+                for column in [0.15, 0.5, 0.85] {
+                    let x = Int(frame.minX + frame.width * column)
+                    for row in [0.01, 0.04, 0.12] {
+                        let y = Int(frame.minY + frame.height * row)
+                        for channel in 0..<3 {
+                            XCTAssertEqual(actual.color(x: x, y: y)[channel], expected.color(x: x, y: y)[channel], accuracy: 0.035,
+                                           "The source's upper pattern and text must stay sharp, in their original coordinates")
+                        }
+                    }
+                    if frame.minY >= 4 {
+                        let above = actual.color(x: x, y: Int(frame.minY) - 2)
+                        let below = actual.color(x: x, y: Int(frame.minY) + 1)
+                        for channel in 0..<3 {
+                            XCTAssertEqual(above[channel], below[channel], accuracy: 0.04,
+                                           "The extension must meet the same source pixels instead of a differently scaled cover")
+                        }
+                    }
+                }
+            }
         }
     }
 
