@@ -368,7 +368,6 @@ struct NowPlayingView: View {
                 .foregroundStyle(artworkControls ? palette.onFilledButton : .white)
                 .frame(width: size, height: size)
                 .background(artworkControls ? palette.filledButton : .black, in: Circle())
-                .overlay { if artworkControls { Circle().stroke(.black.opacity(0.5), lineWidth: 1) } }
                 .frame(minWidth: symbol.hasPrefix("seek.") ? PlayerButtonConstants.seekTouchSize : PlayerButtonConstants.touchSize,
                        minHeight: PlayerButtonConstants.touchSize)
                 .contentShape(Rectangle())
