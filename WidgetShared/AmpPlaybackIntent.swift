@@ -26,7 +26,11 @@ struct AmpPlaybackIntent: AudioPlaybackIntent {
             if player.restoreFinished { break }
             try await Task.sleep(for: .milliseconds(50))
         }
-        guard player.restoreFinished, player.state.currentSong != nil else { return .result() }
+        guard player.restoreFinished else { return .result() }
+        guard player.state.currentSong != nil else {
+            player.refreshSystemPlayback()
+            return .result()
+        }
         switch command {
         case .toggle: player.togglePlayPause()
         case .previous: player.skipToPreviousItem()

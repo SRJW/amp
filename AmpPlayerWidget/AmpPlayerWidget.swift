@@ -207,7 +207,7 @@ struct AmpPlayerWidget: Widget {
 @available(iOS 18.0, *)
 struct AmpPlayerControl: ControlWidget {
     var body: some ControlWidgetConfiguration {
-        StaticControlConfiguration(kind: "com.amp.player.open") {
+        StaticControlConfiguration(kind: PlayerWidgetSnapshot.controlKind) {
             ControlWidgetButton(action: OpenAmpPlayerIntent()) { Label("amp", systemImage: "play.circle.fill") }
         }
         .displayName("Open amp")
