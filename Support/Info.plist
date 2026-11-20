@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>AmpWidgetAppGroup</key>
-	<string>group.com.erhu.player</string>
+	<string>group.com.amp.player</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
@@ -22,8 +22,8 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
-	<key>ErhuReleaseTag</key>
-	<string>$(ERHU_RELEASE_TAG)</string>
+	<key>AmpReleaseTag</key>
+	<string>$(AMP_RELEASE_TAG)</string>
 	<key>AmpMarketingVersion</key>
 	<string>$(MARKETING_VERSION)</string>
 	<key>AmpBuildNumber</key>
@@ -82,7 +82,7 @@
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
-			<string>com.erhu.player</string>
+			<string>com.amp.player</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>amp</string>
@@ -92,6 +92,7 @@
 	</array>
 	<key>NSUserActivityTypes</key>
 	<array>
+		<string>com.amp.nowplaying</string>
 		<string>com.erhu.nowplaying</string>
 	</array>
 </dict>

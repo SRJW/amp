@@ -99,7 +99,7 @@ def main():
               'baselineTripletAccuracy': baseline, 'trainedTripletAccuracy': tuned,
               'trainingSeconds': time.time() - started,
               'dataSHA256': hashlib.sha256(args.data.read_bytes()).hexdigest()}
-    (args.output / 'erhu-training-report.json').write_text(json.dumps(report, indent=2) + '\n')
+    (args.output / 'amp-training-report.json').write_text(json.dumps(report, indent=2) + '\n')
     print(json.dumps(report, indent=2))
     print('A small held-out score is not proof of general music relevance. Test your actual library.')
 

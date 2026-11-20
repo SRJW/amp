@@ -16,7 +16,7 @@ targets:
         buildPhase: resources
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.erhu.vybeprobe
+        PRODUCT_BUNDLE_IDENTIFIER: com.amp.vybeprobe
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
     scheme:

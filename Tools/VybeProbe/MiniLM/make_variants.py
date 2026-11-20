@@ -99,7 +99,7 @@ def main():
     compatible.version = 'minilm-l6-v2-p8-fp32-v3'
     compatible.short_description = 'Offline VYBE sentence embeddings; 384 dimensions, FP32 arithmetic, exact 8-bit palette storage.'
     compatible.user_defined_metadata.update(dict(model.user_defined_metadata))
-    compatible.user_defined_metadata['erhu.compatibility'] = 'FP32 arithmetic and output; exact repack of the existing 6-bit palette values into 8-bit storage.'
+    compatible.user_defined_metadata['amp.compatibility'] = 'FP32 arithmetic and output; exact repack of the existing 6-bit palette values into 8-bit storage.'
     compatible.save(str(args.destination / 'MiniLM32.mlpackage'))
 
 

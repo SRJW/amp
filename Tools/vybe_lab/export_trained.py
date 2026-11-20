@@ -21,7 +21,7 @@ def main():
     from sentence_transformers import SentenceTransformer
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     from export_vybe_model import SentenceModel, validate_compression
-    expected_vocab = Path(__file__).resolve().parents[2] / 'Erhu/Resources/Vybe/vybe-vocab.txt'
+    expected_vocab = Path(__file__).resolve().parents[2] / 'Amp/Resources/Vybe/vybe-vocab.txt'
     vocab = args.source / 'vocab.txt'
     if vocab.read_bytes() != expected_vocab.read_bytes():
         p.error('Vocabulary differs from the iOS tokenizer. Do not replace the app model with this export.')
@@ -63,7 +63,7 @@ def main():
     palette = validate_compression(compressed, model, tokens, expected)
     assert min(palette) > 0.99, 'Compression changed the model too much'
     model_id = 'minilm-local-' + digest[:12] + '-p8-fp32'
-    compressed.author = 'Sentence Transformers; local fine-tune and Erhu Core ML adaptation'
+    compressed.author = 'Sentence Transformers; local fine-tune and Amp Core ML adaptation'
     compressed.license = 'Apache License 2.0'
     compressed.version = model_id
     args.output.mkdir(parents=True, exist_ok=True)

@@ -1,12 +1,12 @@
-<h1><img src="Erhu/Assets.xcassets/AppIcon.appiconset/AppIcon.png" alt="amp" width="64"> amp</h1>
+<h1><img src="Amp/Assets.xcassets/AppIcon.appiconset/AppIcon.png" alt="amp" width="64"> amp</h1>
 
 Tu música, en tu iPhone. **amp** es un reproductor de audio local para iOS 17 o posterior, con una biblioteca propia, un reproductor a pantalla completa y carátulas estáticas.
 
-[Descargar amp · Releases](https://github.com/SRJW/Erhu-iOS-powerampp/releases) · [Compilaciones](https://github.com/SRJW/Erhu-iOS-powerampp/actions/workflows/ios.yml) · [Reportar un problema](https://github.com/SRJW/Erhu-iOS-powerampp/issues)
+[Descargar amp · Releases](https://github.com/SRJW/amp/releases) · [Compilaciones](https://github.com/SRJW/amp/actions/workflows/ios.yml) · [Reportar un problema](https://github.com/SRJW/amp/issues)
 
 ## Descargar e instalar
 
-1. Abre **[Releases](https://github.com/SRJW/Erhu-iOS-powerampp/releases)** y elige la publicación más reciente de amp. Las compilaciones de desarrollo se identifican como *Pre-release*.
+1. Abre **[Releases](https://github.com/SRJW/amp/releases)** y elige la publicación más reciente de amp. Las compilaciones de desarrollo se identifican como *Pre-release*.
 2. En **Assets**, descarga **`amp.ipa`** directamente. No necesitas abrir la página de artefactos de GitHub Actions.
 3. Firma e instala la IPA con [SideStore](https://sidestore.io/) o [AltStore Classic](https://altstore.io/), usando tu cuenta de Apple.
 4. Añade música con **+**, desde **Archivos → En mi iPhone → amp**, o mediante la transferencia por Wi-Fi.
@@ -45,7 +45,7 @@ Añade **amp Player** desde la galería de widgets de iOS. El widget muestra la 
 
 La instalación debe conservar la extensión y un App Group compartido correctamente provisionado. La aparición del widget y su acceso a los datos dependen de la firma utilizada. Más detalles: [reproductor y widget](docs/PLAYER_AND_WIDGET.md).
 
-El indicador de salida del reproductor usa la ruta y frecuencia de la sesión de audio. La línea técnica del archivo muestra sus propios datos; no son la misma medición.
+El reproductor comparte el archivo de audio desde el botón de compartir. La línea técnica muestra la frecuencia, bitrate y formato del archivo.
 
 ## Compilar y validar
 
@@ -53,10 +53,10 @@ El proyecto usa Swift, SwiftUI, AVFoundation y Core Audio. Se necesita un Mac co
 
 ```sh
 xcodegen generate
-open Erhu.xcodeproj
+open Amp.xcodeproj
 ```
 
-El proyecto y los identificadores internos conservan el nombre `Erhu` para mantener la compatibilidad de datos. El nombre de la aplicación instalada es **amp**.
+El proyecto usa el módulo `Amp`, el bundle ID `com.amp` y la extensión `com.amp.playerwidget`. Los datos del contenedor anterior se conservan al migrar las carpetas internas; cambiar la identidad instalada puede crear otro contenedor en iOS.
 
 - **[iOS](.github/workflows/ios.yml)** comprueba el borrado real de archivos con casos de aislamiento, compila Release, verifica que la IPA incluya la extensión y publica `amp.ipa` en Releases. Reutiliza dependencias y productos compilados cuando la caché lo permite.
 - **[iOS full validation](.github/workflows/ios-tests.yml)** ejecuta las pruebas completas unitarias, de regresión y de interacción en un simulador. Se inicia manualmente desde Actions; su resultado es independiente de la exportación de desarrollo.
@@ -65,7 +65,7 @@ Una exportación correcta no implica que se haya ejecutado la suite completa de 
 
 ## Problemas y sugerencias
 
-Abre un [issue](https://github.com/SRJW/Erhu-iOS-powerampp/issues) con el modelo de iPhone, versión de iOS, etiqueta de la publicación de amp y pasos para reproducir el problema. Para problemas de instalación, indica también la herramienta de firma.
+Abre un [issue](https://github.com/SRJW/amp/issues) con el modelo de iPhone, versión de iOS, etiqueta de la publicación de amp y pasos para reproducir el problema. Para problemas de instalación, indica también la herramienta de firma.
 
 ## Créditos y licencia
 

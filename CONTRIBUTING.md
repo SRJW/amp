@@ -1,4 +1,4 @@
-# Contributing to Erhu
+# Contributing to Amp
 
 Bug reports, device testing, documentation, and focused code improvements are welcome.
 
@@ -38,6 +38,6 @@ licences and attribution when changing adapted code or model resources.
 
 ## Licence
 
-erhu for iOS is source-visible proprietary software ([LICENSE](LICENSE)). By submitting a contribution you
+amp for iOS is source-visible proprietary software ([LICENSE](LICENSE)). By submitting a contribution you
 agree that the maintainer may use, modify and license it as part of the app (LICENSE section 6), and you
 confirm you have the right to submit it. Third-party components keep their own terms.

@@ -52,7 +52,7 @@ jobs:
     - name: Compile app and both test bundles once
       id: simulator-build
       run: |
-        if ! xcodebuild build-for-testing -project Erhu.xcodeproj -scheme Erhu -configuration Debug \
+        if ! xcodebuild build-for-testing -project Amp.xcodeproj -scheme Amp -configuration Debug \
           -destination "id=$UI_SIMULATOR_ID" -derivedDataPath build/DerivedData \
           -clonedSourcePackagesDirPath build/SourcePackages CODE_SIGNING_ALLOWED=NO \
           > build/simulator-build.log 2>&1; then
@@ -78,10 +78,10 @@ jobs:
         xcrun simctl bootstatus "$UI_SIMULATOR_ID" -b > build/ui-boot.log 2>&1
     - name: Run all native interaction checks
       run: |
-        if ! xcodebuild test-without-building -project Erhu.xcodeproj -scheme Erhu -configuration Debug \
+        if ! xcodebuild test-without-building -project Amp.xcodeproj -scheme Amp -configuration Debug \
           -derivedDataPath build/DerivedData -clonedSourcePackagesDirPath build/SourcePackages \
           -destination "id=$UI_SIMULATOR_ID" -resultBundlePath build/InteractionResults.xcresult \
-          CODE_SIGNING_ALLOWED=NO -only-testing:ErhuInteractionTests -parallel-testing-enabled NO \
+          CODE_SIGNING_ALLOWED=NO -only-testing:AmpInteractionTests -parallel-testing-enabled NO \
           > build/ui-tests.log 2>&1; then
           python3 Tools/report_native_interactions.py build/ui-tests.log
           exit 1
@@ -102,8 +102,8 @@ jobs:
       if: ${{ !cancelled() && steps.unit-simulator.outcome == 'success' }}
       run: |
         set -o pipefail
-        if ! xcodebuild test-without-building -project Erhu.xcodeproj -scheme Erhu -configuration Debug -derivedDataPath build/DerivedData -clonedSourcePackagesDirPath build/SourcePackages \
-          -destination "id=$SIMULATOR_ID" -resultBundlePath build/TestResults.xcresult CODE_SIGNING_ALLOWED=NO -only-testing:ErhuTests -parallel-testing-enabled NO \
+        if ! xcodebuild test-without-building -project Amp.xcodeproj -scheme Amp -configuration Debug -derivedDataPath build/DerivedData -clonedSourcePackagesDirPath build/SourcePackages \
+          -destination "id=$SIMULATOR_ID" -resultBundlePath build/TestResults.xcresult CODE_SIGNING_ALLOWED=NO -only-testing:AmpTests -parallel-testing-enabled NO \
           > build/tests.log 2>&1; then
           python3 - <<'PY'
         import json
@@ -167,7 +167,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: Erhu-test-results
+        name: Amp-test-results
         path: |
           build/InteractionResults.xcresult
           build/TestResults.xcresult

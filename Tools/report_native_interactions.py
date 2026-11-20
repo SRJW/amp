@@ -9,7 +9,7 @@ if not path.exists():
     raise SystemExit(0)
 log = path.read_text(errors="replace")
 states = {}
-classic = re.compile(r"Test Case '-\[(?:ErhuInteractionTests\.)?(LibraryInteractionTests) (test[A-Za-z0-9_]+)\]' (started|passed|failed)")
+classic = re.compile(r"Test Case '-\[(?:(?:AmpInteractionTests|ErhuInteractionTests)\.)?(LibraryInteractionTests) (test[A-Za-z0-9_]+)\]' (started|passed|failed)")
 compact = re.compile(r"Test case '(LibraryInteractionTests)\.(test[A-Za-z0-9_]+)\(\)' (passed|failed)")
 for pattern in [classic, compact]:
     for name, method, state in pattern.findall(log):

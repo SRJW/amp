@@ -16,7 +16,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY = "MeezaUni/Erhu-iOS"
 VARIANTS = {"static": "without-animated-art", "animated": "with-animated-art"}
-BUILD_PATHS = ["Erhu", "Support", "project.yml", ".github/workflows/ios.yml"]
+BUILD_PATHS = ["Amp", "Support", "project.yml", ".github/workflows/ios.yml"]
 
 
 def command(arguments, *, stdin=None):
@@ -67,7 +67,7 @@ def choose_build(variant, branch):
         if run["head_branch"] != branch or run["conclusion"] != "success":
             continue
         artifacts = api(f"repos/{REPOSITORY}/actions/runs/{run['id']}/artifacts?per_page=100")["artifacts"]
-        available = [item for item in artifacts if item["name"] == "Erhu-ipa" and not item["expired"]]
+        available = [item for item in artifacts if item["name"] == "Amp-ipa" and not item["expired"]]
         if not available:
             continue
         if len(available) != 1:
@@ -96,7 +96,7 @@ def inspect_ipa(path):
         if len(info_names) != 1:
             raise RuntimeError("IPA must contain exactly one main app")
         info = plistlib.loads(archive.read(info_names[0]))
-        if info.get("CFBundleIdentifier") != "com.erhu":
+        if info.get("CFBundleIdentifier") != "com.amp":
             raise RuntimeError("Unexpected app bundle identifier")
         executable = info.get("CFBundleExecutable", "")
         executable_path = info_names[0].rsplit("/", 1)[0] + "/" + executable
@@ -114,18 +114,18 @@ def prepare_assets(tag, builds, destination):
     destination.mkdir(parents=True, exist_ok=False)
     for build in builds:
         variant = build["variant"]
-        with tempfile.TemporaryDirectory(prefix="erhu-ipa-") as directory:
+        with tempfile.TemporaryDirectory(prefix="amp-ipa-") as directory:
             command(["gh", "run", "download", str(build["run_id"]), "--repo", REPOSITORY,
-                     "--name", "Erhu-ipa", "--dir", directory])
+                     "--name", "Amp-ipa", "--dir", directory])
             ipas = list(Path(directory).rglob("*.ipa"))
             if len(ipas) != 1:
                 raise RuntimeError("Expected exactly one IPA in the downloaded artifact")
             build.update(inspect_ipa(ipas[0]))
-            build["ipa"] = f"Erhu-{tag}-{variant}.ipa"
+            build["ipa"] = f"Amp-{tag}-{variant}.ipa"
             shutil.copyfile(ipas[0], destination / build["ipa"])
         build["ipa_bytes"] = (destination / build["ipa"]).stat().st_size
-        build["source"] = f"Erhu-{tag}-{variant}-source.zip"
-        prefix = f"Erhu-{variant}-source/"
+        build["source"] = f"Amp-{tag}-{variant}-source.zip"
+        prefix = f"Amp-{variant}-source/"
         source = destination / build["source"]
         # The built commit may predate the current licence, so its LICENSE is replaced by the current one.
         command(["git", "archive", "--format=zip", f"--prefix={prefix}", f"--output={source}", build["commit"],
@@ -140,7 +140,7 @@ def prepare_assets(tag, builds, destination):
         for path in sorted((ROOT / "ThirdParty").rglob("*")):
             if path.is_file():
                 archive.write(path, path.relative_to(ROOT))
-        archive.write(ROOT / "Erhu/Resources/Vybe/vybe-model-license.txt", "vybe-model-license.txt")
+        archive.write(ROOT / "Amp/Resources/Vybe/vybe-model-license.txt", "vybe-model-license.txt")
     manifest = {"tag": tag, "repository": REPOSITORY, "builds": builds,
                 "source_note": "Each source archive is the built commit, with the current LICENSE and permission record."}
     (destination / "build-manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
@@ -217,7 +217,7 @@ def main():
     builds = [choose_build(variant, branch) for variant, branch in VARIANTS.items()]
     assets = ROOT / "build/beta-release"
     prepare_assets(tag, builds, assets)
-    title = request["title"] if tag == request["tag"] else f"Erhu {tag}"
+    title = request["title"] if tag == request["tag"] else f"Amp {tag}"
     url = publish(tag, title, builds, assets, target)
     annotation("notice", f"Published beta release: {url}")
     details = apply_repository_details()

@@ -65,7 +65,7 @@ const page = (t, name, [kicker, title, sub]) => `<!doctype html><html><head><sty
 </style></head><body>
   <div class="head"><div class="kicker">${kicker}</div><h1>${title}</h1><p class="sub">${sub}</p></div>
   <div class="phone"><img src="file://${join(raw, name + '.png')}"></div>
-  <div class="rule"></div><div class="foot">erhu &nbsp;/&nbsp; iOS</div>
+  <div class="rule"></div><div class="foot">amp &nbsp;/&nbsp; iOS</div>
 </body></html>`;
 
 const hero = (t) => `<!doctype html><html><head><style>${css(t)}
@@ -80,7 +80,7 @@ const hero = (t) => `<!doctype html><html><head><style>${css(t)}
   .a { left: 1040px; top: 270px; width: 520px; }
   .b { left: 1640px; top: 130px; width: 600px; }
 </style></head><body>
-  <div class="left"><div class="kicker">iPhone music player</div><div class="brand">erhu</div>
+  <div class="left"><div class="kicker">iPhone music player</div><div class="brand">amp</div>
     <h1>Your music.<br>Played locally.</h1>
     <p class="sub">Albums, lyrics and on-device discovery.<br>Built around your own music.</p></div>
   <div class="rule"></div><div class="foot">Beta 1 &nbsp;/&nbsp; iPhone captures</div>
@@ -127,7 +127,7 @@ const animated = (t) => `<!doctype html><html><head><style>${css(t)}
   <div class="head"><div class="kicker">Animated artwork</div><h1>Covers that move.</h1>
     <p class="sub">Album pages, Now Playing and the Lock Screen. Animated-artwork build only.</p></div>
   ${clips.map(([, label], i) => `<div class="col" style="left:${72 + i * 508}px"><div class="phone"><div class="screen"></div></div><div class="label">${label}</div></div>`).join('')}
-  <div class="rule"></div><div class="foot">erhu &nbsp;/&nbsp; animated build</div>
+  <div class="rule"></div><div class="foot">amp &nbsp;/&nbsp; animated build</div>
 </body></html>`;
 
 if (only.length === 0 || only.includes('animated')) {

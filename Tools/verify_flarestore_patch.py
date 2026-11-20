@@ -45,7 +45,7 @@ def verify(original, patched):
     with zipfile.ZipFile(original) as source, zipfile.ZipFile(patched) as target:
         source_names, target_names = set(source.namelist()), set(target.namelist())
         infos = sorted(n for n in source_names if n.endswith((".app/Info.plist", ".appex/Info.plist")))
-        if not any(n.endswith("ErhuPlayerWidget.appex/Info.plist") for n in infos):
+        if not any(n.endswith(("AmpPlayerWidget.appex/Info.plist", "ErhuPlayerWidget.appex/Info.plist")) for n in infos):
             raise ValueError("The source IPA is missing the widget extension")
         executables = set()
         for name in infos:
@@ -86,7 +86,7 @@ def verify(original, patched):
         if additions != {library}:
             raise ValueError(f"Unexpected files added: {sorted(additions)}")
         info = plistlib.loads(source.read(app_info))
-    return {"release": info["ErhuReleaseTag"], "bundles": result,
+    return {"release": info.get("AmpReleaseTag") or info["ErhuReleaseTag"], "bundles": result,
             "source_sha256": hashlib.sha256(Path(original).read_bytes()).hexdigest(),
             "patched_sha256": hashlib.sha256(Path(patched).read_bytes()).hexdigest()}
 

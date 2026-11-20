@@ -12,12 +12,12 @@ except (OSError, ValueError):
     old = {}
 if not isinstance(old, dict):
     old = {}
-roots = ('Erhu/', 'ErhuTests/', 'ErhuInteractionTests/', 'ErhuPlayerWidget/', 'WidgetShared/', 'Support/')
+roots = ('Amp/', 'AmpTests/', 'AmpInteractionTests/', 'AmpPlayerWidget/', 'WidgetShared/', 'Support/')
 tracked = subprocess.check_output(['git', 'ls-files', '-z']).decode().split('\0')
 files = [Path(name) for name in tracked if name.startswith(roots) or name == 'project.yml']
 # XcodeGen recreates these files on checkout; identical generated projects should retain their build signature too.
-files += list(Path('Erhu.xcodeproj').rglob('*.pbxproj'))
-files += list(Path('Erhu.xcodeproj').rglob('*.xcscheme'))
+files += list(Path('Amp.xcodeproj').rglob('*.pbxproj'))
+files += list(Path('Amp.xcodeproj').rglob('*.xcscheme'))
 current = {}
 restored = 0
 for path in files:

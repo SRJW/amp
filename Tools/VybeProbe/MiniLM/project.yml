@@ -13,16 +13,16 @@ targets:
     sources:
       - ProbeApp.swift
       - Contract.swift
-      - ../../../Erhu/Core/Common/Regex16.swift
-      - ../../../Erhu/Core/Vybe/WordPieceTokenizer.swift
-      - ../../../Erhu/Core/Vybe/CompactSentenceEmbedder.swift
+      - ../../../Amp/Core/Common/Regex16.swift
+      - ../../../Amp/Core/Vybe/WordPieceTokenizer.swift
+      - ../../../Amp/Core/Vybe/CompactSentenceEmbedder.swift
       - path: Variants
         buildPhase: resources
-      - path: ../../../Erhu/Resources/Vybe
+      - path: ../../../Amp/Resources/Vybe
         buildPhase: resources
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.erhu.minilmprobe
+        PRODUCT_BUNDLE_IDENTIFIER: com.amp.minilmprobe
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
     scheme:
@@ -32,7 +32,7 @@ targets:
     platform: iOS
     sources:
       - ProbeTests.swift
-      - path: ../../../ErhuTests/Vybe/Fixtures/vybe-reference-vectors.json
+      - path: ../../../AmpTests/Vybe/Fixtures/vybe-reference-vectors.json
         buildPhase: resources
     settings:
       base:

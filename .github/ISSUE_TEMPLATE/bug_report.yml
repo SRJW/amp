@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a reproducible problem with Erhu for iOS.
+description: Report a reproducible problem with Amp for iOS.
 title: "[Bug]: "
 body:
   - type: markdown

@@ -43,7 +43,7 @@ runs:
       shell: bash
       run: |
         for attempt in 1 2 3 4 5; do
-          if xcodebuild -resolvePackageDependencies -project Erhu.xcodeproj -scheme Erhu \
+          if xcodebuild -resolvePackageDependencies -project Amp.xcodeproj -scheme Amp \
             -derivedDataPath build/DerivedData -clonedSourcePackagesDirPath build/SourcePackages \
             > build/resolve.log 2>&1; then
             exit 0
@@ -73,7 +73,7 @@ runs:
           build/DerivedData/ModuleCache.noindex
           build/DerivedData/SDKStatCaches.noindex
           build/source-file-stamps.json
-        key: ios-build-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.xcode.outputs.key }}-${{ steps.xcode.outputs.workspace-key }}-${{ inputs.cache-suffix }}-${{ hashFiles('project.yml') }}-${{ hashFiles('Erhu/**', 'ErhuPlayerWidget/**', 'WidgetShared/**', 'Support/**') }}-${{ inputs.cache-suffix == 'simulator-debug' && hashFiles('ErhuTests/**', 'ErhuInteractionTests/**') || 'app-only' }}
+        key: ios-build-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.xcode.outputs.key }}-${{ steps.xcode.outputs.workspace-key }}-${{ inputs.cache-suffix }}-${{ hashFiles('project.yml') }}-${{ hashFiles('Amp/**', 'AmpPlayerWidget/**', 'WidgetShared/**', 'Support/**') }}-${{ inputs.cache-suffix == 'simulator-debug' && hashFiles('AmpTests/**', 'AmpInteractionTests/**') || 'app-only' }}
         restore-keys: |
           ios-build-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.xcode.outputs.key }}-${{ steps.xcode.outputs.workspace-key }}-${{ inputs.cache-suffix }}-${{ hashFiles('project.yml') }}-
           ios-build-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.xcode.outputs.key }}-${{ steps.xcode.outputs.workspace-key }}-${{ inputs.cache-suffix }}-${{ hashFiles('project.yml') }}-

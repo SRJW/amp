@@ -50,8 +50,8 @@ jobs:
         cache-suffix: simulator-debug
     - name: Parse native gesture and rendering test sources
       run: |
-        xcrun swiftc -frontend -parse ErhuInteractionTests/LibraryInteractionTests.swift
-        xcrun swiftc -frontend -parse ErhuTests/Playback/PlayerRenderingTests.swift
+        xcrun swiftc -frontend -parse AmpInteractionTests/LibraryInteractionTests.swift
+        xcrun swiftc -frontend -parse AmpTests/Playback/PlayerRenderingTests.swift
     - name: Create the interaction simulator
       run: |
         newest_ios_runtime() {
@@ -77,7 +77,7 @@ jobs:
     - name: Compile app and both test bundles once
       id: simulator-build
       run: |
-        if ! xcodebuild build-for-testing -project Erhu.xcodeproj -scheme Erhu -configuration Debug \
+        if ! xcodebuild build-for-testing -project Amp.xcodeproj -scheme Amp -configuration Debug \
           -destination "id=$UI_SIMULATOR_ID" -derivedDataPath build/DerivedData \
           -clonedSourcePackagesDirPath build/SourcePackages CODE_SIGNING_ALLOWED=NO \
           > build/simulator-build.log 2>&1; then
@@ -89,20 +89,26 @@ jobs:
       if: ${{ inputs.scope == 'full-player' }}
       run: |
         xcrun simctl boot "$UI_SIMULATOR_ID"
+        defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool NO
+        open -a Simulator --args -CurrentDeviceUDID "$UI_SIMULATOR_ID"
         xcrun simctl bootstatus "$UI_SIMULATOR_ID" -b
-        if ! xcodebuild test-without-building -project Erhu.xcodeproj -scheme Erhu -configuration Debug \
+        if ! xcodebuild test-without-building -project Amp.xcodeproj -scheme Amp -configuration Debug \
           -destination "id=$UI_SIMULATOR_ID" -derivedDataPath build/DerivedData \
           -clonedSourcePackagesDirPath build/SourcePackages CODE_SIGNING_ALLOWED=NO \
-          -only-testing:ErhuTests/PlayerButtonActionTests \
-          -only-testing:ErhuTests/AppNavigationTests \
-          -only-testing:ErhuTests/SongFileDetailsTests \
-          -only-testing:ErhuTests/PlaybackSourceTests \
-          -only-testing:ErhuTests/ReleaseAndDiscoveryTests \
-          -only-testing:ErhuTests/LibrarySearchTests \
-          -only-testing:ErhuTests/LibraryCategoryTests \
-          -only-testing:ErhuTests/PlaybackPresentationTests \
-          -only-testing:ErhuTests/AudioEngineTests/testManualTrackSwitchPreparesTheOtherDeckBeforeReleasingAudio \
-          -only-testing:ErhuTests/AudioEngineTests/testConfiguredManualCrossfadeKeepsTheOutgoingDeckForItsDuration \
+          -only-testing:AmpTests/PlayerButtonActionTests \
+          -only-testing:AmpTests/AppNavigationTests \
+          -only-testing:AmpTests/AppRebrandTests \
+          -only-testing:AmpTests/TransferCoreTests \
+          -only-testing:AmpTests/TransferRouterTests \
+          -only-testing:AmpTests/ForegroundTransferTests \
+          -only-testing:AmpTests/SongFileDetailsTests \
+          -only-testing:AmpTests/PlaybackSourceTests \
+          -only-testing:AmpTests/ReleaseAndDiscoveryTests \
+          -only-testing:AmpTests/LibrarySearchTests \
+          -only-testing:AmpTests/LibraryCategoryTests \
+          -only-testing:AmpTests/PlaybackPresentationTests \
+          -only-testing:AmpTests/AudioEngineTests/testManualTrackSwitchPreparesTheOtherDeckBeforeReleasingAudio \
+          -only-testing:AmpTests/AudioEngineTests/testConfiguredManualCrossfadeKeepsTheOutgoingDeckForItsDuration \
           -parallel-testing-enabled NO \
           -retry-tests-on-failure -test-iterations 2 \
           -resultBundlePath build/PlayerButtonResults.xcresult > build/player-button-tests.log 2>&1; then
@@ -116,6 +122,7 @@ jobs:
         # A long compile can leave a previously booted simulator's AX service stale.
         xcrun simctl shutdown "$UI_SIMULATOR_ID" >/dev/null 2>&1 || true
         xcrun simctl boot "$UI_SIMULATOR_ID"
+        defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool NO
         open -a Simulator --args -CurrentDeviceUDID "$UI_SIMULATOR_ID"
         xcrun simctl bootstatus "$UI_SIMULATOR_ID" -b > build/ui-boot.log 2>&1
     - name: Run real cover swipe and dismissal checks
@@ -123,45 +130,46 @@ jobs:
       run: |
         if [ "${{ inputs.scope }}" = 'navigation-alignment-only' ]; then
           test_filters=(
-            -only-testing:ErhuInteractionTests/LibraryInteractionTests/testLibraryAndPlayerNavigationShareScreenCoordinates
+            -only-testing:AmpInteractionTests/LibraryInteractionTests/testLibraryAndPlayerNavigationShareScreenCoordinates
           )
         elif [ "${{ inputs.scope }}" = 'library-reveal-only' ]; then
           test_filters=(
-            -only-testing:ErhuInteractionTests/LibraryInteractionTests/testPlayerTitleScrollsToAnOffscreenSong
+            -only-testing:AmpInteractionTests/LibraryInteractionTests/testPlayerTitleScrollsToAnOffscreenSong
           )
         elif [ "${{ inputs.scope }}" = 'library-editor-only' ]; then
           test_filters=(
-            -only-testing:ErhuInteractionTests/LibraryInteractionTests/testLibraryVisibilityPersistsAndPlayerTitleRevealsUnfilteredAllSongs
+            -only-testing:AmpInteractionTests/LibraryInteractionTests/testLibraryVisibilityPersistsAndPlayerTitleRevealsUnfilteredAllSongs
           )
         elif [ "${{ inputs.scope }}" = 'library-only' ]; then
           test_filters=(
-            -only-testing:ErhuInteractionTests/LibraryInteractionTests/testPlayerTitleScrollsToAnOffscreenSong
-            -only-testing:ErhuInteractionTests/LibraryInteractionTests/testMiniPlayerScrubsAndSwipesWithoutOpeningThePlayer
-            -only-testing:ErhuInteractionTests/LibraryInteractionTests/testLibraryVisibilityPersistsAndPlayerTitleRevealsUnfilteredAllSongs
-            -only-testing:ErhuInteractionTests/LibraryInteractionTests/testCoverSwipesChangeTracksAndVerticalPullClosesPlayer
-            -only-testing:ErhuInteractionTests/LibraryInteractionTests/testSongsHistoryPersistsAndSelectionAddsToPlaylistAndConfirmsDeletion
-            -only-testing:ErhuInteractionTests/LibraryInteractionTests/testUnifiedNavigationKeepsSearchWhenToolsCloseAndAppReturns
+            -only-testing:AmpInteractionTests/LibraryInteractionTests/testPlayerTitleScrollsToAnOffscreenSong
+            -only-testing:AmpInteractionTests/LibraryInteractionTests/testMiniPlayerScrubsAndSwipesWithoutOpeningThePlayer
+            -only-testing:AmpInteractionTests/LibraryInteractionTests/testLibraryVisibilityPersistsAndPlayerTitleRevealsUnfilteredAllSongs
+            -only-testing:AmpInteractionTests/LibraryInteractionTests/testCoverSwipesChangeTracksAndVerticalPullClosesPlayer
+            -only-testing:AmpInteractionTests/LibraryInteractionTests/testSongsHistoryPersistsAndSelectionAddsToPlaylistAndConfirmsDeletion
+            -only-testing:AmpInteractionTests/LibraryInteractionTests/testUnifiedNavigationKeepsSearchWhenToolsCloseAndAppReturns
           )
         else
           test_filters=(
-            -only-testing:ErhuInteractionTests/LibraryInteractionTests/testWaveformDragSeeksInBothDirectionsAndNewTrackStartsFresh
-            -only-testing:ErhuInteractionTests/LibraryInteractionTests/testStaticWaveformUsesFullSongCoordinatesAndRestoresControls
+            -only-testing:AmpInteractionTests/LibraryInteractionTests/testWaveformDragSeeksInBothDirectionsAndNewTrackStartsFresh
+            -only-testing:AmpInteractionTests/LibraryInteractionTests/testStaticWaveformUsesFullSongCoordinatesAndRestoresControls
           )
           if [ "${{ inputs.scope }}" = 'full-player' ]; then
             test_filters+=(
-              -only-testing:ErhuInteractionTests/LibraryInteractionTests/testLibraryAndPlayerNavigationShareScreenCoordinates
-              -only-testing:ErhuInteractionTests/LibraryInteractionTests/testPlayerTitleScrollsToAnOffscreenSong
-              -only-testing:ErhuInteractionTests/LibraryInteractionTests/testMiniPlayerScrubsAndSwipesWithoutOpeningThePlayer
-              -only-testing:ErhuInteractionTests/LibraryInteractionTests/testLibraryVisibilityPersistsAndPlayerTitleRevealsUnfilteredAllSongs
-              -only-testing:ErhuInteractionTests/LibraryInteractionTests/testCoverSwipesChangeTracksAndVerticalPullClosesPlayer
-              -only-testing:ErhuInteractionTests/LibraryInteractionTests/testLargeTransportChangesTracksAndSmallTransportSeeksWithinTheTrack
-              -only-testing:ErhuInteractionTests/LibraryInteractionTests/testSongsHistoryPersistsAndSelectionAddsToPlaylistAndConfirmsDeletion
-              -only-testing:ErhuInteractionTests/LibraryInteractionTests/testUnifiedNavigationKeepsSearchWhenToolsCloseAndAppReturns
+              -only-testing:AmpInteractionTests/LibraryInteractionTests/testIntroductionShowsSixFeaturePagesAndFinishes
+              -only-testing:AmpInteractionTests/LibraryInteractionTests/testLibraryAndPlayerNavigationShareScreenCoordinates
+              -only-testing:AmpInteractionTests/LibraryInteractionTests/testPlayerTitleScrollsToAnOffscreenSong
+              -only-testing:AmpInteractionTests/LibraryInteractionTests/testMiniPlayerScrubsAndSwipesWithoutOpeningThePlayer
+              -only-testing:AmpInteractionTests/LibraryInteractionTests/testLibraryVisibilityPersistsAndPlayerTitleRevealsUnfilteredAllSongs
+              -only-testing:AmpInteractionTests/LibraryInteractionTests/testCoverSwipesChangeTracksAndVerticalPullClosesPlayer
+              -only-testing:AmpInteractionTests/LibraryInteractionTests/testLargeTransportChangesTracksAndSmallTransportSeeksWithinTheTrack
+              -only-testing:AmpInteractionTests/LibraryInteractionTests/testSongsHistoryPersistsAndSelectionAddsToPlaylistAndConfirmsDeletion
+              -only-testing:AmpInteractionTests/LibraryInteractionTests/testUnifiedNavigationKeepsSearchWhenToolsCloseAndAppReturns
             )
           fi
         fi
         run_interactions() {
-          xcodebuild test-without-building -project Erhu.xcodeproj -scheme Erhu -configuration Debug \
+          xcodebuild test-without-building -project Amp.xcodeproj -scheme Amp -configuration Debug \
           -derivedDataPath build/DerivedData -clonedSourcePackagesDirPath build/SourcePackages \
           -destination "id=$UI_SIMULATOR_ID" -resultBundlePath build/InteractionResults.xcresult \
           CODE_SIGNING_ALLOWED=NO "${test_filters[@]}" \
@@ -178,7 +186,8 @@ jobs:
             UI_SIMULATOR_ID=$(xcrun simctl create "CI UI recovery" "$SIMULATOR_DEVICE_TYPE" "$SIMULATOR_RUNTIME")
             echo "UI_SIMULATOR_ID=$UI_SIMULATOR_ID" >> "$GITHUB_ENV"
             xcrun simctl boot "$UI_SIMULATOR_ID"
-            open -a Simulator --args -CurrentDeviceUDID "$UI_SIMULATOR_ID"
+            defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool NO
+        open -a Simulator --args -CurrentDeviceUDID "$UI_SIMULATOR_ID"
             xcrun simctl bootstatus "$UI_SIMULATOR_ID" -b > build/ui-boot-retry.log 2>&1
             if ! run_interactions; then
               python3 Tools/report_native_interactions.py build/ui-tests.log
@@ -210,11 +219,11 @@ jobs:
           xcrun simctl boot "$UI_SIMULATOR_ID"
           xcrun simctl bootstatus "$UI_SIMULATOR_ID" -b > build/unit-boot.log 2>&1
         fi
-        if ! xcodebuild test-without-building -project Erhu.xcodeproj -scheme Erhu -configuration Debug \
+        if ! xcodebuild test-without-building -project Amp.xcodeproj -scheme Amp -configuration Debug \
           -derivedDataPath build/DerivedData -clonedSourcePackagesDirPath build/SourcePackages \
           -destination "id=$UI_SIMULATOR_ID" -resultBundlePath build/BlendResults.xcresult \
-          CODE_SIGNING_ALLOWED=NO -only-testing:ErhuTests/PlayerRenderingTests \
-          -only-testing:ErhuTests/CarouselMotionTests \
+          CODE_SIGNING_ALLOWED=NO -only-testing:AmpTests/PlayerRenderingTests \
+          -only-testing:AmpTests/CarouselMotionTests \
           -parallel-testing-enabled NO > build/blend-tests.log 2>&1; then
           python3 Tools/report_native_interactions.py build/blend-tests.log
           tail -n 35 build/blend-tests.log

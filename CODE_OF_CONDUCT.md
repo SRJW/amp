@@ -1,6 +1,6 @@
 # Code of conduct
 
-Erhu welcomes contributors and users with different backgrounds and levels of experience.
+Amp welcomes contributors and users with different backgrounds and levels of experience.
 This policy covers project issues, pull requests, discussions, reviews, and other project spaces.
 
 ## Expected behavior

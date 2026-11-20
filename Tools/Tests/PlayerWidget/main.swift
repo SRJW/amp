@@ -8,13 +8,13 @@ func check(_ condition: @autoclosure () -> Bool, _ message: String) {
 func profile(_ groups: [String], format: PropertyListSerialization.PropertyListFormat = .xml) throws -> Data {
     try PropertyListSerialization.data(fromPropertyList: ["Entitlements": ["com.apple.security.application-groups": groups]], format: format, options: 0)
 }
-let renamed = "group.com.erhu.player.TEAM123"
+let renamed = "group.com.amp.player.TEAM123"
 let cms = Data([0x30, 0x82, 0x00, 0xff]) + (try profile([renamed, "group.other.app"])) + Data([0, 0xff])
 let candidates = PlayerWidgetStorage.identifiers(profile: cms)
 check(candidates.first == renamed, "Prefer the concrete group actually provisioned by the signer")
 check(!candidates.contains("group.other.app"), "Do not write player state into an unrelated app group")
 let wildcard = try profile(["group.*"])
-check(PlayerWidgetStorage.identifiers(profile: wildcard).count == 1, "Never treat wildcard entitlements as a concrete container")
+check(!PlayerWidgetStorage.identifiers(profile: wildcard).contains("group.*"), "Never treat wildcard entitlements as a concrete container")
 let binary = try profile([renamed], format: .binary)
 check(PlayerWidgetStorage.profileGroups(binary) == [renamed], "Binary profile plist is supported")
 check(PlayerWidgetStorage.profileGroups(Data([0, 1, 2])) == nil, "Invalid profile does not crash")
@@ -39,6 +39,23 @@ check(PlayerLaunchRequest(url: URL(string: "erhu://player")!) != nil, "Legacy pl
 for invalid in ["https://player", "amp://settings", "amp://player?action=delete", "amp://player?action=next&action=previous", "amp://player/other", "amp://user@player"] {
     check(PlayerLaunchRequest(url: URL(string: invalid)!) == nil, "Reject invalid player command: \(invalid)")
 }
+let legacyProfile = try profile([PlayerWidgetStorage.legacyGroup])
+check(PlayerWidgetStorage.identifiers(profile: legacyProfile).contains(PlayerWidgetStorage.legacyGroup), "Previously provisioned widget groups remain readable")
+let previousCover = PlayerWidgetSnapshot(title: "Track", artist: "Artist", isPlaying: true, songID: 8, hasArtwork: true, artworkFileName: "cover.jpg")
+let cacheMiss = PlayerWidgetSnapshot(title: "Track", artist: "Artist", isPlaying: false, songID: 8, hasArtwork: false)
+check(cacheMiss.retainingArtwork(from: previousCover, available: { $0 == "cover.jpg" }).hasArtwork, "Cache eviction or pausing must retain this track's valid shared artwork")
+check(!cacheMiss.retainingArtwork(from: previousCover, available: { _ in false }).hasArtwork, "A missing file must not be advertised as a valid cover")
+var differentSong = cacheMiss; differentSong.songID = 9
+check(!differentSong.retainingArtwork(from: previousCover, available: { _ in true }).hasArtwork, "Never show another track's cover")
+let oldJSON = Data(#"{"title":"Old track","artist":"Artist","isPlaying":false,"songID":2,"hasArtwork":false}"#.utf8)
+let oldSnapshot = try JSONDecoder().decode(PlayerWidgetSnapshot.self, from: oldJSON)
+check(oldSnapshot.durationMs == nil && oldSnapshot.updatedAt == nil, "Snapshots from older installations decode without progress metadata")
+let archiveFolder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+defer { try? FileManager.default.removeItem(at: archiveFolder) }
+let archive = PlayerWidgetArchive(snapshot: previousCover, artwork: Data([1, 2, 3]))
+try archive.save(in: archiveFolder)
+check(PlayerWidgetArchive.load(in: archiveFolder)?.snapshot.title == previousCover.title, "Widget's last entry survives process eviction or a temporary shared-group failure")
+check(PlayerWidgetArchive.load(in: archiveFolder)?.artwork == Data([1, 2, 3]), "The cached entry retains its own cover bytes")
 var gate = PlayerLaunchGate()
 check(gate.take(restored: true) == nil, "Ordinary launch must not force the player")
 gate.request(PlayerLaunchRequest(command: .next))

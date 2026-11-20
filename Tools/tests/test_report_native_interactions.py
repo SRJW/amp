@@ -20,7 +20,7 @@ class NativeInteractionReportTests(unittest.TestCase):
     def test_compilation_failure_before_tests_is_visible_without_dumping_log(self):
         result = self.report(
             "arbitrary runner environment data must not be published\n"
-            "/checkout/Erhu/App/InteractionProbeView.swift:71:22: error: cannot convert "
+            "/checkout/Amp/App/InteractionProbeView.swift:71:22: error: cannot convert "
             "value of type 'KeyPath<EnvironmentValues, Bool>' to expected argument "
             "type 'WritableKeyPath<EnvironmentValues, Bool>'\n")
         self.assertIn("::error::/InteractionProbeView.swift:71:22: error:", result)
@@ -29,8 +29,8 @@ class NativeInteractionReportTests(unittest.TestCase):
 
     def test_test_outcomes_remain_distinct(self):
         result = self.report(
-            "Test Case '-[ErhuInteractionTests.LibraryInteractionTests testFullPlayer]' started.\n"
-            "Test Case '-[ErhuInteractionTests.LibraryInteractionTests testFullPlayer]' passed.\n"
+            "Test Case '-[AmpInteractionTests.LibraryInteractionTests testFullPlayer]' started.\n"
+            "Test Case '-[AmpInteractionTests.LibraryInteractionTests testFullPlayer]' passed.\n"
             "Test case 'LibraryInteractionTests.testClose()' failed on 'iPhone'\n")
         self.assertIn("LibraryInteractionTests.testFullPlayer: passed", result)
         self.assertIn("LibraryInteractionTests.testClose: failed", result)

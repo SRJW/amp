@@ -13,12 +13,12 @@ publisher = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(publisher)
 
 
-def fixture_ipa(path, identifier="com.erhu"):
-    info = {"CFBundleIdentifier": identifier, "CFBundleExecutable": "Erhu",
+def fixture_ipa(path, identifier="com.amp"):
+    info = {"CFBundleIdentifier": identifier, "CFBundleExecutable": "Amp",
             "CFBundleShortVersionString": "0.1.0", "CFBundleVersion": "1", "MinimumOSVersion": "17.0"}
     with zipfile.ZipFile(path, "w") as archive:
-        archive.writestr("Payload/Erhu.app/Info.plist", plistlib.dumps(info))
-        archive.writestr("Payload/Erhu.app/Erhu", b"fixture executable")
+        archive.writestr("Payload/Amp.app/Info.plist", plistlib.dumps(info))
+        archive.writestr("Payload/Amp.app/Amp", b"fixture executable")
 
 
 class PublisherTests(unittest.TestCase):
@@ -37,8 +37,8 @@ class PublisherTests(unittest.TestCase):
     def test_latest_retained_successful_artifact_is_selected(self):
         runs = [{"id": i, "head_branch": "without-animated-art", "conclusion": "success",
                  "head_sha": "a" * 40, "html_url": f"https://example.test/{i}"} for i in [11, 10]]
-        responses = [{"workflow_runs": runs}, {"artifacts": [{"name": "Erhu-ipa", "expired": True, "id": 2}]},
-                     {"artifacts": [{"name": "Erhu-ipa", "expired": False, "id": 1}]}]
+        responses = [{"workflow_runs": runs}, {"artifacts": [{"name": "Amp-ipa", "expired": True, "id": 2}]},
+                     {"artifacts": [{"name": "Amp-ipa", "expired": False, "id": 1}]}]
         with patch.object(publisher, "api", side_effect=responses), patch.object(publisher, "command"), \
                 patch.object(publisher.subprocess, "run", return_value=SimpleNamespace(returncode=0)):
             build = publisher.choose_build("static", "without-animated-art")
@@ -48,7 +48,7 @@ class PublisherTests(unittest.TestCase):
     def test_stale_binary_cannot_be_released_for_changed_app_code(self):
         run = {"id": 10, "head_branch": "with-animated-art", "conclusion": "success",
                "head_sha": "a" * 40, "html_url": "https://example.test/10"}
-        responses = [{"workflow_runs": [run]}, {"artifacts": [{"name": "Erhu-ipa", "expired": False, "id": 1}]}]
+        responses = [{"workflow_runs": [run]}, {"artifacts": [{"name": "Amp-ipa", "expired": False, "id": 1}]}]
         with patch.object(publisher, "api", side_effect=responses), patch.object(publisher, "command"), \
                 patch.object(publisher.subprocess, "run", return_value=SimpleNamespace(returncode=1)):
             with self.assertRaisesRegex(RuntimeError, "does not match current app code"):
@@ -69,12 +69,12 @@ class PublisherTests(unittest.TestCase):
             (root / "LICENSE").write_text("GPLv3 fixture")
             (root / "ThirdParty").mkdir()
             (root / "ThirdParty/NOTICE.md").write_text("fixture notice")
-            (root / "Erhu/Resources/Vybe").mkdir(parents=True)
-            (root / "Erhu/Resources/Vybe/vybe-model-license.txt").write_text("Apache fixture")
+            (root / "Amp/Resources/Vybe").mkdir(parents=True)
+            (root / "Amp/Resources/Vybe/vybe-model-license.txt").write_text("Apache fixture")
 
             def command(args, **kwargs):
                 if args[:3] == ["gh", "run", "download"]:
-                    fixture_ipa(Path(args[-1]) / "Erhu.ipa")
+                    fixture_ipa(Path(args[-1]) / "Amp.ipa")
                 elif args[:2] == ["git", "archive"]:
                     destination = next(value.split("=", 1)[1] for value in args if value.startswith("--output="))
                     prefix = next(value.split("=", 1)[1] for value in args if value.startswith("--prefix="))
@@ -91,8 +91,8 @@ class PublisherTests(unittest.TestCase):
             self.assertEqual(len((destination / "SHA256SUMS.txt").read_text().splitlines()), 7)
             for build in builds:
                 with zipfile.ZipFile(destination / build["source"]) as archive:
-                    self.assertIn(f"Erhu-{build['variant']}-source/LICENSE", archive.namelist())
-                self.assertEqual(publisher.inspect_ipa(destination / build["ipa"])["bundle_identifier"], "com.erhu")
+                    self.assertIn(f"Amp-{build['variant']}-source/LICENSE", archive.namelist())
+                self.assertEqual(publisher.inspect_ipa(destination / build["ipa"])["bundle_identifier"], "com.amp")
 
     def test_upload_mismatch_keeps_release_unpublished_and_removes_own_draft(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -123,7 +123,7 @@ class PublisherTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / ".github").mkdir()
-            (root / ".github/repository-details.json").write_text(json.dumps({"description": "Erhu", "topics": ["ios"]}))
+            (root / ".github/repository-details.json").write_text(json.dumps({"description": "Amp", "topics": ["ios"]}))
             calls = []
 
             def api(path, *, method="GET", data=None, **kwargs):
@@ -134,7 +134,7 @@ class PublisherTests(unittest.TestCase):
                 result = publisher.apply_repository_details()
             self.assertTrue(all(status == "updated" for status in result.values()))
             patches = [data for _, method, data in calls if method == "PATCH"]
-            self.assertEqual(patches, [{"description": "Erhu"}])
+            self.assertEqual(patches, [{"description": "Amp"}])
             topics = [data for path, method, data in calls if path.endswith("/topics") and method == "PUT"]
             self.assertEqual(topics, [{"names": ["existing", "ios"]}])
 

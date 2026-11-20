@@ -118,7 +118,7 @@ def main():
     palette_agreement = validate_compression(compressed, model, tokens, expected)
     print("Compressed/reference cosine agreement:", palette_agreement, flush=True)
     assert min(palette_agreement) > (0.99 if args.bits >= 6 else 0.93), "Compression changed embeddings too much"
-    compressed.author = "Sentence Transformers; Core ML adaptation for Erhu"
+    compressed.author = "Sentence Transformers; Core ML adaptation for Amp"
     compressed.license = "Apache License 2.0"
     compressed.short_description = f"Offline VYBE sentence embeddings; 384 dimensions, {args.bits}-bit palettes, 128 tokens."
     compressed.version = f"minilm-l6-v2-p{args.bits}-v2"
