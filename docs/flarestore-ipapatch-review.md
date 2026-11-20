@@ -56,4 +56,17 @@ El identificador relevante es el autorizado por el perfil para la app, es decir,
 
 Según la indicación del creador de FlareStore, ese identificador sólo puede ocuparlo una app instalada a la vez. No se debe asignar simultáneamente a varias apps. Cambiar el bundle ID también puede crear una instalación con otro contenedor de datos: la biblioteca anterior no migra automáticamente.
 
-No se han cambiado los identificadores fuente ni parcheado/publicado una IPA en esta revisión. La integración de un artefacto opcional puede hacerse en GitHub después de compilar y antes del refirmado final; una prueba de instalación con FlareStore sigue siendo necesaria.
+Tras confirmar el usuario que el App ID solucionó la apertura desde el Centro de control pero no el widget, se añadió una copia opcional parcheada. No se cambiaron los identificadores fuente.
+
+## Copia de compatibilidad publicada
+
+La ejecución [FlareStore compatibility](https://github.com/SRJW/amp/actions/runs/44803586253) terminó correctamente. Compila ipapatch desde la revisión fijada, verifica el hash de su biblioteca incluida, aplica el parche a ambos ejecutables, vuelve a firmar ad hoc de dentro hacia fuera y comprueba la integridad con `codesign --verify --deep --strict`.
+
+`Tools/verify_flarestore_patch.py` comprueba que ambos ejecutables tengan una única carga de la biblioteca, sus rutas de búsqueda la resuelvan, los entitlements y metadatos no cambien, no falten archivos y ningún recurso ajeno al parche cambie. También se comprobó que el verificador rechaza una IPA normal presentada como parcheada. Se descargó la copia publicada y se repitió la verificación local.
+
+- Fuente normal: compilación 154, revisión `073a209204b9ed2a5465d1aa38dda4f53d6c0ed8`.
+- IPA normal SHA-256: `24fd6f1b3765e066bca7739fedd6f5b30cda5f3c3dc6574e000db08dde472874`.
+- [amp-flarestore.ipa](https://github.com/SRJW/amp/releases/download/v0.1.0-amp.154/amp-flarestore.ipa), SHA-256: `08a7e16d76fdcc58d1bb3a62bcbbc9a1472186b6ced02123784f0cccaca9324a`.
+- [Informe de integridad](https://github.com/SRJW/amp/releases/download/v0.1.0-amp.154/flarestore-verification.json).
+
+La IPA normal permanece disponible sin modificaciones. La firma ad hoc comprueba integridad; esta copia debe volver a firmarse con FlareStore antes de instalarse. Después hay que abrirla, reproducir una canción, quitar el widget anterior y añadir el de esta instalación para probar título y portada al cambiar de pista. Estos controles estáticos no demuestran aún la comunicación real en el iPhone ni que la extensión sobreviva al refirmado. La suite nativa de interfaz del código base 154 sigue pendiente en una ejecución separada.

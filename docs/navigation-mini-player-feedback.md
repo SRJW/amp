@@ -18,4 +18,4 @@ Referencias: los dos videos enviados el 20 de noviembre. El segundo muestra el m
 3. Arrastrar el progreso y comprobar que no abre el player ni cambia la pista.
 4. Añadir y quitar favoritos en el player: revisar texto, icono, tamaño y que el aviso no cubra ninguno de los cuatro botones.
 
-Validación solicitada en [154](https://github.com/SRJW/amp/actions/runs/44800791643), fuente `073a209204b9ed2a5465d1aa38dda4f53d6c0ed8`. Pendiente de resultados nativos y exportación.
+Validación solicitada en [154](https://github.com/SRJW/amp/actions/runs/44800791643), fuente `073a209204b9ed2a5465d1aa38dda4f53d6c0ed8`. La compilación de dispositivo y la exportación de `amp.ipa` terminaron correctamente. La compilación de app y paquetes de pruebas del simulador también pasó; la suite nativa sigue ejecutándose y no se declara todavía validada. La copia opcional de FlareStore usa exactamente este código de interfaz, con el parche binario documentado por separado.
