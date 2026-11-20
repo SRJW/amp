@@ -49,7 +49,21 @@ var differentSong = cacheMiss; differentSong.songID = 9
 check(!differentSong.retainingArtwork(from: previousCover, available: { _ in true }).hasArtwork, "Never show another track's cover")
 let oldJSON = Data(#"{"title":"Old track","artist":"Artist","isPlaying":false,"songID":2,"hasArtwork":false}"#.utf8)
 let oldSnapshot = try JSONDecoder().decode(PlayerWidgetSnapshot.self, from: oldJSON)
-check(oldSnapshot.durationMs == nil && oldSnapshot.updatedAt == nil, "Snapshots from older installations decode without progress metadata")
+check(oldSnapshot.durationMs == nil && oldSnapshot.updatedAt == nil && oldSnapshot.palette == nil && oldSnapshot.waveform == nil && oldSnapshot.formatBadge == nil,
+      "Snapshots from older installations decode without progress or visual metadata")
+var rich = previousCover
+rich.formatBadge = "FLAC"
+rich.waveform = PlayerWidgetSnapshot.downsampleWaveform(Data([0, 255, 128, 128, 64, 192]), bars: 3)
+rich.palette = .fallback
+check(rich.waveform == [127, 128, 128], "Waveform downsampling averages each bucket cleanly")
+check(PlayerWidgetSnapshot.downsampleWaveform(Data(), bars: 30) == nil, "Empty waveform data returns nil")
+let richRoundTrip = try JSONDecoder().decode(PlayerWidgetSnapshot.self, from: JSONEncoder().encode(rich))
+check(richRoundTrip == rich, "Snapshots with palette, waveform and format badge round-trip cleanly")
+let retainedRich = cacheMiss.retainingArtwork(from: rich, available: { $0 == "cover.jpg" })
+check(retainedRich.hasArtwork && retainedRich.palette == .fallback && retainedRich.waveform == rich.waveform,
+      "Retaining artwork after a cache miss preserves the track's palette and waveform")
+check(differentSong.retainingArtwork(from: rich, available: { _ in true }).palette == nil,
+      "Never leak another track's palette across song changes")
 let archiveFolder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
 defer { try? FileManager.default.removeItem(at: archiveFolder) }
 let archive = PlayerWidgetArchive(snapshot: previousCover, artwork: Data([1, 2, 3]))

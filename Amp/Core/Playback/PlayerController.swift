@@ -887,7 +887,10 @@ final class PlayerController {
     private func publishNowPlaying(forceWidgetReload: Bool = false) {
         // Opening from the widget must not erase the last snapshot while restoration runs.
         guard restoreFinished || state.currentSong != nil else { return }
-        PlayerWidgetPublisher.publish(song: state.currentSong, playing: state.isPlaying, positionMs: currentPositionMs(), durationMs: state.durationMs, forceReload: forceWidgetReload)
+        let waveformData = state.currentSong.flatMap { (try? database.cachedWaveform(songId: $0.id))?.levels }
+        let waveformBars = waveformData.flatMap { PlayerWidgetSnapshot.downsampleWaveform($0, bars: 30) }
+        PlayerWidgetPublisher.publish(song: state.currentSong, playing: state.isPlaying, positionMs: currentPositionMs(),
+                                      durationMs: state.durationMs, waveform: waveformBars, forceReload: forceWidgetReload)
         guard let song = state.currentSong else {
             MPNowPlayingInfoCenter.default().playbackState = .stopped
             MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
