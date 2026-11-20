@@ -43,6 +43,9 @@ jobs:
               output.write('SOURCE_SHA=' + source['head_sha'] + '\n')
               output.write('SOURCE_TAG=v0.1.0-amp.' + str(source['run_number']) + '\n')
           PY
+      - name: Read the source build's signing declarations
+        run: |
+          set -euo pipefail
           git fetch --depth=1 origin "$SOURCE_SHA"
           git show "$SOURCE_SHA:Support/Erhu.entitlements" > "$RUNNER_TEMP/amp.entitlements"
           git show "$SOURCE_SHA:Support/ErhuPlayerWidget.entitlements" > "$RUNNER_TEMP/widget.entitlements"
