@@ -132,6 +132,8 @@ struct ThemedRoot<Content: View>: View {
         content
             .buttonStyle(.plain)
             .fontDesign(settings.typeface.design)
+            .fontWeight(settings.boldText ? .bold : nil)
+            .environment(\.legibilityWeight, settings.boldText ? .bold : nil)
             .environment(\.palette, palette)
             .environment(\.playbackPalette, palette)
             .tint(palette.primary).toggleStyle(PaletteToggleStyle())

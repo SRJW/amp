@@ -54,7 +54,19 @@ final class ReleaseAndDiscoveryTests: XCTestCase {
         XCTAssertFalse(value.introductionCompleted)
         XCTAssertEqual(value.theme, .dark)
         XCTAssertEqual(value.typeface, .system)
+        XCTAssertFalse(value.boldText)
         XCTAssertFalse(IntroductionPage.pages().contains { $0.id == "vybe" })
+    }
+
+    @MainActor func testBoldTextPersistsAlongsideEveryFontStyle() throws {
+        for style in AppTypeface.allCases {
+            var stored = AppSettings.Stored()
+            stored.typeface = style
+            stored.boldText = true
+            let restored = try JSONDecoder().decode(AppSettings.Stored.self, from: JSONEncoder().encode(stored))
+            XCTAssertEqual(restored.typeface, style)
+            XCTAssertTrue(restored.boldText)
+        }
     }
 
     func testLoopingPagesWrapInBothDirectionsWithoutExtraDots() {

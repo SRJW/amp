@@ -45,7 +45,7 @@ enum PlayerWidgetPublisher {
             previous = value
             previousImage = image
             lastError = nil
-            WidgetCenter.shared.reloadTimelines(ofKind: PlayerWidgetSnapshot.kind)
+            for kind in PlayerWidgetSnapshot.playbackKinds { WidgetCenter.shared.reloadTimelines(ofKind: kind) }
             pruneArtwork(in: folder, keeping: value.artworkFileName)
         } catch {
             lastError = "Couldn't share the current song with the widget: \(error.localizedDescription)"

@@ -272,6 +272,10 @@ private struct AppearanceSettingsView: View {
                     ForEach(AppTypeface.allCases) { font in Text(font.label).fontDesign(font.design).tag(font) }
                 }.padding(Spacing.lg)
             }
+            SettingsGroup("Text weight") {
+                Toggle("Bold text", isOn: Binding(get: { settings.boldText }, set: { settings.boldText = $0 }))
+                    .accessibilityIdentifier("settingsBoldText").padding(Spacing.lg)
+            }
             PlayerBackgroundSettingsGroup()
             Text("For system appearance and transparency options, open iPhone Settings → Accessibility → Display & Text Size. Liquid Glass options also depend on your iOS version.")
                 .font(.footnote).foregroundStyle(.secondary)
@@ -549,7 +553,7 @@ private struct PlayerWidgetStatusSettings: View {
 
     var body: some View {
         SettingsGroup("Home Screen widget") {
-            Text("Touch and hold a widget → Edit Widget → Style to choose Cover focus, Compact or Immersive. Each widget keeps its own style.")
+            Text("Touch and hold your Home Screen → Edit → Add Widget → amp. Swipe to choose amp · Cover focus, amp · Compact or amp · Immersive. Each style is a separate widget, with the same circular playback controls.")
                 .font(.subheadline).foregroundStyle(.secondary).padding(.horizontal, Spacing.lg).padding(.top, Spacing.lg)
             VStack(alignment: .leading, spacing: Spacing.sm) {
                 if let storage = PlayerWidgetStorage.shared {

@@ -9,8 +9,6 @@ enum AppNavigationMetrics {
     static let stripSpacing: CGFloat = 12
     static let selectionInset: CGFloat = 3
     static let selectionWidthFraction: CGFloat = 0.238
-    static let labelSize: CGFloat = 9
-    static let labelCentreY: CGFloat = 43
     static let selectionDuration = 0.30
     static let bottomPadding: CGFloat = Spacing.xs
     static func centreY(height: CGFloat, safeAreaBottom: CGFloat) -> CGFloat {
@@ -148,20 +146,14 @@ struct AppNavigationButtons: View {
 
     @ViewBuilder private var selectionPill: some View {
         if #available(iOS 26.0, *), settings.glassEnabled {
-            Capsule().fill(palette.onSurface.opacity(0.05))
-                .glassEffect(.regular.interactive(), in: .capsule)
+            Capsule().fill(.clear)
+                .glassEffect(.clear.interactive(), in: .capsule)
         } else { Capsule().fill(palette.onSurface.opacity(0.10)) }
     }
 
     private func navigationLabel<Icon: View>(_ title: String, @ViewBuilder icon: () -> Icon) -> some View {
         ZStack {
             icon().position(x: 24, y: 24)
-            if !inPlayer {
-                Text(title).font(.system(size: AppNavigationMetrics.labelSize, weight: .semibold))
-                    .lineLimit(1).minimumScaleFactor(0.8)
-                    .frame(width: width * AppNavigationMetrics.selectionWidthFraction)
-                    .position(x: 24, y: AppNavigationMetrics.labelCentreY)
-            }
         }
         .frame(width: 48, height: 48).contentShape(Rectangle())
         .accessibilityElement(children: .ignore)

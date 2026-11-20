@@ -17,7 +17,7 @@ struct RootView: View {
     @State private var releases = ReleaseChecker.shared
     @State private var chrome = LibraryChromeState()
     @State private var playerMotion = PlayerDragState()
-    @State private var playerHasArtwork = true
+    @State private var playerHasArtwork = false
     @State private var visualBudget = VisualWorkBudget.current
     var body: some View {
         @Bindable var router = router

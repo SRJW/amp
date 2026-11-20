@@ -14,6 +14,9 @@ struct PlayerWidgetSnapshot: Codable, Equatable {
     static let empty = Self(title: "amp", artist: "Open your music", isPlaying: false, songID: nil, hasArtwork: false)
     // Persisted by WidgetKit; retain the identifier for widgets already on the Home Screen.
     static let kind = "ErhuPlayerWidget"
+    static let compactKind = "com.amp.widget.compact"
+    static let immersiveKind = "com.amp.widget.immersive"
+    static let playbackKinds = [kind, compactKind, immersiveKind]
     static let controlKind = "com.erhu.player.open" // Preserve already installed Control Center tiles.
     static var folder: URL? {
         PlayerWidgetStorage.shared?.folder

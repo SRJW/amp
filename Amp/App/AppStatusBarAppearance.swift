@@ -12,6 +12,7 @@ struct PlayerStatusBarSchemeKey: PreferenceKey {
 struct AppStatusBarAppearance: ViewModifier {
     let settings: AppSettings
     let router: AppRouter
+    @Environment(\.scenePhase) private var scenePhase
     @State private var systemScheme: ColorScheme = .light
     @State private var playerScheme: ColorScheme?
 
@@ -21,6 +22,14 @@ struct AppStatusBarAppearance: ViewModifier {
         content
             .environment(\.colorScheme, theme)
             .preferredColorScheme(playerVisible ? (playerScheme ?? theme) : settings.colorScheme)
+            .onChange(of: scenePhase) { _, phase in
+                guard phase == .active else { return }
+                // The window can keep its status-ink override while Control Center
+                // changes the display appearance in the background.
+                if let screen = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first?.screen {
+                    systemScheme = screen.traitCollection.userInterfaceStyle == .dark ? .dark : .light
+                }
+            }
             .onPreferenceChange(PlayerStatusBarSchemeKey.self) { playerScheme = $0 }
             .background {
                 SystemAppearanceProbe { systemScheme = $0 }.frame(width: 0, height: 0)
@@ -29,7 +38,8 @@ struct AppStatusBarAppearance: ViewModifier {
     }
 }
 
-/// Read the scene's system appearance, unaffected by the window's status-ink override.
+/// Read the display's system appearance. A scene inherits the preferred window
+/// scheme used for status ink, so reading the scene creates a light/dark feedback loop.
 private struct SystemAppearanceProbe: UIViewRepresentable {
     let changed: (ColorScheme) -> Void
     func makeUIView(context: Context) -> Probe {
@@ -44,7 +54,7 @@ private struct SystemAppearanceProbe: UIViewRepresentable {
             super.traitCollectionDidChange(previousTraitCollection); read()
         }
         func read() {
-            guard let style = window?.windowScene?.traitCollection.userInterfaceStyle, style != last else { return }
+            guard let style = window?.windowScene?.screen.traitCollection.userInterfaceStyle, style != last else { return }
             last = style
             DispatchQueue.main.async { [weak self] in self?.changed?(style == .dark ? .dark : .light) }
         }

@@ -1,6 +1,44 @@
 import XCTest
+import UIKit
 
 final class LibraryInteractionTests: XCTestCase {
+    @MainActor func testMissingArtworkHasReadableTitleInLightAndDarkMode() {
+        for mode in ["light", "dark"] {
+            let app = launch("player-" + mode)
+            let mini = app.buttons["openNowPlaying"]
+            XCTAssertTrue(mini.waitForExistence(timeout: 30))
+            mini.tap()
+            let title = app.buttons["nowPlayingTitle"]
+            XCTAssertTrue(title.waitForExistence(timeout: 10))
+            let visible = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                self.contrastingPixelCount(title.screenshot().image, lightBackground: mode == "light") > 20
+            }, object: nil)
+            XCTAssertEqual(XCTWaiter.wait(for: [visible], timeout: 10), .completed,
+                           "The title must contrast with the flat missing-artwork background")
+            let shot = XCTAttachment(screenshot: app.screenshot())
+            shot.name = "Full player without artwork - " + mode; shot.lifetime = .keepAlways; add(shot)
+            app.terminate()
+        }
+    }
+
+    private func contrastingPixelCount(_ image: UIImage, lightBackground: Bool) -> Int {
+        guard let cg = image.cgImage else { return 0 }
+        let width = 200, height = 30
+        var bytes = [UInt8](repeating: 0, count: width * height * 4)
+        let drawn = bytes.withUnsafeMutableBytes { buffer -> Bool in
+            guard let context = CGContext(data: buffer.baseAddress, width: width, height: height,
+                bitsPerComponent: 8, bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
+            context.draw(cg, in: CGRect(x: 0, y: 0, width: width, height: height))
+            return true
+        }
+        guard drawn else { return 0 }
+        return (0..<(width * height)).filter { index in
+            let luminance = (Int(bytes[index * 4]) + Int(bytes[index * 4 + 1]) + Int(bytes[index * 4 + 2])) / 3
+            return lightBackground ? luminance < 100 : luminance > 155
+        }.count
+    }
+
     @MainActor func testIntroductionShowsSixFeaturePagesAndFinishes() {
         let app = launch("introduction")
         let next = app.buttons["introductionPrimaryAction"]
@@ -73,7 +111,7 @@ final class LibraryInteractionTests: XCTestCase {
         XCTAssertFalse(app.staticTexts["On My iPhone › Amp"].exists)
         app.buttons["appSection.library"].tap()
         let libraryScreenshot = XCTAttachment(screenshot: app.screenshot())
-        libraryScreenshot.name = "Library navigation with selection capsule and labels"; libraryScreenshot.lifetime = .keepAlways
+        libraryScreenshot.name = "Library navigation with Liquid Glass and icon-only selection"; libraryScreenshot.lifetime = .keepAlways
         add(libraryScreenshot)
         app.buttons["appSection.library"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
             .press(forDuration: 0.05, thenDragTo: app.buttons["appSection.search"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)))

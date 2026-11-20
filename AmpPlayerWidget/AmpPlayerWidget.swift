@@ -44,7 +44,11 @@ private struct PlayerProvider: AppIntentTimelineProvider {
     func timeline(for configuration: AmpWidgetConfiguration, in context: Context) async -> Timeline<PlayerEntry> {
         Timeline(entries: [load(configuration.style)], policy: .after(.now.addingTimeInterval(WidgetMetrics.refreshInterval)))
     }
-    private func load(_ style: AmpWidgetStyle) -> PlayerEntry {
+    private func load(_ style: AmpWidgetStyle) -> PlayerEntry { PlayerEntryLoader.load(style) }
+}
+
+private enum PlayerEntryLoader {
+    static func load(_ style: AmpWidgetStyle) -> PlayerEntry {
         let cacheFolder = URL.applicationSupportDirectory.appendingPathComponent("amp-widget", isDirectory: true)
         let cached = PlayerWidgetArchive.load(in: cacheFolder)
         if let folder = PlayerWidgetSnapshot.folder, let snapshot = PlayerWidgetSnapshot.read(in: folder) {
@@ -58,6 +62,21 @@ private struct PlayerProvider: AppIntentTimelineProvider {
         }
         return PlayerEntry(date: .now, snapshot: cached?.snapshot ?? PlayerWidgetSnapshot.load(), style: style,
                            artwork: (cached?.artwork).flatMap { UIImage(data: $0) })
+    }
+}
+/// Dedicated gallery entries remain selectable when a sideloaded installation
+/// does not expose WidgetConfigurationIntent's Edit Widget metadata.
+private struct FixedStylePlayerProvider: TimelineProvider {
+    let style: AmpWidgetStyle
+    func placeholder(in context: Context) -> PlayerEntry {
+        PlayerEntry(date: .now, snapshot: .empty, style: style, artwork: nil)
+    }
+    func getSnapshot(in context: Context, completion: @escaping (PlayerEntry) -> Void) {
+        completion(PlayerEntryLoader.load(style))
+    }
+    func getTimeline(in context: Context, completion: @escaping (Timeline<PlayerEntry>) -> Void) {
+        completion(Timeline(entries: [PlayerEntryLoader.load(style)],
+                            policy: .after(.now.addingTimeInterval(WidgetMetrics.refreshInterval))))
     }
 }
 private struct PlayerWidgetView: View {
@@ -197,8 +216,32 @@ struct AmpPlayerWidget: Widget {
         AppIntentConfiguration(kind: PlayerWidgetSnapshot.kind, intent: AmpWidgetConfiguration.self, provider: PlayerProvider()) {
             PlayerWidgetView(entry: $0)
         }
-        .configurationDisplayName("amp Player")
+        .configurationDisplayName("amp · Cover focus")
         .description("Three styles. Previous, play/pause and next, without opening amp.")
+        .supportedFamilies([.systemSmall, .systemMedium])
+        .contentMarginsDisabled()
+        .containerBackgroundRemovable(false)
+    }
+}
+struct AmpCompactWidget: Widget {
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: PlayerWidgetSnapshot.compactKind, provider: FixedStylePlayerProvider(style: .compact)) {
+            PlayerWidgetView(entry: $0)
+        }
+        .configurationDisplayName("amp · Compact")
+        .description("A compact layout with progress and circular playback controls.")
+        .supportedFamilies([.systemSmall, .systemMedium])
+        .contentMarginsDisabled()
+        .containerBackgroundRemovable(false)
+    }
+}
+struct AmpImmersiveWidget: Widget {
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: PlayerWidgetSnapshot.immersiveKind, provider: FixedStylePlayerProvider(style: .immersive)) {
+            PlayerWidgetView(entry: $0)
+        }
+        .configurationDisplayName("amp · Immersive")
+        .description("Artwork as the background, with circular playback controls.")
         .supportedFamilies([.systemSmall, .systemMedium])
         .contentMarginsDisabled()
         .containerBackgroundRemovable(false)
@@ -218,6 +261,8 @@ struct AmpPlayerControl: ControlWidget {
 struct AmpWidgetBundle: WidgetBundle {
     var body: some Widget {
         AmpPlayerWidget()
+        AmpCompactWidget()
+        AmpImmersiveWidget()
         if #available(iOS 18.0, *) { AmpPlayerControl() }
     }
 }

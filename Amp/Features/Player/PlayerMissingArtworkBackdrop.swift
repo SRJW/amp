@@ -2,7 +2,7 @@ import SwiftUI
 
 struct PlayerArtworkPresenceKey: PreferenceKey {
     static let defaultValue = true
-    static func reduce(value: inout Bool, nextValue: () -> Bool) { value = nextValue() }
+    static func reduce(value: inout Bool, nextValue: () -> Bool) { value = value && nextValue() }
 }
 private struct PlayerArtworkPresentKey: EnvironmentKey { static let defaultValue = true }
 extension EnvironmentValues {

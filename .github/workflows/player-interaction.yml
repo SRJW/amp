@@ -156,6 +156,7 @@ jobs:
           )
           if [ "${{ inputs.scope }}" = 'full-player' ]; then
             test_filters+=(
+              -only-testing:AmpInteractionTests/LibraryInteractionTests/testMissingArtworkHasReadableTitleInLightAndDarkMode
               -only-testing:AmpInteractionTests/LibraryInteractionTests/testIntroductionShowsSixFeaturePagesAndFinishes
               -only-testing:AmpInteractionTests/LibraryInteractionTests/testLibraryAndPlayerNavigationShareScreenCoordinates
               -only-testing:AmpInteractionTests/LibraryInteractionTests/testPlayerTitleScrollsToAnOffscreenSong

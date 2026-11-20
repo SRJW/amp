@@ -26,7 +26,7 @@ final class AppRebrandTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: parent) }
         try Data("keep me".utf8).write(to: legacy.appendingPathComponent("library.sqlite"))
         let destination = LibraryPaths.migratedDirectory(in: parent, manager: FailingCopyManager())
-        XCTAssertEqual(destination, legacy)
+        XCTAssertEqual(destination.standardizedFileURL.path, legacy.standardizedFileURL.path)
         XCTAssertFalse(FileManager.default.fileExists(atPath: parent.appendingPathComponent("amp").path))
         XCTAssertEqual(try Data(contentsOf: legacy.appendingPathComponent("library.sqlite")), Data("keep me".utf8))
     }

@@ -199,6 +199,38 @@ final class PlayerRenderingTests: XCTestCase {
         }
     }
 
+    @MainActor func testMissingArtworkPreferenceKeepsForegroundVisibleInBothAppearances() async throws {
+        let size = CGSize(width: 200, height: 500)
+        for scheme in [ColorScheme.light, .dark] {
+            let view = MissingArtworkContrastProbe().environment(\.colorScheme, scheme)
+            let rendered = try await windowPixels(view, size: size)
+            // This marker consumes the same environment as the title, waveform,
+            // option buttons and shared navigation, after the preference has propagated.
+            let ink = rendered.color(x: 100, y: 350)
+            for value in ink { XCTAssertEqual(value, scheme == .light ? 0 : 1, accuracy: 0.05) }
+            let background = rendered.color(x: 10, y: 350)
+            for value in background { XCTAssertEqual(value, scheme == .light ? 1 : 0, accuracy: 0.05) }
+        }
+    }
+
+    private struct MissingArtworkContrastProbe: View {
+        @State private var artwork = true
+        var body: some View {
+            ZStack {
+                PlayerMissingArtworkBackdrop().preference(key: PlayerArtworkPresenceKey.self, value: false)
+                ContrastInkProbe().frame(width: 40, height: 40).position(x: 100, y: 350)
+                // A sibling with the default preference must not overwrite the backdrop.
+                Color.clear.preference(key: PlayerArtworkPresenceKey.self, value: true)
+            }
+            .environment(\.playerArtworkPresent, artwork)
+            .onPreferenceChange(PlayerArtworkPresenceKey.self) { artwork = $0 }
+        }
+    }
+    private struct ContrastInkProbe: View {
+        @Environment(\.playerForegroundInk) private var ink
+        var body: some View { Rectangle().fill(ink) }
+    }
+
     @MainActor func testAdaptiveStatusInkKeepsContrastThroughoutLightDarkTrackChanges() throws {
         let size = CGSize(width: 200, height: 500)
         let dark = PlayerArtworkStatusProfile(solid: .black)

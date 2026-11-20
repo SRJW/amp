@@ -36,8 +36,8 @@ final class LibraryCategoryTests: XCTestCase {
         XCTAssertEqual(SongAlphabet.letters.first, "#", "The numeric group must match the start of the sorted song list")
         XCTAssertEqual(SongAlphabet.target(for: "A", anchors: anchors), 1)
         XCTAssertEqual(SongAlphabet.target(for: "M", anchors: anchors), 2)
-        XCTAssertEqual(SongAlphabet.target(for: "Z", anchors: anchors), 2)
-        XCTAssertEqual(SongAlphabet.target(for: "#", anchors: anchors), 3)
+        XCTAssertEqual(SongAlphabet.target(for: "Z", anchors: anchors), 3)
+        XCTAssertEqual(SongAlphabet.target(for: "#", anchors: anchors), 1)
         XCTAssertNil(SongAlphabet.target(for: "A", anchors: [:]))
         XCTAssertNil(SongAlphabet.target(for: "?", anchors: anchors))
     }

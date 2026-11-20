@@ -13,6 +13,7 @@ final class AppSettings {
         var startSection: String = LibrarySection.library.rawValue
         var introductionCompleted = false
         var typeface: AppTypeface = .system
+        var boldText = false
         var visualizer = VisualizerSettings()
         var playerBackground = PlayerBackgroundSettings()
         /// An imported theme in use instead of [theme], by id.
@@ -29,6 +30,7 @@ final class AppSettings {
             startSection = try c.decodeIfPresent(String.self, forKey: .startSection) ?? LibrarySection.library.rawValue
             introductionCompleted = try c.decodeIfPresent(Bool.self, forKey: .introductionCompleted) ?? false
             typeface = (try? c.decodeIfPresent(AppTypeface.self, forKey: .typeface)) ?? .system
+            boldText = try c.decodeIfPresent(Bool.self, forKey: .boldText) ?? false
             visualizer = (try? c.decodeIfPresent(VisualizerSettings.self, forKey: .visualizer)) ?? VisualizerSettings()
             playerBackground = (try? c.decodeIfPresent(PlayerBackgroundSettings.self, forKey: .playerBackground)) ?? PlayerBackgroundSettings()
             customThemeId = try? c.decodeIfPresent(String.self, forKey: .customThemeId)
@@ -64,6 +66,11 @@ final class AppSettings {
     var typeface: AppTypeface {
         get { stored.typeface }
         set { update { $0.typeface = newValue } }
+    }
+
+    var boldText: Bool {
+        get { stored.boldText }
+        set { update { $0.boldText = newValue } }
     }
 
     var visibleSections: [LibrarySection] { [.library, .equalizer, .search] }

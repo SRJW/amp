@@ -16,8 +16,9 @@ struct InteractionProbeView: View {
         Group {
             if page == "introduction" {
                 IntroductionInteractionProbe()
-            } else if page == "player" || page == "player-reduced-motion" || page == "player-artwork" {
-                PlayerInteractionProbe(reduceMotion: page == "player-reduced-motion", withArtwork: page == "player-artwork")
+            } else if page == "player" || page == "player-reduced-motion" || page == "player-artwork" || page == "player-light" || page == "player-dark" {
+                PlayerInteractionProbe(reduceMotion: page == "player-reduced-motion", withArtwork: page == "player-artwork",
+                                       forcedTheme: page == "player-light" ? .light : page == "player-dark" ? .dark : nil)
             } else if page == "songs" || page == "songs-reveal" {
                 SongsInteractionProbe()
             } else if page == "search" {
@@ -71,6 +72,7 @@ private struct IntroductionInteractionProbe: View {
 private struct PlayerInteractionProbe: View {
     let reduceMotion: Bool
     var withArtwork = false
+    var forcedTheme: ThemeChoice? = nil
     @Environment(PlayerController.self) private var player
     @Environment(AppSettings.self) private var settings
     @Environment(AppRouter.self) private var router
@@ -87,6 +89,7 @@ private struct PlayerInteractionProbe: View {
         .task {
             guard !ready else { return }
             settings.introductionCompleted = true
+            if let forcedTheme { settings.useCustomTheme(nil); settings.theme = forcedTheme }
             router.showsNowPlaying = false
             // The controller restores persisted playback asynchronously on launch.
             for _ in 0..<100 {
