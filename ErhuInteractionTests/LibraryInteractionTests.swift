@@ -11,7 +11,7 @@ final class LibraryInteractionTests: XCTestCase {
         func navigationMatchesLibrary() -> Bool {
             zip(identifiers, libraryFrames).allSatisfy { identifier, expected in
                 let button = app.buttons[identifier]
-                guard button.exists && button.isHittable else { return false }
+                guard button.exists else { return false }
                 let actual = button.frame
                 return abs(actual.midX - expected.midX) < 0.5 && abs(actual.midY - expected.midY) < 0.5
                     && abs(actual.width - expected.width) < 0.5 && abs(actual.height - expected.height) < 0.5
@@ -28,7 +28,15 @@ final class LibraryInteractionTests: XCTestCase {
             let actual = app.buttons[identifier].frame
             XCTAssertEqual(actual.midX, expected.midX, accuracy: 0.5, identifier)
             XCTAssertEqual(actual.midY, expected.midY, accuracy: 0.5, identifier)
+            XCTAssertEqual(actual.width, expected.width, accuracy: 0.5, identifier)
+            XCTAssertEqual(actual.height, expected.height, accuracy: 0.5, identifier)
         }
+        let playerScreenshot = XCTAttachment(screenshot: app.screenshot())
+        playerScreenshot.name = "Player navigation without capsule or labels"; playerScreenshot.lifetime = .keepAlways
+        add(playerScreenshot)
+        // Test actual navigation separately from measuring accessibility frame geometry.
+        app.buttons["appSection.search"].tap()
+        XCTAssertTrue(app.textFields["librarySearchField"].waitForExistence(timeout: 10))
         app.buttons["appSection.library"].tap()
         XCTAssertTrue(mini.waitForExistence(timeout: 10))
         XCTAssertTrue(navigationMatchesLibrary(), "Returning to Library must leave its capsule and mini player in place")
@@ -43,6 +51,13 @@ final class LibraryInteractionTests: XCTestCase {
         librarySettings.tap()
         XCTAssertTrue(app.staticTexts["On My iPhone › amp"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.staticTexts["On My iPhone › Erhu"].exists)
+        app.buttons["appSection.library"].tap()
+        let libraryScreenshot = XCTAttachment(screenshot: app.screenshot())
+        libraryScreenshot.name = "Library navigation with selection capsule and labels"; libraryScreenshot.lifetime = .keepAlways
+        add(libraryScreenshot)
+        app.buttons["appSection.library"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            .press(forDuration: 0.05, thenDragTo: app.buttons["appSection.search"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)))
+        XCTAssertTrue(app.textFields["librarySearchField"].waitForExistence(timeout: 10), "Dragging the selection capsule must activate the destination section")
     }
 
     @MainActor func testLibraryVisibilityPersistsAndPlayerTitleRevealsUnfilteredAllSongs() {

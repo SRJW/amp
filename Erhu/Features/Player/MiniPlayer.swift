@@ -19,6 +19,8 @@ enum MiniPlayerMetrics {
     static let buttonWidth: CGFloat = 44
     static let swipeThreshold: CGFloat = 48
     static let dragDistance: CGFloat = 12
+    static let transitionDuration = 0.45
+    static let reducedTransitionDuration = 0.16
     static let maximumOffset: CGFloat = 36
     static let seekLabel = "Mini player progress"
     static let nextLabel = "Next track"
@@ -36,13 +38,24 @@ struct MiniPlayer: View {
     @Environment(\.palette) private var palette
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @GestureState private var translation = CGSize.zero
+    @State private var frames = ArtworkSlideQueue<MiniPlayerFrame>()
+    @State private var transitionProgress = 1.0
+    @State private var settlement: Task<Void, Never>?
+
+    private var visibleFrame: MiniPlayerFrame {
+        frames.current ?? MiniPlayerFrame(id: player.state.currentEntry?.id.uuidString ?? String(song.id), song: song)
+    }
 
     var body: some View {
         let state = player.state
         let entry = state.currentEntry?.id
         HStack(spacing: MiniPlayerMetrics.columnSpacing) {
             openButton(entry: entry, identifier: "openNowPlayingArtwork", label: MiniPlayerMetrics.artworkLabel) {
-                SongArtworkView(song: song, maxPixels: Int(ArtworkSize.miniPlayer * 3))
+                MiniTrackTransition(current: visibleFrame, outgoing: frames.outgoing, progress: transitionProgress,
+                                    direction: frames.direction, slides: false, reduceMotion: reduceMotion) { frame in
+                    SongArtworkView(song: frame.id == visibleFrame.id && frame.song.id == song.id ? song : frame.song,
+                                    maxPixels: Int(ArtworkSize.miniPlayer * 3))
+                }
                     .frame(width: ArtworkSize.miniPlayer, height: ArtworkSize.miniPlayer)
                     .clipShape(RoundedRectangle(cornerRadius: MiniPlayerMetrics.artworkCornerRadius, style: .continuous))
                     .playerArtworkFrame(expanded: false)
@@ -50,14 +63,18 @@ struct MiniPlayer: View {
             }
             VStack(spacing: 0) {
                 openButton(entry: entry, identifier: "openNowPlaying", label: MiniPlayerMetrics.openLabel) {
-                    VStack(alignment: .leading, spacing: MiniPlayerMetrics.textSpacing) {
-                        Text(song.title).font(.system(size: MiniPlayerMetrics.titleSize, weight: .semibold))
-                            .foregroundStyle(palette.onSurface).lineLimit(1)
-                        Text(song.subtitle).font(.system(size: MiniPlayerMetrics.subtitleSize))
-                            .foregroundStyle(palette.onSurfaceVariant).lineLimit(1)
+                    MiniTrackTransition(current: visibleFrame, outgoing: frames.outgoing, progress: transitionProgress,
+                                        direction: frames.direction, slides: true, reduceMotion: reduceMotion) { frame in
+                        let track = frame.id == visibleFrame.id && frame.song.id == song.id ? song : frame.song
+                        VStack(alignment: .leading, spacing: MiniPlayerMetrics.textSpacing) {
+                            Text(track.title).font(.system(size: MiniPlayerMetrics.titleSize, weight: .semibold))
+                                .foregroundStyle(palette.onSurface).lineLimit(1)
+                            Text(track.subtitle).font(.system(size: MiniPlayerMetrics.subtitleSize))
+                                .foregroundStyle(palette.onSurfaceVariant).lineLimit(1)
+                        }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
                     }
                     .frame(maxWidth: .infinity, minHeight: MiniPlayerMetrics.textHeight,
-                           maxHeight: MiniPlayerMetrics.textHeight, alignment: .bottomLeading)
+                           maxHeight: MiniPlayerMetrics.textHeight)
                 }
                 MiniPlayerProgress(durationMs: state.durationMs, entryID: entry)
                     .id(entry)
@@ -79,6 +96,30 @@ struct MiniPlayer: View {
         .padding(.vertical, MiniPlayerMetrics.artworkVerticalInset)
         .frame(height: MiniPlayerMetrics.height)
         .contentShape(Rectangle())
+        .onChange(of: entry, initial: true) { _, _ in
+            let frame = MiniPlayerFrame(id: entry?.uuidString ?? String(song.id), song: song)
+            if frames.offer(frame, direction: player.artworkDirection) { animateTrackChange() }
+        }
+        .onChange(of: reduceMotion) { _, reduced in
+            if reduced { settlement?.cancel(); frames.settleImmediately(); transitionProgress = 1 }
+        }
+        .onDisappear { settlement?.cancel() }
+    }
+
+    private func animateTrackChange() {
+        settlement?.cancel()
+        var instant = Transaction(animation: nil); instant.disablesAnimations = true
+        withTransaction(instant) { transitionProgress = 0 }
+        let duration = reduceMotion ? MiniPlayerMetrics.reducedTransitionDuration : MiniPlayerMetrics.transitionDuration
+        settlement = Task { @MainActor in
+            do { try await Task.sleep(for: .milliseconds(16)) } catch { return }
+            withAnimation(.timingCurve(0.2, 0.8, 0.2, 1, duration: duration)) { transitionProgress = 1 }
+            do { try await Task.sleep(for: .seconds(duration)) } catch { return }
+            var next = false
+            withTransaction(instant) { next = frames.finish() }
+            if next { animateTrackChange() }
+            else { settlement = nil }
+        }
     }
 
     /// Both open areas share gestures; progress and play/pause remain independent siblings.
@@ -107,6 +148,42 @@ struct MiniPlayer: View {
                     onOpen()
                 }
             })
+    }
+}
+
+private struct MiniPlayerFrame: Identifiable {
+    let id: String
+    let song: Song
+}
+
+/// Only the metadata slides. Artwork dissolves in place, outside the progress and controls.
+private struct MiniTrackTransition<Content: View>: View, Animatable {
+    let current: MiniPlayerFrame
+    let outgoing: MiniPlayerFrame?
+    var progress: Double
+    let direction: Int
+    let slides: Bool
+    let reduceMotion: Bool
+    @ViewBuilder let content: (MiniPlayerFrame) -> Content
+    var animatableData: Double {
+        get { progress }
+        set { progress = newValue }
+    }
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                ForEach([outgoing, current].compactMap { $0 }) { frame in
+                    let incoming = frame.id == current.id
+                    let phase = progress.clamped(0, 1)
+                    content(frame)
+                        .frame(width: geometry.size.width, height: geometry.size.height, alignment: .leading)
+                        .offset(x: slides && !reduceMotion && outgoing != nil
+                                ? geometry.size.width * CGFloat(direction) * (incoming ? 1 - phase : -phase) : 0)
+                        .opacity(outgoing == nil ? 1 : (!slides || reduceMotion ? (incoming ? phase : 1) : 1))
+                }
+            }.frame(width: geometry.size.width, height: geometry.size.height).clipped()
+        }
+        .allowsHitTesting(false)
     }
 }
 

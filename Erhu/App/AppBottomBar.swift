@@ -5,11 +5,18 @@ enum AppNavigationMetrics {
     static let stripHeight: CGFloat = MiniPlayerMetrics.height
     static let buttonsHeight: CGFloat = 48
     static let horizontalInset: CGFloat = Spacing.md
+    static let capsuleHeight: CGFloat = 60
+    static let stripSpacing: CGFloat = 12
+    static let selectionInset: CGFloat = 3
+    static let selectionWidthFraction: CGFloat = 0.238
+    static let labelSize: CGFloat = 9
+    static let labelCentreY: CGFloat = 43
+    static let selectionDuration = 0.30
     static let bottomPadding: CGFloat = Spacing.xs
     static func centreY(height: CGFloat, safeAreaBottom: CGFloat) -> CGFloat {
         height - max(safeAreaBottom, 0) - bottomPadding - buttonsHeight / 2
     }
-    static let reservedHeight: CGFloat = stripHeight + buttonsHeight + 28
+    static let reservedHeight: CGFloat = stripHeight + buttonsHeight + 36
     static let menuWidth: CGFloat = 320
     static let menuBottom: CGFloat = 64
     static let emptyTitle = "No song loaded"
@@ -25,7 +32,7 @@ struct AppBottomBar: View {
     @Environment(\.palette) private var palette
 
     var body: some View {
-        VStack(spacing: Spacing.xs) {
+        VStack(spacing: AppNavigationMetrics.stripSpacing) {
             Group {
                 if let song = player.state.currentSong {
                     MiniPlayer(song: song) { router.openPlayer() }
@@ -45,8 +52,7 @@ struct AppBottomBar: View {
                 if showsButtons { AppNavigationButtons(width: geometry.size.width) }
             }
             .frame(height: AppNavigationMetrics.buttonsHeight)
-            .background { Color.clear.chromeSurface(enabled: settings.glassEnabled).allowsHitTesting(false) }
-            .clipShape(Capsule())
+            .background { Color.clear.frame(height: AppNavigationMetrics.capsuleHeight).chromeSurface(enabled: settings.glassEnabled).allowsHitTesting(false) }
         }
         .padding(.horizontal, AppNavigationMetrics.horizontalInset).padding(.bottom, AppNavigationMetrics.bottomPadding)
     }
@@ -76,19 +82,42 @@ struct AppNavigationButtons: View {
     @Environment(AppRouter.self) private var router
     @Environment(\.palette) private var palette
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(AppSettings.self) private var settings
+    @GestureState private var dragX: CGFloat?
+
+    private var selectedIndex: Int {
+        if router.showsDrawer || router.presentedTool != nil { return 3 }
+        switch router.section { case .library: return 0; case .equalizer: return 1; case .search: return 2 }
+    }
+    private func nearestIndex(_ x: CGFloat) -> Int {
+        PlayerLayoutMetrics.navigationCentresW.indices.min {
+            abs(width * PlayerLayoutMetrics.navigationCentresW[$0] - x) < abs(width * PlayerLayoutMetrics.navigationCentresW[$1] - x)
+        } ?? 0
+    }
+    private func activate(_ index: Int) {
+        if index == 3 { router.showsDrawer = true }
+        else { router.activate([LibrarySection.library, .equalizer, .search][index]) }
+    }
 
     var body: some View {
         ZStack {
+            if !inPlayer {
+                selectionPill
+                    .frame(width: width * AppNavigationMetrics.selectionWidthFraction - AppNavigationMetrics.selectionInset * 2,
+                           height: AppNavigationMetrics.capsuleHeight - AppNavigationMetrics.selectionInset * 2)
+                    .position(x: dragX.map { min(max($0, width * PlayerLayoutMetrics.navigationCentresW[0]), width * PlayerLayoutMetrics.navigationCentresW[3]) }
+                              ?? width * PlayerLayoutMetrics.navigationCentresW[selectedIndex], y: 24)
+                    .allowsHitTesting(false)
+            }
             button("Library", section: .library, index: 0) { Image(systemName: "square.grid.2x2.fill") }
             button("Equalizer", section: .equalizer, index: 1) { PlayerEqualizerGlyph().scaleEffect(PlayerLayoutMetrics.navigationIconScale) }
             button("Search", section: .search, index: 2) { Image(systemName: "magnifyingglass") }
             Button {
                 withAnimation(reduceMotion ? nil : .easeInOut(duration: AppNavigationMetrics.duration)) { router.showsDrawer.toggle() }
             } label: {
-                PlayerQueueGlyph().scaleEffect(PlayerLayoutMetrics.navigationIconScale)
-                    .frame(width: 48, height: 48).contentShape(Rectangle())
+                navigationLabel("Menu") { PlayerQueueGlyph().scaleEffect(PlayerLayoutMetrics.navigationIconScale) }
             }
-            .foregroundStyle(tint(selected: router.showsDrawer))
+            .foregroundStyle(tint(selected: inPlayer ? router.showsDrawer : selectedIndex == 3))
             .accessibilityLabel(AppNavigationMetrics.menuLabel)
             .accessibilityIdentifier("appMenu")
             .position(x: width * PlayerLayoutMetrics.navigationCentresW[3], y: 24)
@@ -96,13 +125,44 @@ struct AppNavigationButtons: View {
         .font(.system(size: 28 * PlayerLayoutMetrics.navigationIconScale, weight: .heavy))
         .buttonStyle(.plain)
         .frame(width: width, height: AppNavigationMetrics.buttonsHeight)
+        .animation(reduceMotion ? nil : .spring(response: AppNavigationMetrics.selectionDuration, dampingFraction: 0.86), value: selectedIndex)
+        .simultaneousGesture(DragGesture(minimumDistance: 8)
+            .updating($dragX) { value, state, _ in
+                guard !inPlayer, abs(value.translation.width) > abs(value.translation.height) else { return }
+                state = value.location.x
+            }
+            .onEnded { value in
+                guard !inPlayer, abs(value.translation.width) > abs(value.translation.height) else { return }
+                withAnimation(reduceMotion ? nil : .smooth(duration: AppNavigationMetrics.selectionDuration)) { activate(nearestIndex(value.location.x)) }
+            })
+    }
+
+    @ViewBuilder private var selectionPill: some View {
+        if #available(iOS 26.0, *), settings.glassEnabled {
+            Capsule().fill(palette.onSurface.opacity(0.05))
+                .glassEffect(.regular.interactive(), in: .capsule)
+        } else { Capsule().fill(palette.onSurface.opacity(0.10)) }
+    }
+
+    private func navigationLabel<Icon: View>(_ title: String, @ViewBuilder icon: () -> Icon) -> some View {
+        ZStack {
+            icon().position(x: 24, y: 24)
+            if !inPlayer {
+                Text(title).font(.system(size: AppNavigationMetrics.labelSize, weight: .semibold))
+                    .lineLimit(1).minimumScaleFactor(0.8)
+                    .frame(width: width * AppNavigationMetrics.selectionWidthFraction)
+                    .position(x: 24, y: AppNavigationMetrics.labelCentreY)
+            }
+        }
+        .frame(width: 48, height: 48).contentShape(Rectangle())
+        .accessibilityElement(children: .ignore)
     }
 
     private func button<Icon: View>(_ title: String, section: LibrarySection, index: Int, @ViewBuilder icon: () -> Icon) -> some View {
         Button {
             withAnimation(reduceMotion ? nil : .easeInOut(duration: AppNavigationMetrics.duration)) { router.activate(section) }
-        } label: { icon().frame(width: 48, height: 48).contentShape(Rectangle()) }
-            .foregroundStyle(tint(selected: router.presentedTool == nil && router.section == section))
+        } label: { navigationLabel(title, icon: icon) }
+            .foregroundStyle(tint(selected: inPlayer ? router.presentedTool == nil && router.section == section : selectedIndex == index))
             .accessibilityLabel(title)
             .accessibilityIdentifier("appSection.\(section.rawValue)")
             .accessibilityAddTraits(router.presentedTool == nil && router.section == section ? .isSelected : [])

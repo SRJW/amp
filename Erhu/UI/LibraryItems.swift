@@ -350,6 +350,18 @@ struct Toast: View {
     }
 }
 
+enum LibraryToastMetrics {
+    static let fontSize: CGFloat = 13
+    static let iconSize: CGFloat = 14
+    static let horizontalPadding: CGFloat = 14
+    static let verticalPadding: CGFloat = 9
+    static let spacing: CGFloat = 7
+    static let backgroundOpacity = 0.84
+    static let duration = 1.8
+    static let fadeDuration = 0.2
+    static let navigationGap: CGFloat = 10
+}
+
 /// A new identity extends the display time even when consecutive actions have the same text.
 struct LibraryActionToast: View {
     let text: String
@@ -357,11 +369,27 @@ struct LibraryActionToast: View {
     @Environment(LibraryActions.self) private var actions
 
     var body: some View {
-        Toast(text: text)
-            .task(id: id) {
-                do { try await Task.sleep(for: .seconds(2.5)) }
-                catch { return }
-                withAnimation { actions.dismissMessage(id: id) }
+        HStack(spacing: LibraryToastMetrics.spacing) {
+            if actions.messageKind != .info {
+                Image(systemName: actions.messageKind == .liked ? "checkmark.circle.fill" : "heart")
+                    .font(.system(size: LibraryToastMetrics.iconSize, weight: .semibold))
+                    .foregroundStyle(actions.messageKind == .liked ? Color.green : Color.white.opacity(0.85))
             }
+            Text(text).font(.system(size: LibraryToastMetrics.fontSize, weight: .semibold))
+                .foregroundStyle(.white).multilineTextAlignment(.center)
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(.horizontal, LibraryToastMetrics.horizontalPadding)
+        .padding(.vertical, LibraryToastMetrics.verticalPadding)
+        .background(.black.opacity(LibraryToastMetrics.backgroundOpacity), in: Capsule())
+        .padding(.horizontal, Spacing.lg)
+        .transition(.opacity)
+        .allowsHitTesting(false)
+        .accessibilityIdentifier("libraryActionToast")
+        .task(id: id) {
+            do { try await Task.sleep(for: .seconds(LibraryToastMetrics.duration)) }
+            catch { return }
+            withAnimation(.easeOut(duration: LibraryToastMetrics.fadeDuration)) { actions.dismissMessage(id: id) }
+        }
     }
 }

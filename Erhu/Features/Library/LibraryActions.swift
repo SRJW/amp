@@ -13,6 +13,12 @@ final class LibraryActions {
         let suggested: Set<Int64>
     }
 
+    enum MessageKind { case info, liked, unliked }
+    enum MessageText {
+        static let liked = "Added to Liked Songs"
+        static let unliked = "Removed from Liked Songs"
+    }
+    private(set) var messageKind: MessageKind = .info
     var songPendingDeletion: Song?
     var message: String?
     private(set) var messageID = UUID()
@@ -28,7 +34,8 @@ final class LibraryActions {
         self.mixes = mixes
     }
 
-    func show(_ text: String) {
+    func show(_ text: String, kind: MessageKind = .info) {
+        messageKind = kind;
         messageID = UUID()
         message = text
     }
@@ -115,7 +122,7 @@ final class LibraryActions {
             try database.toggleFavorite(songId: song.id)
             // Read the database result rather than trusting a potentially older row snapshot.
             guard let updated = try database.song(id: song.id) else { return }
-            show(updated.isFavorite ? "Added to Liked Songs" : "Removed from Liked Songs")
+            show(updated.isFavorite ? MessageText.liked : MessageText.unliked, kind: updated.isFavorite ? .liked : .unliked)
         } catch { show("Couldn't change the favourite: \(error.localizedDescription)") }
     }
 
