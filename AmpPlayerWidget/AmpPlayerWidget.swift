@@ -16,21 +16,22 @@ struct AmpWidgetConfiguration: WidgetConfigurationIntent {
     @Parameter(title: "Style", default: .artwork) var style: AmpWidgetStyle
 }
 private enum WidgetMetrics {
-    static let padding: CGFloat = 13
+    static let padding: CGFloat = 12
     static let smallPadding: CGFloat = 12
     static let spacing: CGFloat = 12
     static let coverRadius: CGFloat = 14
-    static let compactCoverRadius: CGFloat = 11
+    static let compactCoverRadius: CGFloat = 10
     static let touchSize: CGFloat = 44
+    static let compactTouchSize: CGFloat = 42
     static let smallTouchWidth: CGFloat = 40
-    static let playSize: CGFloat = 44
+    static let playSize: CGFloat = 42
     static let immersivePlaySize: CGFloat = 46
-    static let skipSize: CGFloat = 36
+    static let skipSize: CGFloat = 34
     static let immersiveSkipSize: CGFloat = 38
     static let smallPlaySize: CGFloat = 40
     static let smallSkipSize: CGFloat = 34
-    static let titleSize: CGFloat = 17
-    static let compactTitleSize: CGFloat = 15.5
+    static let titleSize: CGFloat = 16.5
+    static let compactTitleSize: CGFloat = 15
     static let immersiveTitleSize: CGFloat = 18
     static let artistSize: CGFloat = 12
     static let triangleFraction: CGFloat = 0.50
@@ -215,45 +216,50 @@ private struct PlayerWidgetView: View {
             }
             .padding(WidgetMetrics.smallPadding)
         } else {
-            let coverSide = max(size.height - WidgetMetrics.padding * 2, 64)
-            HStack(spacing: WidgetMetrics.spacing) {
+            let coverSide = min(max(size.height - WidgetMetrics.padding * 2, 64), size.width * 0.42)
+            HStack(alignment: .center, spacing: WidgetMetrics.spacing) {
                 artworkTile(side: coverSide, radius: WidgetMetrics.coverRadius)
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(alignment: .center, spacing: 6) {
                         if let badge = headerBadgeText {
                             Text(badge.uppercased())
-                                .font(.system(size: 9.5, weight: .bold))
-                                .tracking(0.5)
+                                .font(.system(size: 9, weight: .bold))
+                                .tracking(0.4)
                                 .foregroundStyle(secondaryInk)
                                 .lineLimit(1)
+                                .truncationMode(.tail)
                                 .padding(.horizontal, 7)
                                 .padding(.vertical, 2.5)
                                 .background(primaryInk.opacity(0.08), in: Capsule())
                         }
                         Spacer(minLength: 4)
-                        wordmark(size: 12.5, opacity: 0.48)
+                        wordmark(size: 12, opacity: 0.48)
+                            .fixedSize(horizontal: true, vertical: false)
+                            .layoutPriority(1)
                     }
                     Spacer(minLength: 4)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(title)
                             .font(.system(size: WidgetMetrics.titleSize, weight: .bold))
                             .lineLimit(1)
-                            .minimumScaleFactor(0.84)
+                            .minimumScaleFactor(0.82)
                         Text(artist)
                             .font(.system(size: WidgetMetrics.artistSize))
                             .foregroundStyle(secondaryInk)
                             .lineLimit(1)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     if durationSeconds > 0 {
                         HStack(spacing: 6) {
                             slimProgressBar(tint: accentColor)
-                            elapsedLabel(size: 9.5)
+                            elapsedLabel(size: 9.5, alignment: .trailing)
                         }
-                        .padding(.top, 7)
+                        .padding(.top, 5)
                     }
                     Spacer(minLength: 4)
                     coverStageControls(compact: false)
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             }
             .padding(WidgetMetrics.padding)
         }
@@ -308,10 +314,10 @@ private struct PlayerWidgetView: View {
                             .foregroundStyle(secondaryInk)
                             .lineLimit(1)
                     }
-                    Spacer(minLength: 0)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 Spacer(minLength: 0)
-                miniWaveform(bars: 18, maxHeight: 18)
+                miniWaveform(bars: 16, maxHeight: 16)
                 Spacer(minLength: 0)
                 HStack(spacing: 0) {
                     dockIconButton(.previous, symbol: "backward.fill", label: "Previous track", size: 12.5)
@@ -320,9 +326,9 @@ private struct PlayerWidgetView: View {
                         Image(systemName: entry.snapshot.isPlaying ? "pause.fill" : "play.fill")
                             .font(.system(size: 13.5, weight: .bold))
                             .foregroundStyle(playInk)
-                            .frame(width: 34, height: 32)
+                            .frame(width: 34, height: 30)
                             .background(playFill, in: Capsule())
-                            .frame(minWidth: WidgetMetrics.smallTouchWidth, minHeight: 36)
+                            .frame(minWidth: WidgetMetrics.smallTouchWidth, minHeight: 34)
                             .contentShape(Rectangle())
                     }
                     .accessibilityLabel(entry.snapshot.isPlaying ? "Pause" : "Play")
@@ -341,52 +347,60 @@ private struct PlayerWidgetView: View {
             .padding(WidgetMetrics.smallPadding)
         } else {
             VStack(spacing: 0) {
-                HStack(alignment: .center, spacing: 11) {
-                    artworkTile(side: 46, radius: WidgetMetrics.compactCoverRadius)
-                    VStack(alignment: .leading, spacing: 2) {
+                HStack(alignment: .center, spacing: 10) {
+                    artworkTile(side: 42, radius: WidgetMetrics.compactCoverRadius)
+                    VStack(alignment: .leading, spacing: 1.5) {
                         Text(title)
                             .font(.system(size: WidgetMetrics.compactTitleSize, weight: .bold))
                             .lineLimit(1)
-                            .minimumScaleFactor(0.85)
+                            .minimumScaleFactor(0.84)
                         Text(artist)
-                            .font(.system(size: WidgetMetrics.artistSize))
+                            .font(.system(size: 11.5))
                             .foregroundStyle(secondaryInk)
                             .lineLimit(1)
                     }
-                    Spacer(minLength: 4)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     VStack {
-                        wordmark(size: 12.5, opacity: 0.45)
+                        wordmark(size: 12, opacity: 0.45)
+                            .fixedSize(horizontal: true, vertical: false)
+                            .layoutPriority(1)
                         Spacer(minLength: 0)
                     }
-                    .frame(height: 44)
+                    .frame(height: 40)
                 }
                 Spacer(minLength: 4)
-                VStack(spacing: 4) {
-                    HStack(spacing: 8) {
-                        if durationSeconds > 0 { elapsedLabel(size: 10) }
-                        miniWaveform(bars: 28, maxHeight: 20)
+                HStack(alignment: .center, spacing: 6) {
+                    if durationSeconds > 0 {
+                        elapsedLabel(size: 10, alignment: .leading)
+                    }
+                    VStack(spacing: 3) {
+                        miniWaveform(bars: 24, maxHeight: 16)
                         if durationSeconds > 0 {
-                            Text(formatDuration(durationSeconds))
-                                .font(.system(size: 10, weight: .medium).monospacedDigit())
-                                .foregroundStyle(secondaryInk)
+                            slimProgressBar(tint: accentColor)
                         }
                     }
+                    .frame(maxWidth: .infinity)
                     if durationSeconds > 0 {
-                        slimProgressBar(tint: accentColor)
+                        Text(formatDuration(durationSeconds))
+                            .font(.system(size: 10, weight: .medium).monospacedDigit())
+                            .foregroundStyle(secondaryInk)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                            .frame(width: timerLabelWidth, alignment: .trailing)
                     }
                 }
-                Spacer(minLength: 5)
+                Spacer(minLength: 4)
                 HStack(spacing: 0) {
-                    dockIconButton(.previous, symbol: "backward.fill", label: "Previous track", size: 15)
+                    dockIconButton(.previous, symbol: "backward.fill", label: "Previous track", size: 14.5)
                     Spacer(minLength: 0)
                     Button(intent: AmpPlaybackIntent(command: .toggle)) {
                         Image(systemName: entry.snapshot.isPlaying ? "pause.fill" : "play.fill")
-                            .font(.system(size: 15, weight: .bold))
+                            .font(.system(size: 14.5, weight: .bold))
                             .foregroundStyle(playInk)
-                            .frame(width: 66, height: 34)
+                            .frame(width: 64, height: 32)
                             .background(playFill, in: Capsule())
                             .shadow(color: .black.opacity(isLight ? 0.14 : 0.26), radius: 5, y: 2)
-                            .frame(minWidth: 66, minHeight: 38)
+                            .frame(minWidth: 64, minHeight: 34)
                             .contentShape(Rectangle())
                     }
                     .accessibilityLabel(entry.snapshot.isPlaying ? "Pause" : "Play")
@@ -394,7 +408,7 @@ private struct PlayerWidgetView: View {
                     .opacity(hasSong ? 1 : 0.4)
                     .widgetAccentable()
                     Spacer(minLength: 0)
-                    dockIconButton(.next, symbol: "forward.fill", label: "Next track", size: 15)
+                    dockIconButton(.next, symbol: "forward.fill", label: "Next track", size: 14.5)
                 }
                 .buttonStyle(.plain)
                 .padding(.horizontal, 8)
@@ -402,6 +416,7 @@ private struct PlayerWidgetView: View {
                 .background(dockFill, in: Capsule())
                 .overlay { Capsule().stroke(dockStroke, lineWidth: 0.75) }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(WidgetMetrics.padding)
         }
     }
@@ -457,6 +472,7 @@ private struct PlayerWidgetView: View {
                     .frame(maxWidth: size.width * 0.64, alignment: .leading)
                     Spacer(minLength: 0)
                     wordmark(size: 12, opacity: hasArtwork ? 0.82 : 0.48)
+                        .fixedSize(horizontal: true, vertical: false)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)
                         .background(Color.black.opacity(hasArtwork ? 0.26 : 0), in: Capsule())
@@ -497,7 +513,8 @@ private struct PlayerWidgetView: View {
     private func circularButton(_ command: AmpWidgetCommand, symbol: String, label: String, side: CGFloat,
                                 fill: Color, glyph: Color, stroke: Color?, accentable: Bool) -> some View {
         let isToggle = command == .toggle
-        let button = Button(intent: AmpPlaybackIntent(command: command)) {
+        let minTouch = isSmall ? WidgetMetrics.smallTouchWidth : WidgetMetrics.compactTouchSize
+        return Button(intent: AmpPlaybackIntent(command: command)) {
             Image(systemName: symbol)
                 .resizable()
                 .scaledToFit()
@@ -510,23 +527,20 @@ private struct PlayerWidgetView: View {
                         Circle().stroke(stroke, lineWidth: 0.75)
                     }
                 }
-                .shadow(color: .black.opacity(isToggle ? 0.26 : 0), radius: 6, y: 3)
-                .frame(minWidth: isSmall ? WidgetMetrics.smallTouchWidth : WidgetMetrics.touchSize,
-                       minHeight: WidgetMetrics.touchSize)
+                .shadow(color: .black.opacity(isToggle ? 0.26 : 0), radius: 5, y: 2)
+                .frame(minWidth: minTouch, minHeight: minTouch)
                 .contentShape(Rectangle())
         }
         .accessibilityLabel(label)
         .disabled(!hasSong)
         .opacity(hasSong ? 1 : 0.4)
-        return Group {
-            if accentable { button.widgetAccentable() } else { button }
-        }
+        .widgetAccentable(accentable)
     }
 
     private func smokedGlassButton(_ command: AmpWidgetCommand, symbol: String, label: String,
                                    side: CGFloat, primary: Bool) -> some View {
         let isToggle = command == .toggle
-        let button = Button(intent: AmpPlaybackIntent(command: command)) {
+        return Button(intent: AmpPlaybackIntent(command: command)) {
             Image(systemName: symbol)
                 .resizable()
                 .scaledToFit()
@@ -557,9 +571,7 @@ private struct PlayerWidgetView: View {
         .accessibilityLabel(label)
         .disabled(!hasSong)
         .opacity(hasSong ? 1 : 0.4)
-        return Group {
-            if primary { button.widgetAccentable() } else { button }
-        }
+        .widgetAccentable(primary)
     }
 
     private func dockIconButton(_ command: AmpWidgetCommand, symbol: String, label: String, size: CGFloat) -> some View {
@@ -567,7 +579,7 @@ private struct PlayerWidgetView: View {
             Image(systemName: symbol)
                 .font(.system(size: size, weight: .bold))
                 .foregroundStyle(primaryInk.opacity(0.86))
-                .frame(minWidth: isSmall ? 36 : WidgetMetrics.touchSize, minHeight: 36)
+                .frame(minWidth: isSmall ? 36 : WidgetMetrics.touchSize, minHeight: 34)
                 .contentShape(Rectangle())
         }
         .accessibilityLabel(label)
@@ -578,17 +590,18 @@ private struct PlayerWidgetView: View {
     private func miniWaveform(bars count: Int, maxHeight: CGFloat) -> some View {
         let raw = (entry.snapshot.waveform?.isEmpty == false) ? entry.snapshot.waveform! : WidgetMetrics.fallbackWaveform
         let levels = resampledBars(from: raw, count: count)
-        return HStack(alignment: .center, spacing: isSmall ? 2 : 3) {
+        let barWidth: CGFloat = isSmall ? 3 : 3.5
+        return HStack(alignment: .center, spacing: 0) {
             ForEach(levels.indices, id: \.self) { index in
                 let fraction = Double(index) / Double(max(count - 1, 1))
                 let played = hasSong && fraction <= progressFraction
                 let normalized = Double(levels[index]) / 255.0
-                let barHeight = max(3.5, CGFloat(normalized) * maxHeight)
+                let barHeight = max(3, CGFloat(normalized) * maxHeight)
                 Capsule()
                     .fill(played ? accentColor : primaryInk.opacity(0.18))
-                    .frame(maxWidth: .infinity)
-                    .frame(height: barHeight)
+                    .frame(width: barWidth, height: barHeight)
                     .widgetAccentable(played)
+                    .frame(maxWidth: .infinity)
             }
         }
         .frame(height: maxHeight)
@@ -607,32 +620,40 @@ private struct PlayerWidgetView: View {
     private func slimProgressBar(tint: Color) -> some View {
         Group {
             if let range = liveTimerRange {
-                ProgressView(timerInterval: range, countsDown: false)
-                    .labelsHidden()
+                ProgressView(timerInterval: range, countsDown: false) {
+                    EmptyView()
+                } currentValueLabel: {
+                    EmptyView()
+                }
             } else {
                 ProgressView(value: progressFraction)
-                    .labelsHidden()
             }
         }
+        .progressViewStyle(.linear)
+        .labelsHidden()
         .tint(tint)
-        .scaleEffect(x: 1, y: 0.65, anchor: .center)
-        .frame(height: 3)
+        .frame(height: 4)
+        .clipped()
         .widgetAccentable()
     }
 
+    private var timerLabelWidth: CGFloat { durationSeconds >= 3600 ? 48 : 36 }
+
     @ViewBuilder
-    private func elapsedLabel(size: CGFloat) -> some View {
+    private func elapsedLabel(size: CGFloat, alignment: Alignment) -> some View {
         Group {
             if let range = liveTimerRange {
-                Text(timerInterval: range, countsDown: false, showsHours: false)
+                Text(timerInterval: range, countsDown: false, showsHours: durationSeconds >= 3600)
             } else {
                 Text(formatDuration(positionSeconds))
             }
         }
         .font(.system(size: size, weight: .medium).monospacedDigit())
         .foregroundStyle(secondaryInk)
-        .multilineTextAlignment(.leading)
-        .fixedSize(horizontal: true, vertical: false)
+        .lineLimit(1)
+        .minimumScaleFactor(0.8)
+        .multilineTextAlignment(alignment == .trailing ? .trailing : .leading)
+        .frame(width: timerLabelWidth, alignment: alignment)
     }
 
     private func formatDuration(_ seconds: Double) -> String {
@@ -651,6 +672,7 @@ private struct PlayerWidgetView: View {
             if let cover = entry.artwork {
                 artworkImage(cover)
                     .frame(width: side, height: side)
+                    .clipped()
                     .clipShape(shape)
                     .overlay {
                         shape.stroke(Color.white.opacity(entry.style == .compact && compactUsesLight ? 0.55 : 0.16),
