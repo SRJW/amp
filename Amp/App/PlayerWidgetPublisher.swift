@@ -28,7 +28,7 @@ enum PlayerWidgetPublisher {
         guard forceReload || !value.samePlaybackState(as: previous) || image !== previousImage || seeked else { return }
         value.updatedAt = now
         do {
-            try? FileManager.default.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], atPath: folder.path)
+            try? FileManager.default.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: folder.path)
             if image !== previousImage || (image != nil && value.artworkFileName == nil) {
                 if let image, let data = thumbnail(image).jpegData(compressionQuality: 0.6) {
                     let name = "cover-\(UUID().uuidString).jpg"

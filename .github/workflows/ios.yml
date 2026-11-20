@@ -171,6 +171,7 @@ jobs:
         path: |
           build/compile.log
           build/resolve.log
+          build/flarestore-verification.json
         if-no-files-found: warn
   cover-checks:
     if: ${{ !inputs.artifact_run && github.ref == 'refs/heads/without-animated-art' && github.event.deleted != true }}
