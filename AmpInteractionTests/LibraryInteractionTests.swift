@@ -54,6 +54,9 @@ final class LibraryInteractionTests: XCTestCase {
         // Test actual navigation separately from measuring accessibility frame geometry.
         app.buttons["appSection.search"].tap()
         XCTAssertTrue(app.textFields["librarySearchField"].waitForExistence(timeout: 10))
+        // Search focuses its field automatically; navigation is intentionally hidden
+        // while the keyboard is visible. Close it through the real search control.
+        app.buttons["searchCloseButton"].tap()
         app.buttons["appSection.library"].tap()
         XCTAssertTrue(mini.waitForExistence(timeout: 10))
         XCTAssertTrue(navigationMatchesLibrary(), "Returning to Library must leave its capsule and mini player in place")
