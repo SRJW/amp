@@ -169,6 +169,7 @@ struct PlayerFullBleedBackground<Artwork: View>: View, Animatable {
     var safeAreaTop: CGFloat = 0
     var showsStatusProtection = true
     var artworkHeightFraction: CGFloat? = nil
+    var onStatusBarScheme: ((ColorScheme) -> Void)? = nil
     @ViewBuilder var artwork: () -> Artwork
 
     var animatableData: Double {
@@ -299,9 +300,10 @@ struct PlayerFullBleedBackground<Artwork: View>: View, Animatable {
                         }
                     }
                 if showsStatusProtection {
-                PlayerAdaptiveStatusBar(current: statusProfile ?? PlayerArtworkStatusProfile(solid: UIColor(dominant)),
+                    PlayerAdaptiveStatusBar(current: statusProfile ?? PlayerArtworkStatusProfile(solid: UIColor(dominant)),
                                             next: secondaryStatusProfile, blend: blend, size: geometry.size,
-                                            safeAreaTop: max(safeAreaTop, geometry.safeAreaInsets.top))
+                                            safeAreaTop: max(safeAreaTop, geometry.safeAreaInsets.top),
+                                            onSchemeChange: onStatusBarScheme)
                 }
             }
         }

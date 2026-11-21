@@ -19,9 +19,10 @@ struct AppStatusBarAppearance: ViewModifier {
     func body(content: Content) -> some View {
         let theme = settings.colorScheme ?? systemScheme
         let playerVisible = router.showsNowPlaying && router.presentedTool == nil
+        let activePlayerScheme = router.playerStatusBarScheme ?? playerScheme
         content
             .environment(\.colorScheme, theme)
-            .preferredColorScheme(playerVisible ? (playerScheme ?? theme) : settings.colorScheme)
+            .preferredColorScheme(playerVisible ? (activePlayerScheme ?? theme) : settings.colorScheme)
             .onChange(of: scenePhase) { _, phase in
                 guard phase == .active else { return }
                 // The window can keep its status-ink override while Control Center

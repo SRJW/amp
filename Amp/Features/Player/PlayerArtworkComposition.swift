@@ -315,6 +315,7 @@ struct PlayerAdaptiveStatusBar: View {
     let blend: Double
     let size: CGSize
     let safeAreaTop: CGFloat
+    var onSchemeChange: ((ColorScheme) -> Void)? = nil
 
     static func selection(current: PlayerArtworkStatusProfile, next: PlayerArtworkStatusProfile?,
                           blend: Double, size: CGSize, safeAreaTop: CGFloat) -> (scheme: ColorScheme, opacity: Double) {
@@ -339,6 +340,7 @@ struct PlayerAdaptiveStatusBar: View {
                        startPoint: .top, endPoint: .bottom)
             .frame(height: height)
             .preference(key: PlayerStatusBarSchemeKey.self, value: choice.scheme)
+            .onChange(of: choice.scheme, initial: true) { _, scheme in onSchemeChange?(scheme) }
             .allowsHitTesting(false).accessibilityHidden(true)
     }
 }

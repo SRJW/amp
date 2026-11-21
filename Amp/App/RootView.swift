@@ -18,7 +18,6 @@ struct RootView: View {
     @State private var releases = ReleaseChecker.shared
     @State private var chrome = LibraryChromeState()
     @State private var playerMotion = PlayerDragState()
-    @State private var playerHasArtwork = false
     @State private var visualBudget = VisualWorkBudget.current
     var body: some View {
         @Bindable var router = router
@@ -73,8 +72,7 @@ struct RootView: View {
         .environment(chrome)
         .environment(playerMotion)
         .environment(\.appNavigationIsShared, true)
-        .environment(\.playerArtworkPresent, playerHasArtwork)
-        .onPreferenceChange(PlayerArtworkPresenceKey.self) { playerHasArtwork = $0 }
+        .environment(\.playerArtworkPresent, router.playerHasArtwork)
         .modifier(AppNavigationSafeArea())
         .environment(\.visualWorkBudget, visualBudget)
         .onReceive(NotificationCenter.default.publisher(for: .NSProcessInfoPowerStateDidChange).receive(on: RunLoop.main)) { _ in visualBudget = .current }

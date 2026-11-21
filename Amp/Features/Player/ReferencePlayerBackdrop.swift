@@ -10,6 +10,7 @@ private struct ArtworkSlideFrame: Identifiable {
 
 struct ReferencePlayerBackdrop: View {
     @Environment(AppSettings.self) private var settings
+    @Environment(AppRouter.self) private var router
     @Environment(\.colorScheme) private var scheme
     let song: Song?
     @Binding var artworkDrag: Double
@@ -38,6 +39,10 @@ struct ReferencePlayerBackdrop: View {
     private var outgoingCover: ArtworkSlideFrame? { frames.moving ? frames.outgoing : frames.current }
     private var incomingCover: ArtworkSlideFrame? { frames.moving ? frames.current : neighbour }
     private var visibleDirection: Int { frames.moving ? frames.direction : dragDirection }
+    private var resolvedHasArtwork: Bool {
+        let active = blend >= 0.5 ? (incomingCover ?? outgoingCover) : outgoingCover
+        return active == nil ? true : (active?.image != nil)
+    }
 
     var body: some View {
         Group {
@@ -48,13 +53,15 @@ struct ReferencePlayerBackdrop: View {
                         if let incomingCover { wholeSurface(incomingCover).opacity(blend.clamped(0, 1)) }
                         PlayerAdaptiveStatusBar(current: outgoingCover?.statusProfile ?? emptyProfile,
                                                 next: incomingCover.map { $0.statusProfile ?? emptyProfile },
-                                                blend: blend, size: geometry.size, safeAreaTop: safeAreaTop)
+                                                blend: blend, size: geometry.size, safeAreaTop: safeAreaTop,
+                                                onSchemeChange: { router.playerStatusBarScheme = $0 })
                     }
                 }
             } else {
         PlayerFullBleedBackground(dominant: base, secondaryDominant: target, blend: blend, appearance: settings.playerBackground,
                                   statusProfile: outgoingCover?.statusProfile, secondaryStatusProfile: incomingCover?.statusProfile,
-                                  safeAreaTop: safeAreaTop) {
+                                  safeAreaTop: safeAreaTop,
+                                  onStatusBarScheme: { router.playerStatusBarScheme = $0 }) {
             GeometryReader { geometry in
                 ZStack {
                     // Keep the same two layer slots when a drag becomes a committed skip.
@@ -66,8 +73,13 @@ struct ReferencePlayerBackdrop: View {
         }
             }
         }
-        .preference(key: PlayerArtworkPresenceKey.self,
-                    value: (blend >= 0.5 ? (incomingCover ?? outgoingCover) : outgoingCover)?.image != nil)
+        .preference(key: PlayerArtworkPresenceKey.self, value: resolvedHasArtwork)
+        .onChange(of: resolvedHasArtwork, initial: true) { _, hasArtwork in
+            router.playerHasArtwork = hasArtwork
+        }
+        .onPreferenceChange(PlayerStatusBarSchemeKey.self) { scheme in
+            if let scheme { router.playerStatusBarScheme = scheme }
+        }
         .background {
             PlayerArtworkSafeAreaProbe { safeAreaTop = $0 }.frame(width: 0, height: 0)
                 .allowsHitTesting(false).accessibilityHidden(true)

@@ -113,6 +113,8 @@ final class AppRouter {
     var allSongsRevealID = UUID()
     var highlightedSongID: Int64?
     var showsNewPlaylist = false
+    var playerHasArtwork = true
+    var playerStatusBarScheme: ColorScheme?
 
     func open(_ route: Route) {
         if presentedTool != nil { toolPath.append(route) }
