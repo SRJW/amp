@@ -39,5 +39,6 @@ struct PlayerArtworkTopExtension: View {
                 .position(x: frame.midX, y: frame.midY)
         }
         .frame(width: size.width, height: size.height)
+        .compositingGroup()
     }
 }

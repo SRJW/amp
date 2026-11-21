@@ -90,7 +90,9 @@ struct PlayerPresentationOpacity: AnimatableModifier {
         set { progress = newValue; meter.record(progress) }
     }
     func body(content: Content) -> some View {
-        content.opacity(PlayerCoverGeometry.chromeOpacity(progress))
+        content
+            .compositingGroup()
+            .opacity(PlayerCoverGeometry.chromeOpacity(progress))
     }
 }
 
