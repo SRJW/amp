@@ -48,7 +48,7 @@ struct ReleaseCheckView: View {
                     Divider().padding(.leading, Spacing.lg)
                     Link(destination: url) {
                         SettingsActionLabel(
-                            title: BuildVariant.animated ? L("Download animated IPA") : L("Download static IPA"),
+                            title: L("Download IPA"),
                             icon: "arrow.down.circle",
                             accessory: "arrow.up.right"
                         )
