@@ -61,19 +61,26 @@ struct AppBottomBar: View {
 struct AppFixedNavigation: View {
     @Environment(\.appKeyboardVisible) private var keyboardVisible
     @Environment(AppRouter.self) private var router
+    @Environment(PlayerDragState.self) private var playerMotion
     @Environment(\.appNavigationBottomInset) private var bottomInset
+    @Environment(\.playerReduceMotion) private var reduceMotion
 
     var body: some View {
+        let playerProgress: CGFloat = (playerMotion.isPresented && router.presentedTool == nil) ? playerMotion.progress : 0
         Group {
             if !keyboardVisible {
-        GeometryReader { geometry in
-            AppNavigationButtons(width: max(geometry.size.width - 2 * AppNavigationMetrics.horizontalInset, 0),
-                                 inPlayer: router.showsNowPlaying && router.presentedTool == nil)
-                .frame(width: geometry.size.width, height: AppNavigationMetrics.buttonsHeight)
-                .position(x: geometry.size.width / 2,
-                          y: AppNavigationMetrics.centreY(height: geometry.size.height, safeAreaBottom: bottomInset))
-        }
-        .ignoresSafeArea()
+                GeometryReader { geometry in
+                    AppNavigationButtons(
+                        width: max(geometry.size.width - 2 * AppNavigationMetrics.horizontalInset, 0),
+                        inPlayer: router.showsNowPlaying && router.presentedTool == nil,
+                        playerProgress: playerProgress
+                    )
+                    .frame(width: geometry.size.width, height: AppNavigationMetrics.buttonsHeight)
+                    .position(x: geometry.size.width / 2,
+                              y: AppNavigationMetrics.centreY(height: geometry.size.height, safeAreaBottom: bottomInset))
+                }
+                .ignoresSafeArea()
+                .animation(reduceMotion ? nil : .easeInOut(duration: AppNavigationMetrics.duration), value: router.presentedTool == nil)
             }
         }
     }
@@ -83,6 +90,7 @@ struct AppFixedNavigation: View {
 struct AppNavigationButtons: View {
     let width: CGFloat
     var inPlayer = false
+    var playerProgress: CGFloat? = nil
     @Environment(\.playerForegroundInk) private var playerInk
     @Environment(\.playerArtworkPresent) private var playerArtworkPresent
     @Environment(\.colorScheme) private var colorScheme
@@ -109,7 +117,7 @@ struct AppNavigationButtons: View {
     }
 
     private var usesArtworkControlPalette: Bool {
-        inPlayer && playerArtworkPresent && settings.customTheme == nil &&
+        playerArtworkPresent && settings.customTheme == nil &&
             (settings.playerBackground.navBarCapsule || settings.playerBackground.gradientStyle == .deepChromatic || settings.theme == .artwork)
     }
 
@@ -127,24 +135,115 @@ struct AppNavigationButtons: View {
         return controlColors.navCapsule
     }
 
+    private func playerTint(selected: Bool) -> Color {
+        if usesArtworkControlPalette {
+            return settings.playerBackground.navBarCapsule
+                ? controlColors.navIcon
+                : controlColors.navIcon.opacity(selected ? 1 : 0.68)
+        }
+        return settings.playerBackground.navBarCapsule
+            ? playerInk.opacity(0.88)
+            : playerInk.opacity(selected ? 1 : 0.6)
+    }
+
+    private func libraryTint(selected: Bool) -> Color {
+        selected ? palette.primary : palette.onSurfaceVariant
+    }
+
     var body: some View {
         let artworkURL = player.state.currentSong?.url
-        ZStack {
-            if !inPlayer {
-                selectionPill
-                    .frame(width: width * AppNavigationMetrics.selectionWidthFraction - AppNavigationMetrics.selectionInset * 2,
-                           height: AppNavigationMetrics.capsuleHeight - AppNavigationMetrics.selectionInset * 2)
-                    .position(x: dragX.map { min(max($0, width * PlayerLayoutMetrics.navigationCentresW[0]), width * PlayerLayoutMetrics.navigationCentresW[2]) }
-                              ?? width * PlayerLayoutMetrics.navigationCentresW[selectedIndex], y: 24)
-                    .allowsHitTesting(false)
+        let resolvedProgress = playerProgress ?? (inPlayer ? 1 : 0)
+        let activeSectionIndex: Int = switch router.section {
+        case .library: 0
+        case .equalizer: 1
+        case .search: 2
+        }
+        AppNavigationBarContent(
+            width: width,
+            playerProgress: resolvedProgress,
+            selectedIndex: selectedIndex,
+            activeSectionIndex: activeSectionIndex,
+            hasPresentedTool: router.presentedTool != nil,
+            showsPlayerCapsule: settings.playerBackground.navBarCapsule,
+            glassEnabled: settings.glassEnabled,
+            dragX: dragX,
+            playerCapsuleFill: playerCapsuleFill,
+            selectionFallbackFill: palette.onSurface.opacity(0.10),
+            librarySelectedColor: libraryTint(selected: true),
+            libraryIdleColor: libraryTint(selected: false),
+            playerSelectedColor: playerTint(selected: true),
+            playerIdleColor: playerTint(selected: false),
+            onSelectSection: { section in
+                withAnimation(reduceMotion ? nil : .easeInOut(duration: AppNavigationMetrics.duration)) { router.activate(section) }
+            },
+            onOpenTool: { tool in router.open(tool) }
+        )
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: artworkDominant)
+        .animation(reduceMotion ? nil : .spring(response: AppNavigationMetrics.selectionDuration, dampingFraction: 0.86), value: selectedIndex)
+        .onReceive(NotificationCenter.default.publisher(for: ArtworkLoader.didChange)) { note in
+            if note.object as? String == artworkURL?.path { artworkRevision += 1 }
+        }
+        .task(id: "\(settings.customTheme == nil)|\(artworkURL?.path ?? "")|\(artworkRevision)") {
+            guard settings.customTheme == nil, let artworkURL else { return }
+            let sampled = await LyricsPaletteCache.shared.palette(for: artworkURL)
+            guard !Task.isCancelled else { return }
+            artworkDominant = sampled.artworkDominant
+        }
+        .simultaneousGesture(DragGesture(minimumDistance: 8)
+            .updating($dragX) { value, state, _ in
+                guard resolvedProgress < 0.5, abs(value.translation.width) > abs(value.translation.height) else { return }
+                state = value.location.x
             }
-            button(L("Library"), section: .library, index: 0) { PlayerLibraryGlyph().scaleEffect(PlayerLayoutMetrics.navigationIconScale) }
-            button(L("Equalizer"), section: .equalizer, index: 1) { PlayerEqualizerGlyph().scaleEffect(PlayerLayoutMetrics.navigationIconScale) }
-            button(L("Search"), section: .search, index: 2) { PlayerSearchGlyph().scaleEffect(PlayerLayoutMetrics.navigationIconScale) }
+            .onEnded { value in
+                guard resolvedProgress < 0.5, abs(value.translation.width) > abs(value.translation.height) else { return }
+                withAnimation(reduceMotion ? nil : .smooth(duration: AppNavigationMetrics.selectionDuration)) { activate(nearestSectionIndex(value.location.x)) }
+            })
+    }
+}
+
+/// Continuously interpolates the bottom navigation capsule, selection pill, and icon colors
+/// in lockstep with Now Playing's presentation progress during both drags and animations.
+private struct AppNavigationBarContent: View, Animatable {
+    let width: CGFloat
+    var playerProgress: CGFloat
+    let selectedIndex: Int
+    let activeSectionIndex: Int
+    let hasPresentedTool: Bool
+    let showsPlayerCapsule: Bool
+    let glassEnabled: Bool
+    let dragX: CGFloat?
+    let playerCapsuleFill: Color
+    let selectionFallbackFill: Color
+    let librarySelectedColor: Color
+    let libraryIdleColor: Color
+    let playerSelectedColor: Color
+    let playerIdleColor: Color
+    let onSelectSection: (LibrarySection) -> Void
+    let onOpenTool: (Tool) -> Void
+    @Environment(\.self) private var environment
+
+    var animatableData: CGFloat {
+        get { playerProgress }
+        set { playerProgress = newValue }
+    }
+
+    var body: some View {
+        let blend = PlayerCoverGeometry.chromeOpacity(playerProgress)
+        ZStack {
+            selectionPill
+                .frame(width: width * AppNavigationMetrics.selectionWidthFraction - AppNavigationMetrics.selectionInset * 2,
+                       height: AppNavigationMetrics.capsuleHeight - AppNavigationMetrics.selectionInset * 2)
+                .position(x: dragX.map { min(max($0, width * PlayerLayoutMetrics.navigationCentresW[0]), width * PlayerLayoutMetrics.navigationCentresW[2]) }
+                          ?? width * PlayerLayoutMetrics.navigationCentresW[selectedIndex], y: 24)
+                .opacity(1 - blend)
+                .allowsHitTesting(false)
+            button(L("Library"), section: .library, index: 0, blend: blend) { PlayerLibraryGlyph().scaleEffect(PlayerLayoutMetrics.navigationIconScale) }
+            button(L("Equalizer"), section: .equalizer, index: 1, blend: blend) { PlayerEqualizerGlyph().scaleEffect(PlayerLayoutMetrics.navigationIconScale) }
+            button(L("Search"), section: .search, index: 2, blend: blend) { PlayerSearchGlyph().scaleEffect(PlayerLayoutMetrics.navigationIconScale) }
             Menu {
                 Section(L(AppNavigationMetrics.menuLabel)) {
                     ForEach(Tool.available) { tool in
-                        Button { router.open(tool) } label: {
+                        Button { onOpenTool(tool) } label: {
                             Label(L(tool.label), systemImage: tool.icon)
                         }
                         .accessibilityIdentifier("appMenu.\(tool.rawValue)")
@@ -152,7 +251,11 @@ struct AppNavigationButtons: View {
                 }
             } label: {
                 navigationLabel(L("Menu")) { PlayerQueueGlyph().scaleEffect(PlayerLayoutMetrics.navigationIconScale) }
-                    .foregroundStyle(tint(selected: inPlayer ? false : selectedIndex == 3))
+                    .foregroundStyle(blendedColor(
+                        from: selectedIndex == 3 ? librarySelectedColor : libraryIdleColor,
+                        to: playerIdleColor,
+                        amount: blend
+                    ))
             }
             .menuStyle(.button)
             .menuOrder(.fixed)
@@ -164,40 +267,21 @@ struct AppNavigationButtons: View {
         .buttonStyle(.plain)
         .frame(width: width, height: AppNavigationMetrics.buttonsHeight)
         .background {
-            if inPlayer && settings.playerBackground.navBarCapsule {
+            if showsPlayerCapsule {
                 Capsule()
                     .fill(playerCapsuleFill)
                     .frame(width: width, height: 54)
+                    .opacity(blend)
                     .allowsHitTesting(false)
             }
         }
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: artworkDominant)
-        .animation(reduceMotion ? nil : .spring(response: AppNavigationMetrics.selectionDuration, dampingFraction: 0.86), value: selectedIndex)
-        .onReceive(NotificationCenter.default.publisher(for: ArtworkLoader.didChange)) { note in
-            if note.object as? String == artworkURL?.path { artworkRevision += 1 }
-        }
-        .task(id: "\(inPlayer && settings.customTheme == nil)|\(artworkURL?.path ?? "")|\(artworkRevision)") {
-            guard inPlayer, settings.customTheme == nil, let artworkURL else { return }
-            let sampled = await LyricsPaletteCache.shared.palette(for: artworkURL)
-            guard !Task.isCancelled else { return }
-            artworkDominant = sampled.artworkDominant
-        }
-        .simultaneousGesture(DragGesture(minimumDistance: 8)
-            .updating($dragX) { value, state, _ in
-                guard !inPlayer, abs(value.translation.width) > abs(value.translation.height) else { return }
-                state = value.location.x
-            }
-            .onEnded { value in
-                guard !inPlayer, abs(value.translation.width) > abs(value.translation.height) else { return }
-                withAnimation(reduceMotion ? nil : .smooth(duration: AppNavigationMetrics.selectionDuration)) { activate(nearestSectionIndex(value.location.x)) }
-            })
     }
 
     @ViewBuilder private var selectionPill: some View {
-        if #available(iOS 26.0, *), settings.glassEnabled {
+        if #available(iOS 26.0, *), glassEnabled {
             Capsule().fill(.clear)
                 .glassEffect(.clear.interactive(), in: .capsule)
-        } else { Capsule().fill(palette.onSurface.opacity(0.10)) }
+        } else { Capsule().fill(selectionFallbackFill) }
     }
 
     private func navigationLabel<Icon: View>(_ title: String, @ViewBuilder icon: () -> Icon) -> some View {
@@ -208,28 +292,33 @@ struct AppNavigationButtons: View {
         .accessibilityElement(children: .ignore)
     }
 
-    private func button<Icon: View>(_ title: String, section: LibrarySection, index: Int, @ViewBuilder icon: () -> Icon) -> some View {
-        Button {
-            withAnimation(reduceMotion ? nil : .easeInOut(duration: AppNavigationMetrics.duration)) { router.activate(section) }
-        } label: { navigationLabel(title, icon: icon) }
-            .foregroundStyle(tint(selected: inPlayer ? router.presentedTool == nil && router.section == section : selectedIndex == index))
+    private func button<Icon: View>(_ title: String, section: LibrarySection, index: Int, blend: Double, @ViewBuilder icon: () -> Icon) -> some View {
+        let isLibrarySelected = selectedIndex == index
+        let isPlayerSelected = !hasPresentedTool && activeSectionIndex == index
+        return Button { onSelectSection(section) } label: { navigationLabel(title, icon: icon) }
+            .foregroundStyle(blendedColor(
+                from: isLibrarySelected ? librarySelectedColor : libraryIdleColor,
+                to: isPlayerSelected ? playerSelectedColor : playerIdleColor,
+                amount: blend
+            ))
             .accessibilityLabel(title)
             .accessibilityIdentifier("appSection.\(section.rawValue)")
-            .accessibilityAddTraits(router.presentedTool == nil && router.section == section ? .isSelected : [])
+            .accessibilityAddTraits(isPlayerSelected ? .isSelected : [])
             .position(x: width * PlayerLayoutMetrics.navigationCentresW[index], y: 24)
     }
 
-    private func tint(selected: Bool) -> Color {
-        if inPlayer {
-            if usesArtworkControlPalette {
-                return settings.playerBackground.navBarCapsule
-                    ? controlColors.navIcon
-                    : controlColors.navIcon.opacity(selected ? 1 : 0.68)
-            }
-            return settings.playerBackground.navBarCapsule
-                ? playerInk.opacity(0.88)
-                : playerInk.opacity(selected ? 1 : 0.6)
-        }
-        return selected ? palette.primary : palette.onSurfaceVariant
+    private func blendedColor(from a: Color, to b: Color, amount: Double) -> Color {
+        let t = amount.clamped(0, 1)
+        if t <= 0 { return a }
+        if t >= 1 { return b }
+        let ca = a.resolve(in: environment)
+        let cb = b.resolve(in: environment)
+        return Color(
+            .sRGB,
+            red: Double(ca.red) + (Double(cb.red) - Double(ca.red)) * t,
+            green: Double(ca.green) + (Double(cb.green) - Double(ca.green)) * t,
+            blue: Double(ca.blue) + (Double(cb.blue) - Double(ca.blue)) * t,
+            opacity: Double(ca.opacity) + (Double(cb.opacity) - Double(ca.opacity)) * t
+        )
     }
 }
