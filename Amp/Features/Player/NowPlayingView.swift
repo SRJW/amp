@@ -212,38 +212,38 @@ struct NowPlayingView: View {
     private func menu(width: CGFloat) -> some View {
         let song = player.state.currentSong
         return Menu {
-            Section("Track") {
-                Button { router.songForDetails = song } label: { Label("Music information", systemImage: "info.circle") }
-                Button { showsAudioDetails = true } label: { Label("Audio details", systemImage: "waveform.badge.magnifyingglass") }
+            Section(L("Track")) {
+                Button { router.songForDetails = song } label: { Label(L("Music information"), systemImage: "info.circle") }
+                Button { showsAudioDetails = true } label: { Label(L("Audio details"), systemImage: "waveform.badge.magnifyingglass") }
                 if let album = song.flatMap({ library.album($0.albumId) }) {
-                    Button { artworkTarget = .album(album) } label: { Label("Find a better cover", systemImage: "photo.badge.magnifyingglass") }
+                    Button { artworkTarget = .album(album) } label: { Label(L("Find a better cover"), systemImage: "photo.badge.magnifyingglass") }
                 }
             }
-            Section("Library") {
-                Button { addBookmark() } label: { Label("Bookmark this moment", systemImage: "bookmark") }
+            Section(L("Library")) {
+                Button { addBookmark() } label: { Label(L("Bookmark this moment"), systemImage: "bookmark") }
                 Button { showsMarks = true } label: {
-                    Label(player.state.abLoop?.enabled == true ? "Bookmarks & A–B loop (on)" : "Bookmarks & A–B loop", systemImage: "bookmark.square")
+                    Label(player.state.abLoop?.enabled == true ? L("Bookmarks & A–B loop (on)") : L("Bookmarks & A–B loop"), systemImage: "bookmark.square")
                 }
-                Button { if let song { router.songsForPlaylist = [song] } } label: { Label("Add to playlist", systemImage: "music.note.list") }
+                Button { if let song { router.songsForPlaylist = [song] } } label: { Label(L("Add to playlist"), systemImage: "music.note.list") }
 
             }
-            Section("Playback") {
-                Button { showsLyrics = true } label: { Label("Lyrics", systemImage: "quote.bubble") }
-                Button { close() } label: { Label("Close player", systemImage: "chevron.down") }
+            Section(L("Playback")) {
+                Button { showsLyrics = true } label: { Label(L("Lyrics"), systemImage: "quote.bubble") }
+                Button { close() } label: { Label(L("Close player"), systemImage: "chevron.down") }
                     .accessibilityIdentifier("closeNowPlaying")
                 if radioAvailable, let song {
-                    Button { router.showsNowPlaying = false; router.open(.radio(.song(song.id))) } label: { Label("Browse radio", systemImage: "dot.radiowaves.left.and.right") }
+                    Button { router.showsNowPlaying = false; router.open(.radio(.song(song.id))) } label: { Label(L("Browse radio"), systemImage: "dot.radiowaves.left.and.right") }
                 }
                 if radioAvailable, let radio = actions.radio, let song, radio.startSongId == song.id || radio.suggested.contains(song.id) {
-                    Button { actions.refreshRadio() } label: { Label("New radio picks", systemImage: "arrow.clockwise") }
+                    Button { actions.refreshRadio() } label: { Label(L("New radio picks"), systemImage: "arrow.clockwise") }
                 }
-                Button { showsQueue = true } label: { Label("Queue", systemImage: "music.note.list") }
-                Button { showsVisualizer = true } label: { Label("Visualizer", systemImage: "waveform") }
-                Button { showsEqualizer = true } label: { Label("Equalizer", systemImage: "slider.vertical.3") }
+                Button { showsQueue = true } label: { Label(L("Queue"), systemImage: "music.note.list") }
+                Button { showsVisualizer = true } label: { Label(L("Visualizer"), systemImage: "waveform") }
+                Button { showsEqualizer = true } label: { Label(L("Equalizer"), systemImage: "slider.vertical.3") }
                 Button {
                     close()
                     router.open(.settingsPage(.playback))
-                } label: { Label("Playback settings", systemImage: "play.circle") }
+                } label: { Label(L("Playback settings"), systemImage: "play.circle") }
             }
         } label: {
             Image(systemName: PlayerButtonConstants.optionsSymbol)
@@ -631,9 +631,9 @@ struct QueueSheet: View {
         let state = player.state
         NavigationStack {
             VStack(spacing: 0) {
-                Picker("Page", selection: $page) {
-                    Text("Queue (\(state.queue.count))").tag(0)
-                    Text("History").tag(1)
+                Picker(L("Page"), selection: $page) {
+                    Text(L("Queue (%d)", state.queue.count)).tag(0)
+                    Text(L("History")).tag(1)
                 }
                 .pickerStyle(.segmented)
                 .padding(.horizontal, Spacing.gutter)
@@ -641,28 +641,28 @@ struct QueueSheet: View {
                 if page == 0 { queue(state) } else { history(state) }
             }
             .modifier(ToolPageAppearance())
-            .navigationTitle(page == 0 ? "Queue" : "History")
+            .navigationTitle(page == 0 ? L("Queue") : L("History"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) { Button(L("Done")) { dismiss() } }
                 if page == 0 {
                     ToolbarItem(placement: .topBarLeading) {
                         Menu {
-                            Button { if !player.shuffleUpcoming() { showFeedback("Fewer than two songs are coming up") } } label: {
-                                Label("Shuffle upcoming", systemImage: "shuffle")
+                            Button { if !player.shuffleUpcoming() { showFeedback(L("Fewer than two songs are coming up")) } } label: {
+                                Label(L("Shuffle upcoming"), systemImage: "shuffle")
                             }
-                            Button { saving = true } label: { Label("Save as playlist", systemImage: "square.and.arrow.down") }
-                            Button { showFeedback(player.undoQueueRemoval() ? "Removal undone" : "Nothing to undo") } label: {
-                                Label("Undo removal", systemImage: "arrow.uturn.backward")
+                            Button { saving = true } label: { Label(L("Save as playlist"), systemImage: "square.and.arrow.down") }
+                            Button { showFeedback(player.undoQueueRemoval() ? L("Removal undone") : L("Nothing to undo")) } label: {
+                                Label(L("Undo removal"), systemImage: "arrow.uturn.backward")
                             }
                         } label: { Image(systemName: "ellipsis.circle") }
                     }
                 }
             }
-            .alert("Save queue as playlist", isPresented: $saving) {
-                TextField("Name", text: $savingName)
-                Button("Cancel", role: .cancel) {}
-                Button("Save") {
+            .alert(L("Save queue as playlist"), isPresented: $saving) {
+                TextField(L("Name"), text: $savingName)
+                Button(L("Cancel"), role: .cancel) {}
+                Button(L("Save")) {
                     actions.createPlaylist(savingName, songs: player.state.queue.map(\.song))
                     savingName = ""
                 }
@@ -685,7 +685,7 @@ struct QueueSheet: View {
     private func queue(_ state: PlaybackState) -> some View {
         List {
             if state.queue.isEmpty {
-                Text("No track playing").foregroundStyle(palette.onSurfaceVariant)
+                Text(L("No track playing")).foregroundStyle(palette.onSurfaceVariant)
                     .listRowBackground(palette.background)
             }
             ForEach(Array(state.queue.enumerated()), id: \.element.id) { index, entry in

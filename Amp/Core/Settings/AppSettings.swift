@@ -14,6 +14,7 @@ final class AppSettings {
         var introductionCompleted = false
         var typeface: AppTypeface = .system
         var boldText = false
+        var language: AppLanguage = .system
         var visualizer = VisualizerSettings()
         var playerBackground = PlayerBackgroundSettings()
         /// An imported theme in use instead of [theme], by id.
@@ -31,6 +32,7 @@ final class AppSettings {
             introductionCompleted = try c.decodeIfPresent(Bool.self, forKey: .introductionCompleted) ?? false
             typeface = (try? c.decodeIfPresent(AppTypeface.self, forKey: .typeface)) ?? .system
             boldText = try c.decodeIfPresent(Bool.self, forKey: .boldText) ?? false
+            language = (try? c.decodeIfPresent(AppLanguage.self, forKey: .language)) ?? .system
             visualizer = (try? c.decodeIfPresent(VisualizerSettings.self, forKey: .visualizer)) ?? VisualizerSettings()
             playerBackground = (try? c.decodeIfPresent(PlayerBackgroundSettings.self, forKey: .playerBackground)) ?? PlayerBackgroundSettings()
             customThemeId = try? c.decodeIfPresent(String.self, forKey: .customThemeId)
@@ -41,7 +43,19 @@ final class AppSettings {
     private(set) var stored: Stored
     @ObservationIgnored private let store = JSONStore<Stored>(name: "settings.json")
 
-    init() { stored = store.load() ?? Stored() }
+    init() {
+        stored = store.load() ?? Stored()
+        AppLocalization.shared.apply(stored.language)
+    }
+
+    var language: AppLanguage {
+        get { stored.language }
+        set {
+            update { $0.language = newValue }
+            AppLocalization.shared.apply(newValue)
+            store.saveNow(stored)
+        }
+    }
 
     var theme: ThemeChoice {
         get { stored.theme }

@@ -84,19 +84,19 @@ struct CategoryHeader<Options: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
             if showsTitle {
-                Label(title, systemImage: icon).font(.largeTitle.bold())
+                Label(L(title), systemImage: icon).font(.largeTitle.bold())
                     .accessibilityAddTraits(.isHeader).accessibilityIdentifier("sectionBrowseTitle")
                 Text(countLabel(count, "song")).font(.subheadline).foregroundStyle(.secondary)
             }
             HStack(spacing: Spacing.xs) {
-                action("Shuffle", icon: "shuffle", id: "songsShuffle", action: shuffle).disabled(count == 0 || selecting)
-                action("Play", icon: "play.fill", id: "songsPlayAll", action: play).disabled(count == 0 || selecting)
-                action("Search", icon: "magnifyingglass", id: "sectionSearchButton", action: search)
-                action(selecting ? "Done" : "Select", icon: "checklist", id: "songsSelect", action: select)
+                action(L("Shuffle"), icon: "shuffle", id: "songsShuffle", action: shuffle).disabled(count == 0 || selecting)
+                action(L("Play"), icon: "play.fill", id: "songsPlayAll", action: play).disabled(count == 0 || selecting)
+                action(L("Search"), icon: "magnifyingglass", id: "sectionSearchButton", action: search)
+                action(selecting ? L("Done") : L("Select"), icon: "checklist", id: "songsSelect", action: select)
                 Menu(content: options) {
                     Image(systemName: "ellipsis").rotationEffect(.degrees(90))
                         .frame(width: 44, height: 44).contentShape(Rectangle())
-                }.accessibilityLabel("More options")
+                }.accessibilityLabel(L("More options"))
             }.buttonStyle(.plain)
         }.padding(.horizontal, Spacing.gutter)
     }

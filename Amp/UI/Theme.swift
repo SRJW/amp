@@ -136,6 +136,8 @@ struct ThemedRoot<Content: View>: View {
             .environment(\.legibilityWeight, settings.boldText ? .bold : nil)
             .environment(\.palette, palette)
             .environment(\.playbackPalette, palette)
+            .environment(\.locale, settings.language.locale)
+            .environment(\.layoutDirection, settings.language.layoutDirection)
             .tint(palette.primary).toggleStyle(PaletteToggleStyle())
             .onReceive(NotificationCenter.default.publisher(for: ArtworkLoader.didChange)) { note in
                 if note.object as? String == artworkURL?.path { artworkRevision += 1 }

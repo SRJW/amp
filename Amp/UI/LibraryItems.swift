@@ -22,27 +22,27 @@ struct SongActionItems: View {
     let actions: SongActions
 
     var body: some View {
-        Button { actions.playNext(song) } label: { Label("Play next", systemImage: "text.line.first.and.arrowtriangle.forward") }
-        Button { actions.addToQueue(song) } label: { Label("Add to queue", systemImage: "text.badge.plus") }
-        if radioAvailable { Button { actions.startRadio(song) } label: { Label("Browse radio", systemImage: "dot.radiowaves.left.and.right") } }
-        Button { actions.addToPlaylist(song) } label: { Label("Add to playlist", systemImage: "music.note.list") }
+        Button { actions.playNext(song) } label: { Label(L("Play next"), systemImage: "text.line.first.and.arrowtriangle.forward") }
+        Button { actions.addToQueue(song) } label: { Label(L("Add to queue"), systemImage: "text.badge.plus") }
+        if radioAvailable { Button { actions.startRadio(song) } label: { Label(L("Browse radio"), systemImage: "dot.radiowaves.left.and.right") } }
+        Button { actions.addToPlaylist(song) } label: { Label(L("Add to playlist"), systemImage: "music.note.list") }
         Button { actions.toggleFavorite(song) } label: {
-            Label(song.isFavorite ? "Remove from favorites" : "Add to favorites", systemImage: song.isFavorite ? "heart.slash" : "heart")
+            Label(song.isFavorite ? L("Remove from favorites") : L("Add to favorites"), systemImage: song.isFavorite ? "heart.slash" : "heart")
         }
         if let view = actions.viewDetails {
-            Button { view(song) } label: { Label("View metadata", systemImage: "info.circle") }
+            Button { view(song) } label: { Label(L("View metadata"), systemImage: "info.circle") }
         }
         if let edit = actions.editTags {
-            Button { edit(song) } label: { Label("Edit tags", systemImage: "pencil") }
+            Button { edit(song) } label: { Label(L("Edit tags"), systemImage: "pencil") }
         }
         if let fix = actions.fixTags {
-            Button { fix(song) } label: { Label("Fix tags online", systemImage: "wand.and.stars") }
+            Button { fix(song) } label: { Label(L("Fix tags online"), systemImage: "wand.and.stars") }
         }
         if let remove = actions.removeFromPlaylist {
-            Button(role: .destructive) { remove(song) } label: { Label("Remove from playlist", systemImage: "minus.circle") }
+            Button(role: .destructive) { remove(song) } label: { Label(L("Remove from playlist"), systemImage: "minus.circle") }
         }
         if let delete = actions.deleteFromDevice {
-            Button(role: .destructive) { delete(song) } label: { Label("Delete from device", systemImage: "trash") }
+            Button(role: .destructive) { delete(song) } label: { Label(L("Delete from device"), systemImage: "trash") }
         }
 
     }

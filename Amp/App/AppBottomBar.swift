@@ -34,7 +34,7 @@ struct AppBottomBar: View {
                 if let song = player.state.currentSong {
                     MiniPlayer(song: song) { router.openPlayer() }
                 } else {
-                    Label(AppNavigationMetrics.emptyTitle, systemImage: "music.note")
+                    Label(L(AppNavigationMetrics.emptyTitle), systemImage: "music.note")
                         .foregroundStyle(palette.onSurfaceVariant)
                         .frame(maxWidth: .infinity, minHeight: AppNavigationMetrics.stripHeight)
                 }
@@ -113,25 +113,25 @@ struct AppNavigationButtons: View {
                               ?? width * PlayerLayoutMetrics.navigationCentresW[selectedIndex], y: 24)
                     .allowsHitTesting(false)
             }
-            button("Library", section: .library, index: 0) { Image(systemName: "square.grid.2x2.fill") }
-            button("Equalizer", section: .equalizer, index: 1) { PlayerEqualizerGlyph().scaleEffect(PlayerLayoutMetrics.navigationIconScale) }
-            button("Search", section: .search, index: 2) { Image(systemName: "magnifyingglass") }
+            button(L("Library"), section: .library, index: 0) { Image(systemName: "square.grid.2x2.fill") }
+            button(L("Equalizer"), section: .equalizer, index: 1) { PlayerEqualizerGlyph().scaleEffect(PlayerLayoutMetrics.navigationIconScale) }
+            button(L("Search"), section: .search, index: 2) { Image(systemName: "magnifyingglass") }
             Menu {
-                Section(AppNavigationMetrics.menuLabel) {
+                Section(L(AppNavigationMetrics.menuLabel)) {
                     ForEach(Tool.available) { tool in
                         Button { router.open(tool) } label: {
-                            Label(tool.label, systemImage: tool.icon)
+                            Label(L(tool.label), systemImage: tool.icon)
                         }
                         .accessibilityIdentifier("appMenu.\(tool.rawValue)")
                     }
                 }
             } label: {
-                navigationLabel("Menu") { PlayerQueueGlyph().scaleEffect(PlayerLayoutMetrics.navigationIconScale) }
+                navigationLabel(L("Menu")) { PlayerQueueGlyph().scaleEffect(PlayerLayoutMetrics.navigationIconScale) }
                     .foregroundStyle(tint(selected: inPlayer ? false : selectedIndex == 3))
             }
             .menuStyle(.button)
             .menuOrder(.fixed)
-            .accessibilityLabel(AppNavigationMetrics.menuLabel)
+            .accessibilityLabel(L(AppNavigationMetrics.menuLabel))
             .accessibilityIdentifier("appMenu")
             .position(x: width * PlayerLayoutMetrics.navigationCentresW[3], y: 24)
         }

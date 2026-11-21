@@ -22,14 +22,14 @@ struct LibraryOverviewView: View {
                     }
                 }
                 if LibraryCategory.visible(order: storedOrder, hidden: hiddenSections).isEmpty {
-                    Text(LibraryCustomizationText.empty).foregroundStyle(.secondary).padding(.horizontal, Spacing.gutter)
-                    Button(LibraryCustomizationText.action, action: customize).padding(.horizontal, Spacing.gutter)
+                    Text(L(LibraryCustomizationText.empty)).foregroundStyle(.secondary).padding(.horizontal, Spacing.gutter)
+                    Button(L(LibraryCustomizationText.action), action: customize).padding(.horizontal, Spacing.gutter)
                 }
                 ForEach(LibraryCategory.visible(order: storedOrder, hidden: hiddenSections)) { category in
                     Button { router.open(category == .songs ? .allSongs : .category(category)) } label: {
                         HStack(spacing: Spacing.lg) {
                             Image(systemName: category.icon).font(.title2).frame(width: 36)
-                            Text(category.title).font(.headline)
+                            Text(L(category.title)).font(.headline)
                             Spacer()
                             Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary)
                         }.frame(minHeight: 56).padding(.horizontal, Spacing.gutter).contentShape(Rectangle())
@@ -41,12 +41,12 @@ struct LibraryOverviewView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
-                    Button("Import music", systemImage: "plus") { router.showsImporter = true }
-                    Button("Wi-Fi Transfer", systemImage: "wifi") { router.open(Tool.wifiTransfer) }
-                    Button(LibraryCustomizationText.action, systemImage: "slider.horizontal.3", action: customize)
+                    Button(L("Import music"), systemImage: "plus") { router.showsImporter = true }
+                    Button(L("Wi-Fi Transfer"), systemImage: "wifi") { router.open(Tool.wifiTransfer) }
+                    Button(L(LibraryCustomizationText.action), systemImage: "slider.horizontal.3", action: customize)
                         .accessibilityIdentifier("customizeLibrary")
                 } label: { Image(systemName: "ellipsis").rotationEffect(.degrees(90)).frame(width: 44, height: 44) }
-                .accessibilityLabel("Library options")
+                .accessibilityLabel(L("Library options"))
             }
         }
         .sheet(isPresented: $showsOrder) { LibraryCustomizationView() }

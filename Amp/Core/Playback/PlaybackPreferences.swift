@@ -48,8 +48,8 @@ enum PlayerWaveformMode: String, CaseIterable, Identifiable {
 enum PlaybackPreferences {
     static let waveformKey = "amp.player.waveformMode"
     static let defaultWaveform = PlayerWaveformMode.scrolling.rawValue
-    static let crossfadeRange = 0.0...10.0
-    static let crossfadeStep = 0.5
+    static let crossfadeRange = 1.0...12.0
+    static let crossfadeStep = 1.0
     static let seekSize: Double = 0.075
     static let skipSize: Double = 0.105
     static let playSize: Double = 0.15

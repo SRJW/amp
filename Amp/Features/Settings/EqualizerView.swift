@@ -14,17 +14,17 @@ struct EqualizerView: View {
         let band = settings.bands.indices.contains(selected) ? settings.bands[selected] : SoundSettings.defaultBands()[selected]
         Form {
             Section {
-                Toggle("Equalizer", isOn: Binding(get: { settings.isEqEnabled }, set: { sound.setEqEnabled($0) }))
+                Toggle(L("Equalizer"), isOn: Binding(get: { settings.isEqEnabled }, set: { sound.setEqEnabled($0) }))
             }.toolSectionAppearance()
-            Section("Preset & curve") {
+            Section(L("Preset & curve")) {
                 HStack {
                     Menu {
                         ForEach(settings.allPresets) { preset in
-                            Button(preset.name) { sound.applyPreset(preset.id) }
+                            Button(L(preset.name)) { sound.applyPreset(preset.id) }
                         }
                         let customs = settings.customPresets
                         if !customs.isEmpty {
-                            Menu("Delete a custom preset") {
+                            Menu(L("Delete a custom preset")) {
                                 ForEach(customs) { preset in
                                     Button(preset.name, role: .destructive) { sound.deleteCustomPreset(preset.id) }
                                 }
@@ -32,18 +32,18 @@ struct EqualizerView: View {
                         }
                     } label: {
                         HStack {
-                            Text("Preset")
+                            Text(L("Preset"))
                             Spacer()
-                            Text(settings.allPresets.first { $0.id == settings.activePresetId }?.name ?? "Flat").foregroundStyle(.secondary)
+                            Text(L(settings.allPresets.first { $0.id == settings.activePresetId }?.name ?? "Flat")).foregroundStyle(.secondary)
                             Image(systemName: "chevron.up.chevron.down").font(.caption).foregroundStyle(.secondary)
                         }
                     }
                     Button { savingPreset = true } label: { Image(systemName: "square.and.arrow.down") }
                         .buttonStyle(.borderless)
-                        .accessibilityLabel("Save custom preset")
+                        .accessibilityLabel(L("Save custom preset"))
                     Button { sound.resetToFlat() } label: { Image(systemName: "arrow.counterclockwise") }
                         .buttonStyle(.borderless)
-                        .accessibilityLabel("Reset to flat")
+                        .accessibilityLabel(L("Reset to flat"))
                 }
                 EqCurve(settings: settings, selected: selected,
                         onSelect: { sound.setSelectedBandIndex($0) },
@@ -51,43 +51,43 @@ struct EqualizerView: View {
                     .frame(height: 200)
                     .listRowInsets(EdgeInsets(top: Spacing.sm, leading: Spacing.sm, bottom: Spacing.sm, trailing: Spacing.sm))
             }.toolSectionAppearance()
-            Section("Bands") {
-                Stepper("Active bands: \(settings.activeBandCount)", value: Binding(get: { settings.activeBandCount }, set: { sound.setActiveBandCount($0) }),
+            Section(L("Bands")) {
+                Stepper(L("Active bands: %d", settings.activeBandCount), value: Binding(get: { settings.activeBandCount }, set: { sound.setActiveBandCount($0) }),
                         in: Equalizer.minBandCount...Equalizer.bandCount)
                     .disabled(!settings.isEqEnabled)
-                Picker("Band", selection: Binding(get: { selected }, set: { sound.setSelectedBandIndex($0) })) {
+                Picker(L("Band"), selection: Binding(get: { selected }, set: { sound.setSelectedBandIndex($0) })) {
                     ForEach(0..<settings.activeBandCount, id: \.self) { Text("\($0 + 1)").tag($0) }
                 }
                 .pickerStyle(.segmented)
             }.toolSectionAppearance()
-            Section("Band \(selected + 1)") {
+            Section(L("Band %d", selected + 1)) {
                 let isFirst = selected == 0
                 let isLast = selected == settings.activeBandCount - 1
                 if isFirst || isLast {
                     let shelf: FilterType = isFirst ? .lowShelf : .highShelf
-                    Picker("Filter type", selection: Binding(get: { band.filterType == shelf ? 1 : 0 },
+                    Picker(L("Filter type"), selection: Binding(get: { band.filterType == shelf ? 1 : 0 },
                                                              set: { sound.setFilterType(selected, $0 == 1 ? shelf : .peaking) })) {
-                        Text("Bell").tag(0)
-                        Text("Shelf").tag(1)
+                        Text(L("Bell")).tag(0)
+                        Text(L("Shelf")).tag(1)
                     }
                     .pickerStyle(.segmented)
                 }
-                labeledSlider("Center frequency", value: formatFrequency(band.frequencyHz),
+                labeledSlider(L("Center frequency"), value: formatFrequency(band.frequencyHz),
                               binding: Binding(get: { frequencyToNormalized(band.frequencyHz) },
                                                set: { sound.setBandFrequency(selected, normalizedToFrequency($0)) }), range: 0...1)
-                labeledSlider("Gain", value: formatGain(band.gainDb),
+                labeledSlider(L("Gain"), value: formatGain(band.gainDb),
                               binding: Binding(get: { band.gainDb }, set: { sound.setBandGain(selected, $0) }),
                               range: Equalizer.minGainDb...Equalizer.maxGainDb)
-                labeledSlider("Q-factor (sharpness)", value: String(format: "%.2f", band.q),
+                labeledSlider(L("Q-factor (sharpness)"), value: String(format: "%.2f", band.q),
                               binding: Binding(get: { band.q }, set: { sound.setBandQ(selected, $0) }), range: Equalizer.minQ...Equalizer.maxQ)
             }.toolSectionAppearance()
             .disabled(!settings.isEqEnabled)
         }.modifier(ToolPageAppearance())
-        .navigationTitle("Equalizer")
-        .alert("Save custom preset", isPresented: $savingPreset) {
-            TextField("Preset name", text: $presetName)
-            Button("Cancel", role: .cancel) {}
-            Button("Save") {
+        .navigationTitle(L("Equalizer"))
+        .alert(L("Save custom preset"), isPresented: $savingPreset) {
+            TextField(L("Preset name"), text: $presetName)
+            Button(L("Cancel"), role: .cancel) {}
+            Button(L("Save")) {
                 sound.saveCustomPreset(presetName)
                 presetName = ""
             }

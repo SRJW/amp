@@ -119,7 +119,7 @@ struct SearchView: View {
                     HStack(spacing: Spacing.sm) {
                         ForEach(SearchType.allCases) { type in
                             Button { search.type = type } label: {
-                                Text(type.rawValue).font(.subheadline.weight(.medium))
+                                Text(L(type.rawValue)).font(.subheadline.weight(.medium))
                                     .padding(.horizontal, Spacing.md).frame(minHeight: 44)
                                     .background(.primary.opacity(search.type == type ? 0.16 : 0.04), in: Capsule())
                             }.buttonStyle(.plain)
@@ -133,9 +133,9 @@ struct SearchView: View {
                                play: { rememberQuery(); actions.playInOrder(tracks) },
                                search: { focused = true },
                                select: { search.selecting.toggle(); if !search.selecting { search.selected.removeAll() } }, options: {
-                    Picker("Sort by", selection: $sort) {
-                        Text("Relevance").tag("relevance")
-                        ForEach(LibrarySort.songs, id: \.rawValue) { Text($0.label).tag($0.rawValue) }
+                    Picker(L("Sort by"), selection: $sort) {
+                        Text(L("Relevance")).tag("relevance")
+                        ForEach(LibrarySort.songs, id: \.rawValue) { Text(L($0.label)).tag($0.rawValue) }
                     }
                 }, showsTitle: false)
                 if search.selecting { SongSelectionBar(songs: tracks, selected: $search.selected) }
@@ -146,16 +146,16 @@ struct SearchView: View {
                 } else {
                     if !search.selecting { entityResults }
                     if search.selecting || search.type == .all || search.type == .songs {
-                        SongList(songs: tracks, emptyMessage: "No songs match this search.", emptyIcon: "magnifyingglass",
+                        SongList(songs: tracks, emptyMessage: L("No songs match this search."), emptyIcon: "magnifyingglass",
                                  selection: search.selecting ? $search.selected : nil, showsFileDetails: true,
                                  onPlay: rememberQuery, onPlaySong: { search.remember(.song($0)) })
-                    } else if tracks.isEmpty { EmptyState(message: "No results for this filter.", systemImage: "magnifyingglass") }
+                    } else if tracks.isEmpty { EmptyState(message: L("No results for this filter."), systemImage: "magnifyingglass") }
                 }
             }.padding(.vertical, Spacing.md)
         }
         .scrollDismissesKeyboard(.interactively)
         .safeAreaInset(edge: .top, spacing: 0) {
-            GlassSearchField(text: $search.query, prompt: "Search your library", focused: $focused,
+            GlassSearchField(text: $search.query, prompt: L("Search your library"), focused: $focused,
                              close: { focused = false; router.activate(.library) })
                 .padding(.horizontal, Spacing.gutter).padding(.vertical, Spacing.sm)
         }
@@ -172,32 +172,32 @@ struct SearchView: View {
 
     @ViewBuilder private var entityResults: some View {
         if includes(.artists), !search.artists.isEmpty {
-            Shelf(title: "Artists") {
+            Shelf(title: L("Artists")) {
                 ForEach(search.artists) { artist in ArtistTile(artist: artist) { open(.artist(artist)) }.frame(width: 112) }
             }
         }
         if includes(.albums), !search.albums.isEmpty {
-            Shelf(title: "Albums") {
+            Shelf(title: L("Albums")) {
                 ForEach(search.albums) { album in AlbumTile(album: album) { open(.album(album)) }.frame(width: 128) }
             }
         }
         if includes(.albumArtists), !search.extras.albumArtists.isEmpty {
-            Shelf(title: "Album Artists") {
+            Shelf(title: L("Album Artists")) {
                 ForEach(search.extras.albumArtists) { artist in ArtistTile(artist: artist) { open(.artist(artist)) }.frame(width: 112) }
             }
         }
         if includes(.playlists), !search.extras.playlists.isEmpty {
-            Shelf(title: "Playlists") {
+            Shelf(title: L("Playlists")) {
                 ForEach(search.extras.playlists) { playlist in PlaylistTile(playlist: playlist) { open(.playlist(playlist)) }.frame(width: 128) }
             }
         }
         if includes(.folders), !search.extras.folders.isEmpty {
-            SectionHeading(title: "Folders")
+            SectionHeading(title: L("Folders"))
             ForEach(search.extras.folders, id: \.self) { path in
                 Button {
                     rememberQuery(); focused = false; router.open(.songFolder(path))
                 } label: {
-                    Label(path.isEmpty ? "Music folder" : path, systemImage: "folder")
+                    Label(path.isEmpty ? L("Music folder") : path, systemImage: "folder")
                         .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).padding(.horizontal, Spacing.gutter)
                 }.buttonStyle(.plain)
             }
@@ -206,12 +206,12 @@ struct SearchView: View {
 
     @ViewBuilder private var recents: some View {
         if search.recents.isEmpty {
-            EmptyState(message: "Search your songs, albums and artists.", systemImage: "magnifyingglass")
+            EmptyState(message: L("Search your songs, albums and artists."), systemImage: "magnifyingglass")
         } else {
             HStack {
-                Text("Recent").font(.title3.weight(.bold))
+                Text(L("Recent")).font(.title3.weight(.bold))
                 Spacer()
-                Button("Clear") { search.clearRecents() }
+                Button(L("Clear")) { search.clearRecents() }
             }
             .padding(.horizontal, Spacing.gutter)
             .padding(.vertical, Spacing.sm)
