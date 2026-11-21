@@ -128,11 +128,10 @@ enum PlayerBackdropPalette {
         if isLight {
             let lightFillSat = isFrosted ? min(max(saturation * 0.18, 0.10), 0.22) : min(max(saturation * 0.24, 0.14), 0.28)
             let darkInkSat = isFrosted ? min(max(saturation * 0.50, 0.28), 0.58) : min(max(saturation * 0.68, 0.42), 0.72)
-            let fillAlpha: CGFloat = isFrosted ? 0.84 : 0.96
-            let capAlpha: CGFloat = isFrosted ? 0.78 : 0.88
+            let capAlpha: CGFloat = isFrosted ? 0.84 : 0.90
             let inkColor = Color(uiColor: UIColor(hue: controlHue, saturation: darkInkSat, brightness: 0.20, alpha: 1))
             return ControlColors(
-                buttonFill: Color(uiColor: UIColor(hue: controlHue, saturation: lightFillSat, brightness: 0.94, alpha: fillAlpha)),
+                buttonFill: Color(uiColor: UIColor(hue: controlHue, saturation: lightFillSat, brightness: 0.94, alpha: 1)),
                 buttonIcon: inkColor,
                 navCapsule: Color(uiColor: UIColor(hue: controlHue, saturation: lightFillSat, brightness: 0.92, alpha: capAlpha)),
                 navIcon: inkColor,
@@ -141,13 +140,12 @@ enum PlayerBackdropPalette {
         }
         let buttonSat = isFrosted ? min(max(saturation * 0.45, 0.22), 0.50) : min(max(saturation * 0.65, 0.42), 0.68)
         let buttonBright: CGFloat = style == .deepChromatic ? 0.21 : (isFrosted ? 0.16 : 0.19)
-        let buttonAlpha: CGFloat = isFrosted ? 0.72 : 1.0
         let iconSat = isFrosted ? min(max(saturation * 0.14, 0.08), 0.16) : min(max(saturation * 0.20, 0.14), 0.22)
         let capSat = isFrosted ? min(max(saturation * 0.42, 0.20), 0.48) : min(max(saturation * 0.62, 0.35), 0.68)
         let capBright: CGFloat = style == .deepChromatic ? 0.14 : (isFrosted ? 0.14 : 0.16)
-        let capAlpha: CGFloat = isFrosted ? 0.68 : 0.84
+        let capAlpha: CGFloat = isFrosted ? 0.76 : 0.86
         return ControlColors(
-            buttonFill: Color(uiColor: UIColor(hue: controlHue, saturation: buttonSat, brightness: buttonBright, alpha: buttonAlpha)),
+            buttonFill: Color(uiColor: UIColor(hue: controlHue, saturation: buttonSat, brightness: buttonBright, alpha: 1)),
             buttonIcon: Color(uiColor: UIColor(hue: controlHue, saturation: iconSat, brightness: isFrosted ? 0.99 : 0.98, alpha: 1)),
             navCapsule: Color(uiColor: UIColor(hue: controlHue, saturation: capSat, brightness: capBright, alpha: capAlpha)),
             navIcon: Color(uiColor: UIColor(hue: controlHue, saturation: accentSat, brightness: isFrosted ? 0.96 : 0.93, alpha: 1)),

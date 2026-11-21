@@ -35,6 +35,7 @@ struct PlayerBackgroundSettings: Codable, Equatable {
     var gradientColor: UInt32 = 0xFF000000
     var gradientStyle: PlayerGradientStyle = .classic
     var navBarCapsule = false
+    var buttonOpacity = 1.0
 
     init() {}
     init(from decoder: Decoder) throws {
@@ -48,6 +49,7 @@ struct PlayerBackgroundSettings: Codable, Equatable {
         gradientColor = try c.decodeIfPresent(UInt32.self, forKey: .gradientColor) ?? 0xFF000000
         gradientStyle = (try? c.decodeIfPresent(PlayerGradientStyle.self, forKey: .gradientStyle)) ?? .classic
         navBarCapsule = (try? c.decodeIfPresent(Bool.self, forKey: .navBarCapsule)) ?? false
+        buttonOpacity = (try? c.decodeIfPresent(Double.self, forKey: .buttonOpacity)) ?? 1.0
     }
 }
 
@@ -60,6 +62,8 @@ enum PlayerBackgroundControls {
     static let gradientStyle = "Backdrop gradient"
     static let navBarCapsule = "Navigation bar contour"
     static let navBarCapsuleDescription = "Adds an artwork-tinted capsule behind the bottom controls in the player."
+    static let buttonOpacity = "Control button opacity"
+    static let buttonOpacityDescription = "Opacity of the circles behind Play, Pause, and skip controls. Set to 0% for borderless icons."
     static let gradient = "Tint overlay"
     static let gradientDescription = "Optional dark or colored wash over the lower edge."
     static let gradientColor = "Tint color"

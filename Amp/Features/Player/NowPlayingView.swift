@@ -317,12 +317,12 @@ struct NowPlayingView: View {
 
     private func transport(_ symbol: String, identifier: String, label: String, size: CGFloat, action: @escaping () -> Void) -> some View {
         let isSeek = symbol.hasPrefix("seek.")
-        let seekIconAlpha: Double = themeScheme == .light ? 0.78 : 0.72
-        let seekFillAlpha: Double = themeScheme == .light ? 0.68 : 0.52
-        let iconColor: Color = artworkControls.map { isSeek ? $0.buttonIcon.opacity(seekIconAlpha) : $0.buttonIcon }
-            ?? (themedControls ? palette.onFilledButton : .white)
-        let circleFill: Color = artworkControls.map { isSeek ? $0.buttonFill.opacity(seekFillAlpha) : $0.buttonFill }
-            ?? (themedControls ? palette.filledButton : .black)
+        let circleOpacity = settings.playerBackground.buttonOpacity.clamped(0, 1)
+        let baseFill: Color = artworkControls?.buttonFill ?? (themedControls ? palette.filledButton : .black)
+        let iconColor: Color = circleOpacity < 0.35
+            ? (artworkControls?.accentInk ?? playerInk)
+            : (artworkControls?.buttonIcon ?? (themedControls ? palette.onFilledButton : .white))
+        let circleFill: Color = baseFill.opacity(circleOpacity)
         return Button(action: action) {
             Group {
                 if isSeek {

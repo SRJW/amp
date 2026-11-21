@@ -514,6 +514,13 @@ private struct PlayerBackgroundSettingsView: View {
                                 .foregroundStyle(palette.onSurfaceVariant)
                         }
                         .padding(Spacing.lg)
+                        Divider().padding(.leading, Spacing.lg)
+                        sliderRow(
+                            L(PlayerBackgroundControls.buttonOpacity),
+                            description: L(PlayerBackgroundControls.buttonOpacityDescription),
+                            key: \.buttonOpacity,
+                            range: PlayerBackgroundControls.unitRange
+                        )
                     }
 
                     SettingsGroup(L(PlayerBackgroundControls.fineTuningSection)) {
@@ -727,13 +734,19 @@ private struct PlayerBackgroundMiniPreview: View {
         )
     }
 
+    private var circleOpacity: Double {
+        appearance.buttonOpacity.clamped(0, 1)
+    }
+
     private var buttonFill: Color {
-        if let controlColors { return controlColors.buttonFill }
-        if let customPalette { return customPalette.filledButton }
-        return .black
+        let base: Color = controlColors?.buttonFill ?? customPalette?.filledButton ?? .black
+        return base.opacity(circleOpacity)
     }
 
     private var buttonIcon: Color {
+        if circleOpacity < 0.35 {
+            return controlColors?.accentInk ?? .white
+        }
         if let controlColors { return controlColors.buttonIcon }
         if let customPalette { return customPalette.onFilledButton }
         return .white
@@ -789,8 +802,13 @@ private struct PlayerBackgroundMiniPreview: View {
                     }
                     HStack(spacing: 3) {
                         Circle()
-                            .fill(buttonFill.opacity(colorScheme == .light ? 0.68 : 0.52))
+                            .fill(buttonFill)
                             .frame(width: 11, height: 11)
+                            .overlay {
+                                Image(systemName: "arrowtriangle.left.fill")
+                                    .font(.system(size: 4.5, weight: .black))
+                                    .foregroundStyle(buttonIcon)
+                            }
                         Circle()
                             .fill(buttonFill)
                             .frame(width: 16, height: 16)
@@ -816,8 +834,13 @@ private struct PlayerBackgroundMiniPreview: View {
                                     .foregroundStyle(buttonIcon)
                             }
                         Circle()
-                            .fill(buttonFill.opacity(colorScheme == .light ? 0.68 : 0.52))
+                            .fill(buttonFill)
                             .frame(width: 11, height: 11)
+                            .overlay {
+                                Image(systemName: "arrowtriangle.right.fill")
+                                    .font(.system(size: 4.5, weight: .black))
+                                    .foregroundStyle(buttonIcon)
+                            }
                     }
                 }
                 .frame(height: 28)
