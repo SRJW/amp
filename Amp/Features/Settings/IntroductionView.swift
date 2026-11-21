@@ -17,12 +17,12 @@ struct IntroductionPage: Identifiable {
     let benefit: String
     let symbol: String
     static func pages() -> [Self] { [
-        .init(id: "welcome", eyebrow: "THIS IS AMP", title: "Your music.\nIn full colour.",
+        .init(id: "welcome", eyebrow: "THIS IS AMP", title: "Your music.\nIn full color.",
               text: "A player for the music you own. Keep your collection on your iPhone, without an amp account or a music subscription.",
               benefit: "Your collection. Your listening space.", symbol: "music.note"),
         .init(id: "library", eyebrow: "A LIBRARY THAT FITS YOU", title: "Less searching.\nMore listening.",
               text: "Browse songs, albums, artists and playlists. Reorder or hide Library sections, jump by letter, and return to recent searches.",
-              benefit: "Find your favourites, your way.", symbol: "square.grid.2x2.fill"),
+              benefit: "Find your favorites, your way.", symbol: "square.grid.2x2.fill"),
         .init(id: "import", eyebrow: "BRING YOUR COLLECTION", title: "Your files.\nStraight to amp.",
               text: "Import with Files or send music from your computer through Wi-Fi Transfer. Playback stays local; MP3, AAC, ALAC, FLAC and more are supported.",
               benefit: "Wi-Fi transfers stay on your local network.", symbol: "wifi"),
@@ -33,7 +33,7 @@ struct IntroductionPage: Identifiable {
               text: "Shape playback with the eight-band equalizer and adjustable crossfade. Use Transition Studio to fine-tune an album or playlist's handovers.",
               benefit: "More control over how your collection sounds.", symbol: "slider.vertical.3"),
         .init(id: "ready", eyebrow: "MAKE IT YOURS", title: "One app.\nYour own rhythm.",
-              text: "Choose artwork colours, tune the player background and add a widget in one of three styles. Artwork Fetcher and tag repair are ready in the menu; their online searches send the metadata needed by each provider.",
+              text: "Choose artwork colors, tune the player background and add a widget in one of three styles. Artwork Fetcher and tag repair are ready in the menu; their online searches send the metadata needed by each provider.",
               benefit: "Ready when you are. Revisit this guide in Settings.", symbol: "sparkles")
     ] }
 }
@@ -130,7 +130,7 @@ private struct IntroductionIllustration: View {
                 VStack(spacing: 9) {
                     previewRow("All Songs", detail: "Every track, in one place", symbol: "music.note.list")
                     previewRow("Albums & Artists", detail: "The people and records you love", symbol: "square.stack")
-                    previewRow("Playlists & Favourites", detail: "Your own listening collections", symbol: "heart.fill")
+                    previewRow("Playlists & Favorites", detail: "Your own listening collections", symbol: "heart.fill")
                 }
             case "import":
                 VStack(spacing: 18) {
@@ -168,12 +168,13 @@ private struct IntroductionIllustration: View {
             default:
                 VStack(spacing: 18) {
                     HStack(spacing: 10) {
-                        ForEach([Color(red: 0.9, green: 0.82, blue: 0.7), Color(white: 0.15), Color(red: 0.45, green: 0.29, blue: 0.2)], id: \.self) { color in
-                            RoundedRectangle(cornerRadius: 15).fill(color).frame(width: 58, height: 76)
-                                .overlay { Image(systemName: "music.note").font(.title2).foregroundStyle(.white.opacity(0.85)) }
+                        ForEach([Color(red: 0.24, green: 0.19, blue: 0.15), Color(red: 0.15, green: 0.20, blue: 0.25), Color(red: 0.29, green: 0.14, blue: 0.17)], id: \.self) { color in
+                            RoundedRectangle(cornerRadius: 15, style: .continuous).fill(color).frame(width: 58, height: 76)
+                                .overlay { RoundedRectangle(cornerRadius: 15, style: .continuous).strokeBorder(.white.opacity(0.18), lineWidth: 1) }
+                                .overlay { Image(systemName: "play.fill").font(.callout.weight(.bold)).foregroundStyle(.white.opacity(0.9)) }
                         }
                     }
-                    HStack { badge("Your colours"); badge("Your widgets") }
+                    HStack { badge("Your colors"); badge("Your widgets") }
                 }
             }
         }.padding(24).frame(maxWidth: .infinity, maxHeight: .infinity)

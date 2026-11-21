@@ -93,9 +93,9 @@ struct TrackRow: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(song.title)
                         .font(.body.weight(.semibold))
-                        .foregroundStyle(isCurrent ? (settings.theme == .artwork && settings.customTheme == nil ? palette.primary : Color.accentColor) : palette.onSurface)
+                        .foregroundStyle(isCurrent ? palette.primary : palette.onSurface)
                         .lineLimit(1)
-                    Text(subtitle ?? [song.artist, song.album].filter { !$0.isBlank }.joined(separator: showsFileDetails ? " - " : " · "))
+                    Text(subtitle ?? [song.artist, song.album].filter { !$0.isBlank }.joined(separator: " · "))
                         .font(.subheadline)
                         .foregroundStyle(palette.onSurfaceVariant)
                         .lineLimit(1)
@@ -168,7 +168,7 @@ struct TrackRow: View {
         .modifier(PlayerRevealedSong(songID: song.id))
         .onDisappear { swipe = 0 }
         .accessibilityAction(named: "Add to queue") { actions.addToQueue(song) }
-        .accessibilityAction(named: song.isFavorite ? "Remove from Liked Songs" : "Add to Liked Songs") { actions.toggleFavorite(song) }
+        .accessibilityAction(named: song.isFavorite ? "Remove from favorites" : "Add to favorites") { actions.toggleFavorite(song) }
         .contextMenu { SongActionItems(song: song, actions: actions) }
     }
 
@@ -180,7 +180,7 @@ struct TrackRow: View {
         if showTrackNumber {
             Text("\(displayTrackNumber ?? song.trackNumber)")
                 .font(.body.weight(.semibold).monospacedDigit())
-                .foregroundStyle(isCurrent ? Color.accentColor : palette.onSurfaceVariant)
+                .foregroundStyle(isCurrent ? palette.primary : palette.onSurfaceVariant)
                 .frame(width: ArtworkSize.list, height: ArtworkSize.list)
         } else {
             SongArtworkView(song: song, maxPixels: 144)

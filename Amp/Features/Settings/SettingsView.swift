@@ -27,11 +27,11 @@ struct SettingsView: View {
         @Bindable var settings = settings
         SettingsPage {
             SettingsGroup("Personalize") {
-                SettingsLink("Themes & Appearance", subtitle: "Colours, themes and appearance", icon: "paintpalette.fill", page: .appearance)
+                SettingsLink("Themes & Appearance", subtitle: "Colors, themes and appearance", icon: "paintpalette.fill", page: .appearance)
             }
             SettingsGroup("Sound") {
-                SettingsLink("Playback", subtitle: "Crossfade and waveform mode", icon: "waveform", page: .playback)
-                SettingsLink("Audio & Equalizer", subtitle: "8-band equalizer, presets and audio effects", icon: "chart.bar.fill", tool: .equalizer)
+                SettingsLink("Playback", subtitle: "Crossfade and waveform mode", icon: "play.circle", page: .playback)
+                SettingsLink("Audio & Equalizer", subtitle: "8-band equalizer, presets and audio effects", icon: "slider.vertical.3", tool: .equalizer)
                 SettingsLink("Visualizer", subtitle: "Style and feel of the Now Playing visualizer", icon: "waveform", page: .visualizer)
             }
             SettingsGroup("Library") {
@@ -137,7 +137,7 @@ private extension ThemeChoice {
         case .system: "Light or dark, following your iPhone"
         case .light: "A bright, clean appearance"
         case .dark: "A darker look for your library"
-        case .artwork: "Artwork colours, following light or dark mode"
+        case .artwork: "Artwork colors, following light or dark mode"
         }
     }
 }
@@ -272,14 +272,17 @@ private struct AppearanceSettingsView: View {
                     ForEach(AppTypeface.allCases) { font in Text(font.label).fontDesign(font.design).tag(font) }
                 }.padding(Spacing.lg)
             }
-            SettingsGroup("Text weight") {
+            SettingsGroup("Display") {
                 Toggle("Bold text", isOn: Binding(get: { settings.boldText }, set: { settings.boldText = $0 }))
                     .accessibilityIdentifier("settingsBoldText").padding(Spacing.lg)
+                Divider().padding(.leading, Spacing.lg)
+                Toggle("Glass surfaces", isOn: Binding(get: { settings.glassEnabled }, set: { settings.glassEnabled = $0 }))
+                    .accessibilityIdentifier("settingsGlassEnabled").padding(Spacing.lg)
             }
             PlayerBackgroundSettingsGroup()
             Text("For system appearance and transparency options, open iPhone Settings → Accessibility → Display & Text Size. Liquid Glass options also depend on your iOS version.")
                 .font(.footnote).foregroundStyle(.secondary)
-            Text("Import colours from an Android theme ZIP or its manifest.json.")
+            Text("Import custom colors from a theme ZIP or manifest.json.")
                 .font(.footnote).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
         }
         .fileImporter(isPresented: $importingTheme, allowedContentTypes: [.zip, .json]) { result in
@@ -432,7 +435,6 @@ private struct LibrarySettingsView: View {
             SettingsGroup("Navigation") {
                 SettingsValueRow(title: SongAlphabetPreferences.hapticsTitle, icon: "hand.tap") {
                     Toggle(SongAlphabetPreferences.hapticsTitle, isOn: $alphabetHaptics)
-                        .toggleStyle(.switch).fixedSize()
                 }
                 Text(SongAlphabetPreferences.hapticsDescription)
                     .font(.footnote).foregroundStyle(.secondary)
@@ -528,15 +530,15 @@ private struct AboutSettingsView: View {
                 Link(destination: URL(string: "https://github.com/SRJW/amp")!) {
                     SettingsActionLabel(title: "Source code on GitHub", icon: "chevron.left.forwardslash.chevron.right", accessory: "arrow.up.right")
                 }
-            }
-            SettingsGroup("amp project") {
+                Divider().padding(.leading, Spacing.lg)
                 Link(destination: URL(string: "https://github.com/SRJW/amp/releases")!) {
                     SettingsActionLabel(title: "Download amp releases", icon: "shippingbox", accessory: "arrow.up.right")
                 }
+                Divider().padding(.leading, Spacing.lg)
                 Link(destination: URL(string: "https://github.com/SRJW/amp/issues")!) {
                     SettingsActionLabel(title: "Report an amp issue", icon: "bubble.left", accessory: "arrow.up.right")
                 }
-                Text("amp is maintained in SRJW/amp. Based on Erhu for iOS by Mohammed Azeemulla Khan, with original Android contributions by Lochan Thakke and Kshitij Kekunnaya. Original licences and image credits remain applicable.")
+                Text("amp is maintained in SRJW/amp. Based on Erhu for iOS by Mohammed Azeemulla Khan, with original Android contributions by Lochan Thakke and Kshitij Kekunnaya. Original licenses and image credits remain applicable.")
                     .font(.footnote).foregroundStyle(.secondary).padding(Spacing.lg)
             }
             SettingsGroup("Updates") { ReleaseCheckView() }
@@ -553,7 +555,7 @@ private struct PlayerWidgetStatusSettings: View {
 
     var body: some View {
         SettingsGroup("Home Screen widget") {
-            Text("Touch and hold your Home Screen → Edit → Add Widget → amp. Swipe to choose amp · Cover focus, amp · Compact or amp · Immersive. Each style is a separate widget, with the same circular playback controls.")
+            Text("Touch and hold your Home Screen → Edit → Add Widget → amp. Swipe to choose amp · Cover focus, amp · Compact or amp · Immersive. Each style adapts to your artwork's colors and lets you control playback without opening amp.")
                 .font(.subheadline).foregroundStyle(.secondary).padding(.horizontal, Spacing.lg).padding(.top, Spacing.lg)
             VStack(alignment: .leading, spacing: Spacing.sm) {
                 if let storage = PlayerWidgetStorage.shared {

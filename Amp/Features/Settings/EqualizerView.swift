@@ -98,7 +98,7 @@ struct EqualizerView: View {
             HStack {
                 Text(label)
                 Spacer()
-                Text(value).foregroundStyle(Color.accentColor).monospacedDigit()
+                Text(value).foregroundStyle(palette.primary).monospacedDigit()
             }
             Slider(value: binding, in: range)
         }

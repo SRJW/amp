@@ -15,8 +15,8 @@ final class LibraryActions {
 
     enum MessageKind { case info, liked, unliked }
     enum MessageText {
-        static let liked = "Added to Liked Songs"
-        static let unliked = "Removed from Liked Songs"
+        static let liked = "Added to Favorites"
+        static let unliked = "Removed from Favorites"
     }
     private(set) var messageKind: MessageKind = .info
     var songPendingDeletion: Song?

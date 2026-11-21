@@ -83,7 +83,7 @@ enum ThemeChoice: String, CaseIterable, Codable, Identifiable {
         case .system: "System default"
         case .light: "Light"
         case .dark: "Dark"
-        case .artwork: "Colours from artwork"
+        case .artwork: "Colors from artwork"
         }
     }
 

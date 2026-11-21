@@ -187,8 +187,9 @@ struct AppMenu: View {
                 .accessibilityLabel("Close menu").accessibilityAddTraits(.isButton)
             VStack(alignment: .leading, spacing: Spacing.xs) {
                 HStack {
-                    Button { router.activate(.library) } label: { Label("Library", systemImage: "books.vertical") }
-                        .buttonStyle(.bordered).buttonBorderShape(.capsule)
+                    Text(AppNavigationMetrics.menuLabel)
+                        .font(.headline)
+                        .foregroundStyle(palette.onSurface)
                     Spacer()
                     Button { router.showsDrawer = false } label: { Image(systemName: "xmark").frame(width: 44, height: 44) }
                         .accessibilityLabel("Close menu")

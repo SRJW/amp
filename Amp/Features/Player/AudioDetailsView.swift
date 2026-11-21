@@ -30,12 +30,13 @@ struct AudioDetailsView: View {
         let headroom = DspDiagnostics.headroom(eq, sampleRateHz: runtime.sampleRateHz)
         NavigationStack {
             List {
-                sourceSection
-                playbackSection
-                chainSection(eq)
-                outputSection
-                analysisSection(eq, headroom)
+                sourceSection.toolSectionAppearance()
+                playbackSection.toolSectionAppearance()
+                chainSection(eq).toolSectionAppearance()
+                outputSection.toolSectionAppearance()
+                analysisSection(eq, headroom).toolSectionAppearance()
             }
+            .modifier(ToolPageAppearance())
             .navigationTitle("Audio details")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

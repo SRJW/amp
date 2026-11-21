@@ -7,12 +7,12 @@ enum PlayerButtonConstants {
     static let titleSize: CGFloat = 22
     static let subtitleWeight: Font.Weight = .semibold
     static let subtitleSize: CGFloat = 14
-    static let metadataSeparator = " - "
-    static let shareLabel = "Compartir"
+    static let metadataSeparator = " · "
+    static let shareLabel = "Share"
     static let optionsLabel = "More options"
     static let settingsLabel = "Settings"
-    static let locationUnavailable = "No se encontró la ubicación de esta canción."
-    static let shareFailed = "No se pudo preparar el archivo para compartir."
+    static let locationUnavailable = "Couldn't find this song in your library."
+    static let shareFailed = "Couldn't prepare this file for sharing."
     static let shareSymbol = "square.and.arrow.up"
     static let optionsSymbol = "ellipsis"
     static let iconSize: CGFloat = 25

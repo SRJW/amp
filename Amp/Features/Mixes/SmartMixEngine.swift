@@ -26,7 +26,7 @@ enum MixKind: String, CaseIterable, Sendable, Codable {
         switch self {
         case .rotation: "In Your Rotation"
         case .yourSound: "Your Kind of Sound"
-        case .forgotten: "Forgotten Favourites"
+        case .forgotten: "Forgotten Favorites"
         case .deepCuts: "Deep Cuts"
         case .highEnergy: "High Energy"
         case .chill: "Chill"
@@ -37,7 +37,7 @@ enum MixKind: String, CaseIterable, Sendable, Codable {
         case .quickHits: "Quick Hits"
         case .longListens: "Long Listens"
         case .yetToHear: "Yet to Be Heard"
-        case .favourites: "Favourites"
+        case .favourites: "Favorites"
         case .fresh: "Fresh in Your Library"
         }
     }

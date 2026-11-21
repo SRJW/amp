@@ -116,7 +116,7 @@ struct NowPlayingView: View {
         .sheet(isPresented: $showsMarks) { MarksSheet().preferredColorScheme(themeScheme) }
         .sheet(isPresented: $showsAudioDetails) { AudioDetailsView().preferredColorScheme(themeScheme) }
         .fullScreenCover(isPresented: $showsVisualizer) { VisualizerView().preferredColorScheme(themeScheme) }
-        .fullScreenCover(isPresented: $showsLyrics) { ExpandedLyrics(previous: previous, next: next).preferredColorScheme(themeScheme) }
+        .fullScreenCover(isPresented: $showsLyrics) { ExpandedLyrics(previous: { player.skipPrevious() }, next: next).preferredColorScheme(themeScheme) }
         .sheet(isPresented: $showsEqualizer) {
             NavigationStack {
                 EqualizerView().toolbar { Button("Done") { showsEqualizer = false } }
@@ -199,19 +199,6 @@ struct NowPlayingView: View {
         }
     }
 
-    private func previousEntry(_ state: PlaybackState) -> QueueEntry? {
-        PlayOrder.previous(before: state.currentIndex, count: state.queue.count, repeatMode: state.repeatMode).map { state.queue[$0] }
-    }
-
-    /// Previous restarts the song after a few seconds.
-    private func previous() {
-        if player.currentPositionMs() > 3_000 || previousEntry(player.state) == nil {
-            player.skipPrevious()
-        } else {
-            player.skipToPreviousItem()
-        }
-    }
-
     private func next() { player.skipNext() }
 
     @ViewBuilder
@@ -237,7 +224,7 @@ struct NowPlayingView: View {
                 Button { showsMarks = true } label: {
                     Label(player.state.abLoop?.enabled == true ? "Bookmarks & A–B loop (on)" : "Bookmarks & A–B loop", systemImage: "bookmark.square")
                 }
-                Button { if let song { router.songsForPlaylist = [song] } } label: { Label("Add to playlist", systemImage: "text.badge.plus") }
+                Button { if let song { router.songsForPlaylist = [song] } } label: { Label("Add to playlist", systemImage: "music.note.list") }
 
             }
             Section("Playback") {
@@ -256,7 +243,7 @@ struct NowPlayingView: View {
                 Button {
                     close()
                     router.open(.settingsPage(.playback))
-                } label: { Label("Playback settings", systemImage: "waveform") }
+                } label: { Label("Playback settings", systemImage: "play.circle") }
             }
         } label: {
             Image(systemName: PlayerButtonConstants.optionsSymbol)
@@ -342,7 +329,7 @@ struct NowPlayingView: View {
         .animation(reduceMotion ? nil : .spring(response: 0.25, dampingFraction: 0.75), value: playIntent)
     }
 
-    private var artworkControls: Bool { settings.customTheme == nil && settings.theme == .artwork }
+    private var themedControls: Bool { settings.customTheme != nil || settings.theme == .artwork }
 
     private func transport(_ symbol: String, identifier: String, label: String, size: CGFloat, action: @escaping () -> Void) -> some View {
         Button(action: action) {
@@ -365,9 +352,9 @@ struct NowPlayingView: View {
                 }
             }
                 .font(.system(size: size * 0.43, weight: .black))
-                .foregroundStyle(artworkControls ? palette.onFilledButton : .white)
+                .foregroundStyle(themedControls ? palette.onFilledButton : .white)
                 .frame(width: size, height: size)
-                .background(artworkControls ? palette.filledButton : .black, in: Circle())
+                .background(themedControls ? palette.filledButton : .black, in: Circle())
                 .frame(minWidth: symbol.hasPrefix("seek.") ? PlayerButtonConstants.seekTouchSize : PlayerButtonConstants.touchSize,
                        minHeight: PlayerButtonConstants.touchSize)
                 .contentShape(Rectangle())
@@ -427,6 +414,8 @@ private struct ProgressSection<Controls: View>: View {
     let screenWidth: CGFloat
     @ViewBuilder let controls: () -> Controls
     @Environment(PlayerController.self) private var player
+    @Environment(AppSettings.self) private var settings
+    @Environment(\.palette) private var palette
     @Environment(\.playerReduceMotion) private var reduceMotion
     @Environment(\.playerInMotion) private var playerInMotion
     @AppStorage(PlaybackPreferences.waveformKey) private var waveformMode = PlaybackPreferences.defaultWaveform
@@ -434,6 +423,8 @@ private struct ProgressSection<Controls: View>: View {
     @State private var levels: [Float]?
     @State private var levelsSongID: Int64?
     @State private var bookmarks: [Int64] = []
+
+    private var themedBadges: Bool { settings.customTheme != nil || settings.theme == .artwork }
 
     var body: some View {
         let state = player.state
@@ -496,10 +487,10 @@ private struct ProgressSection<Controls: View>: View {
     private func timeBadge(_ ms: Int64) -> some View {
         Text(formatDuration(ms))
             .font(.system(size: 14 * PlayerLayoutMetrics.timeTextScale, weight: .bold).monospacedDigit())
-            .foregroundStyle(.white)
+            .foregroundStyle(themedBadges ? palette.onFilledButton : .white)
             .lineLimit(1).minimumScaleFactor(PlayerLayoutMetrics.timeMinimumScale)
             .frame(width: screenWidth * PlayerLayoutMetrics.timeBadgeW, height: PlayerLayoutMetrics.timeBadgeHeight)
-            .background(.black, in: Capsule())
+            .background(themedBadges ? palette.filledButton : .black, in: Capsule())
     }
 }
 
@@ -566,7 +557,8 @@ private struct ExpandedLyrics: View {
 
     var body: some View {
         let state = player.state
-        let colors = LyricsColors(artworkPalette.palette(for: state.currentSong?.url), scheme: scheme)
+        let sampled = artworkPalette.palette(for: state.currentSong?.url).forScheme(scheme)
+        let colors = LyricsColors(sampled)
         VStack(spacing: 0) {
             HStack(spacing: Spacing.xs) {
                 Button { dismiss() } label: {
@@ -588,22 +580,27 @@ private struct ExpandedLyrics: View {
             } else {
                 Spacer()
             }
-            HStack {
-                Button(action: previous) { Image(systemName: "backward.end.fill").font(.system(size: 28)).frame(width: 56, height: 56).contentShape(Rectangle()) }
-                    .accessibilityLabel("Previous")
-                    .frame(maxWidth: .infinity)
+            HStack(spacing: Spacing.xxl) {
+                Button(action: previous) {
+                    Image(systemName: "backward.fill").font(.title).frame(width: 52, height: 52).contentShape(Rectangle())
+                }
+                .accessibilityLabel("Previous")
                 Button { player.togglePlayPause() } label: {
-                    Image(systemName: state.isPlaying ? "pause.fill" : "play.fill").font(.system(size: 30)).contentTransition(.symbolEffect(.replace))
-                        .frame(width: 56, height: 56).contentShape(Rectangle())
+                    Image(systemName: state.isPlaying ? "pause.fill" : "play.fill")
+                        .font(.system(size: 26, weight: .bold))
+                        .contentTransition(.symbolEffect(.replace))
+                        .foregroundStyle(Color(argb: sampled.onButtonFill))
+                        .frame(width: 60, height: 60)
+                        .background(Circle().fill(Color(argb: sampled.buttonFill)))
                 }
                 .accessibilityLabel(state.isPlaying ? "Pause" : "Play")
-                .frame(maxWidth: .infinity)
-                Button(action: next) { Image(systemName: "forward.end.fill").font(.system(size: 28)).frame(width: 56, height: 56).contentShape(Rectangle()) }
-                    .accessibilityLabel("Next")
-                    .frame(maxWidth: .infinity)
+                Button(action: next) {
+                    Image(systemName: "forward.fill").font(.title).frame(width: 52, height: 52).contentShape(Rectangle())
+                }
+                .accessibilityLabel("Next")
             }
             .foregroundStyle(colors.content)
-            .padding(.vertical, Spacing.sm)
+            .padding(.vertical, Spacing.md)
         }
         .buttonStyle(.plain)
         .background(LinearGradient(colors: colors.gradient, startPoint: .top, endPoint: .bottom).ignoresSafeArea())
@@ -643,6 +640,7 @@ struct QueueSheet: View {
                 .padding(.vertical, Spacing.sm)
                 if page == 0 { queue(state) } else { history(state) }
             }
+            .modifier(ToolPageAppearance())
             .navigationTitle(page == 0 ? "Queue" : "History")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -688,6 +686,7 @@ struct QueueSheet: View {
         List {
             if state.queue.isEmpty {
                 Text("No track playing").foregroundStyle(palette.onSurfaceVariant)
+                    .listRowBackground(palette.background)
             }
             ForEach(Array(state.queue.enumerated()), id: \.element.id) { index, entry in
                 Button { player.skipToQueueItem(index) } label: {
@@ -695,6 +694,7 @@ struct QueueSheet: View {
                 }
                 .buttonStyle(.plain)
                 .opacity(index < state.currentIndex ? 0.55 : 1)
+                .listRowBackground(palette.background)
             }
             .onDelete { offsets in offsets.sorted(by: >).forEach { player.removeFromQueue($0) } }
             .onMove { source, destination in
@@ -703,6 +703,7 @@ struct QueueSheet: View {
             }
         }
         .listStyle(.plain)
+        .scrollContentBackground(.hidden)
         .environment(\.editMode, .constant(.active))
     }
 
@@ -710,6 +711,7 @@ struct QueueSheet: View {
         List {
             if state.history.isEmpty {
                 Text("Songs you play this session show up here.").foregroundStyle(palette.onSurfaceVariant)
+                    .listRowBackground(palette.background)
             }
             ForEach(state.history) { entry in
                 HStack {
@@ -718,9 +720,11 @@ struct QueueSheet: View {
                         .buttonStyle(.plain)
                         .accessibilityLabel("Play \(entry.song.title) again")
                 }
+                .listRowBackground(palette.background)
             }
         }
         .listStyle(.plain)
+        .scrollContentBackground(.hidden)
     }
 
     private func row(_ song: Song, highlighted: Bool) -> some View {
@@ -729,7 +733,7 @@ struct QueueSheet: View {
                 .frame(width: ArtworkSize.compact, height: ArtworkSize.compact)
                 .clipShape(RoundedRectangle(cornerRadius: Radius.small, style: .continuous))
             VStack(alignment: .leading, spacing: 1) {
-                Text(song.title).font(.subheadline.weight(.semibold)).foregroundStyle(highlighted ? Color.accentColor : palette.onSurface).lineLimit(1)
+                Text(song.title).font(.subheadline.weight(.semibold)).foregroundStyle(highlighted ? palette.primary : palette.onSurface).lineLimit(1)
                 Text(song.artist).font(.caption).foregroundStyle(palette.onSurfaceVariant).lineLimit(1)
             }
             Spacer(minLength: 0)

@@ -180,14 +180,15 @@ struct BrowseControlLabel: View {
     let title: String
     let icon: String
     var selected = false
+    @Environment(\.palette) private var palette
 
     var body: some View {
         Label(title, systemImage: icon)
             .font(.subheadline.weight(.medium))
             .lineLimit(1)
             .padding(.horizontal, 12).frame(minHeight: 44)
-            .foregroundStyle(.primary)
-            .background(selected ? Color.accentColor.opacity(0.22) : Color.secondary.opacity(0.12), in: Capsule())
-            .overlay(Capsule().strokeBorder(Color.primary.opacity(selected ? 0.35 : 0.15)))
+            .foregroundStyle(palette.onSurface)
+            .background(selected ? palette.primary.opacity(0.20) : palette.onSurfaceVariant.opacity(0.12), in: Capsule())
+            .overlay(Capsule().strokeBorder(palette.onSurface.opacity(selected ? 0.35 : 0.15)))
     }
 }

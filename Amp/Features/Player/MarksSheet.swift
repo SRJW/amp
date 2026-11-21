@@ -5,6 +5,7 @@ struct MarksSheet: View {
     @Environment(PlayerController.self) private var player
     @Environment(LibraryStore.self) private var library
     @Environment(LibraryActions.self) private var actions
+    @Environment(\.palette) private var palette
     @Environment(\.dismiss) private var dismiss
     @State private var bookmarks: [TrackBookmark] = []
     @State private var renaming: TrackBookmark?
@@ -29,7 +30,7 @@ struct MarksSheet: View {
                     Text("A–B loop")
                 } footer: {
                     Text("Set A and B while listening. Looping jumps back to A each time playback reaches B.")
-                }
+                }.toolSectionAppearance()
                 Section {
                     Button {
                         addBookmark()
@@ -43,8 +44,8 @@ struct MarksSheet: View {
                     ForEach(bookmarks) { bookmark in
                         Button { if bookmark.songId == player.state.currentSong?.id { player.seek(to: bookmark.positionMs) } } label: {
                             HStack {
-                                Text(formatDuration(bookmark.positionMs)).monospacedDigit().foregroundStyle(Color.accentColor)
-                                Text(bookmark.label.isBlank ? "Bookmark" : bookmark.label).foregroundStyle(.primary)
+                                Text(formatDuration(bookmark.positionMs)).monospacedDigit().foregroundStyle(palette.primary)
+                                Text(bookmark.label.isBlank ? "Bookmark" : bookmark.label).foregroundStyle(palette.onSurface)
                                 Spacer()
                             }
                         }
@@ -59,8 +60,9 @@ struct MarksSheet: View {
                     }
                 } header: {
                     Text("Bookmarks")
-                }
+                }.toolSectionAppearance()
             }
+            .modifier(ToolPageAppearance())
             .navigationTitle("Bookmarks & A–B loop")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { Button("Done") { dismiss() } }

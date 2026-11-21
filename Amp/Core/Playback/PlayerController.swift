@@ -181,7 +181,7 @@ final class PlayerController {
     func skipToPreviousItem() {
         guard let previous = PlayOrder.previous(before: state.currentIndex, count: state.queue.count, repeatMode: state.repeatMode)
         else { return }
-        moveTo(previous, playing: state.isPlaying, sameEntryRepeated: false, direction: -1)
+        moveTo(previous, playing: state.isPlaying || state.status == .buffering, sameEntryRepeated: false, direction: -1)
     }
 
     func skipToQueueItem(_ index: Int) {

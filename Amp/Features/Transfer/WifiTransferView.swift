@@ -25,7 +25,7 @@ struct WifiTransferView: View {
                 Section {
                     let counts = transfer.counts
                     HStack(spacing: Spacing.md) {
-                        Text("\(counts.saved) saved").foregroundStyle(Color.accentColor)
+                        Text("\(counts.saved) saved").foregroundStyle(palette.primary)
                         if counts.duplicates > 0 { Text("\(counts.duplicates) already on phone") }
                         if counts.failed > 0 { Text("\(counts.failed) not saved").foregroundStyle(.red) }
                     }
@@ -123,7 +123,7 @@ struct WifiTransferView: View {
             case .finalizing:
                 Text("Saving…").font(.caption).foregroundStyle(.secondary)
             case .completed:
-                Text("Saved").font(.caption).foregroundStyle(Color.accentColor)
+                Text("Saved").font(.caption).foregroundStyle(palette.primary)
             case .duplicate:
                 Text("Already on phone").font(.caption).foregroundStyle(.secondary)
             case .failed:
