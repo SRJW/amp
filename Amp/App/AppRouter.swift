@@ -101,7 +101,6 @@ final class AppRouter {
         set { if newValue { activate(.search) } }
     }
     var showsImporter = false
-    var showsDrawer = false
     var showsNowPlaying = false
     var presentedTool: Tool?
     var toolPath = NavigationPath()
@@ -121,7 +120,6 @@ final class AppRouter {
     }
 
     func open(_ tool: Tool) {
-        showsDrawer = false
         if tool == .equalizer { activate(.equalizer) }
         else { toolPath = NavigationPath(); presentedTool = tool }
     }
@@ -131,7 +129,6 @@ final class AppRouter {
         highlightedSongID = nil
         presentedTool = nil
         showsNowPlaying = false
-        showsDrawer = false
         if target == .library { select(target) }
         else { section = target }
     }
@@ -140,7 +137,6 @@ final class AppRouter {
         songReveal = nil
         highlightedSongID = nil
         presentedTool = nil
-        showsDrawer = false
         showsNowPlaying = true
     }
 
@@ -150,7 +146,6 @@ final class AppRouter {
         let reselecting = target == section
         paths[target] = NavigationPath()
         section = target
-        showsDrawer = false
         if reselecting { scrollToTopRequests[target, default: 0] += 1 }
     }
 
@@ -173,7 +168,6 @@ final class AppRouter {
         case .vybe: section = .library; destination = .allSongs
         }
         paths[section] = destination.map { NavigationPath([$0]) } ?? NavigationPath()
-        showsDrawer = false
         showsSearch = false
         showsNowPlaying = false
     }

@@ -15,8 +15,6 @@ enum AppNavigationMetrics {
         height - max(safeAreaBottom, 0) - bottomPadding - buttonsHeight / 2
     }
     static let reservedHeight: CGFloat = stripHeight + buttonsHeight + 36
-    static let menuWidth: CGFloat = 320
-    static let menuBottom: CGFloat = 64
     static let emptyTitle = "No song loaded"
     static let menuLabel = "Menu"
 }
@@ -93,17 +91,16 @@ struct AppNavigationButtons: View {
     @GestureState private var dragX: CGFloat?
 
     private var selectedIndex: Int {
-        if router.showsDrawer || router.presentedTool != nil { return 3 }
+        if router.presentedTool != nil { return 3 }
         switch router.section { case .library: return 0; case .equalizer: return 1; case .search: return 2 }
     }
-    private func nearestIndex(_ x: CGFloat) -> Int {
-        PlayerLayoutMetrics.navigationCentresW.indices.min {
+    private func nearestSectionIndex(_ x: CGFloat) -> Int {
+        (0..<3).min {
             abs(width * PlayerLayoutMetrics.navigationCentresW[$0] - x) < abs(width * PlayerLayoutMetrics.navigationCentresW[$1] - x)
         } ?? 0
     }
     private func activate(_ index: Int) {
-        if index == 3 { router.showsDrawer = true }
-        else { router.activate([LibrarySection.library, .equalizer, .search][index]) }
+        router.activate([LibrarySection.library, .equalizer, .search][index])
     }
 
     var body: some View {
@@ -112,19 +109,28 @@ struct AppNavigationButtons: View {
                 selectionPill
                     .frame(width: width * AppNavigationMetrics.selectionWidthFraction - AppNavigationMetrics.selectionInset * 2,
                            height: AppNavigationMetrics.capsuleHeight - AppNavigationMetrics.selectionInset * 2)
-                    .position(x: dragX.map { min(max($0, width * PlayerLayoutMetrics.navigationCentresW[0]), width * PlayerLayoutMetrics.navigationCentresW[3]) }
+                    .position(x: dragX.map { min(max($0, width * PlayerLayoutMetrics.navigationCentresW[0]), width * PlayerLayoutMetrics.navigationCentresW[2]) }
                               ?? width * PlayerLayoutMetrics.navigationCentresW[selectedIndex], y: 24)
                     .allowsHitTesting(false)
             }
             button("Library", section: .library, index: 0) { Image(systemName: "square.grid.2x2.fill") }
             button("Equalizer", section: .equalizer, index: 1) { PlayerEqualizerGlyph().scaleEffect(PlayerLayoutMetrics.navigationIconScale) }
             button("Search", section: .search, index: 2) { Image(systemName: "magnifyingglass") }
-            Button {
-                withAnimation(reduceMotion ? nil : .easeInOut(duration: AppNavigationMetrics.duration)) { router.showsDrawer.toggle() }
+            Menu {
+                Section(AppNavigationMetrics.menuLabel) {
+                    ForEach(Tool.available) { tool in
+                        Button { router.open(tool) } label: {
+                            Label(tool.label, systemImage: tool.icon)
+                        }
+                        .accessibilityIdentifier("appMenu.\(tool.rawValue)")
+                    }
+                }
             } label: {
                 navigationLabel("Menu") { PlayerQueueGlyph().scaleEffect(PlayerLayoutMetrics.navigationIconScale) }
+                    .foregroundStyle(tint(selected: inPlayer ? false : selectedIndex == 3))
             }
-            .foregroundStyle(tint(selected: inPlayer ? router.showsDrawer : selectedIndex == 3))
+            .menuStyle(.button)
+            .menuOrder(.fixed)
             .accessibilityLabel(AppNavigationMetrics.menuLabel)
             .accessibilityIdentifier("appMenu")
             .position(x: width * PlayerLayoutMetrics.navigationCentresW[3], y: 24)
@@ -140,7 +146,7 @@ struct AppNavigationButtons: View {
             }
             .onEnded { value in
                 guard !inPlayer, abs(value.translation.width) > abs(value.translation.height) else { return }
-                withAnimation(reduceMotion ? nil : .smooth(duration: AppNavigationMetrics.selectionDuration)) { activate(nearestIndex(value.location.x)) }
+                withAnimation(reduceMotion ? nil : .smooth(duration: AppNavigationMetrics.selectionDuration)) { activate(nearestSectionIndex(value.location.x)) }
             })
     }
 
@@ -172,41 +178,5 @@ struct AppNavigationButtons: View {
 
     private func tint(selected: Bool) -> Color {
         inPlayer ? playerInk.opacity(selected ? 1 : 0.6) : (selected ? palette.primary : palette.onSurfaceVariant)
-    }
-}
-
-struct AppMenu: View {
-    @Environment(AppRouter.self) private var router
-    @Environment(AppSettings.self) private var settings
-    @Environment(\.palette) private var palette
-
-    var body: some View {
-        ZStack(alignment: .bottomTrailing) {
-            Color.black.opacity(0.25).ignoresSafeArea().contentShape(Rectangle())
-                .onTapGesture { router.showsDrawer = false }
-                .accessibilityLabel("Close menu").accessibilityAddTraits(.isButton)
-            VStack(alignment: .leading, spacing: Spacing.xs) {
-                HStack {
-                    Text(AppNavigationMetrics.menuLabel)
-                        .font(.headline)
-                        .foregroundStyle(palette.onSurface)
-                    Spacer()
-                    Button { router.showsDrawer = false } label: { Image(systemName: "xmark").frame(width: 44, height: 44) }
-                        .accessibilityLabel("Close menu")
-                }.padding(.horizontal, Spacing.md)
-                ForEach(Tool.available) { tool in
-                    Button { router.open(tool) } label: {
-                        Label(tool.label, systemImage: tool.icon)
-                            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                            .padding(.horizontal, Spacing.md).contentShape(Rectangle())
-                    }.accessibilityIdentifier("appMenu.\(tool.rawValue)")
-                }
-            }
-            .buttonStyle(.plain).foregroundStyle(palette.onSurface)
-            .padding(.vertical, Spacing.sm)
-            .frame(maxWidth: AppNavigationMetrics.menuWidth)
-            .glassSurface(cornerRadius: Radius.medium, enabled: settings.glassEnabled)
-            .padding(.horizontal, Spacing.md).padding(.bottom, AppNavigationMetrics.menuBottom)
-        }
     }
 }

@@ -62,10 +62,8 @@ struct RootView: View {
             if let tool = router.presentedTool { toolScreen(tool).transition(.opacity) }
         }
         .overlay(alignment: .bottom) { AppFixedNavigation() }
-        .overlay { if router.showsDrawer { AppMenu().transition(.opacity) } }
         .animation(reduceMotion ? nil : .easeInOut(duration: AppNavigationMetrics.duration), value: router.presentedTool)
         .animation(reduceMotion ? .linear(duration: 0.12) : .easeInOut(duration: 0.28), value: router.section)
-        .animation(.spring(response: 0.3, dampingFraction: 0.85), value: router.showsDrawer)
         .coordinateSpace(name: PlayerArtworkSpace.root)
         .onChange(of: router.showsNowPlaying, initial: true) { _, shown in
             playerMotion.setPresented(shown, reduceMotion: reduceMotion)
@@ -105,7 +103,7 @@ struct RootView: View {
         }
         .onChange(of: player.playbackError) { _, message in if let message { library.report(message) } }
         .sheet(item: Binding(get: {
-            settings.introductionCompleted && !router.showsNowPlaying && !router.showsSearch && !router.showsDrawer ? releases.prompt : nil
+            settings.introductionCompleted && !router.showsNowPlaying && !router.showsSearch ? releases.prompt : nil
         }, set: { if $0 == nil { releases.dismissPrompt() } })) { release in
             AppUpdatePrompt(release: release, checker: releases)
         }
