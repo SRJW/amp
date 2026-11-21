@@ -4,6 +4,7 @@ import SwiftUI
 /// band nodes, the active band count, and the selected band's type, frequency, gain and Q.
 struct EqualizerView: View {
     @Environment(SoundStore.self) private var sound
+    @Environment(\.palette) private var palette
     @State private var savingPreset = false
     @State private var presetName = ""
 
