@@ -222,19 +222,22 @@ struct PlayerEqualizerGlyph: View {
 
 struct PlayerSearchGlyph: View {
     var body: some View {
-        ZStack {
-            Circle()
-                .stroke(lineWidth: 7.2)
-                .frame(width: 19, height: 19)
-                .position(x: 13.2, y: 13.2)
-            Path { path in
-                path.move(to: CGPoint(x: 20.6, y: 20.6))
-                path.addLine(to: CGPoint(x: 28.2, y: 28.2))
+        Rectangle()
+            .frame(width: 32, height: 32)
+            .mask {
+                ZStack {
+                    Circle()
+                        .stroke(.white, lineWidth: 7.2)
+                        .frame(width: 19, height: 19)
+                        .position(x: 13.2, y: 13.2)
+                    Path { path in
+                        path.move(to: CGPoint(x: 20.0, y: 20.0))
+                        path.addLine(to: CGPoint(x: 27.6, y: 27.6))
+                    }
+                    .stroke(.white, style: StrokeStyle(lineWidth: 7.2, lineCap: .round))
+                }
+                .frame(width: 32, height: 32)
             }
-            .stroke(style: StrokeStyle(lineWidth: 7.2, lineCap: .round))
-        }
-        .compositingGroup()
-        .frame(width: 32, height: 32)
     }
 }
 
