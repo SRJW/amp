@@ -1,5 +1,19 @@
 import Foundation
 
+enum PlayerGradientStyle: String, CaseIterable, Codable, Identifiable {
+    case classic
+    case deepChromatic
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .classic: "Classic"
+        case .deepChromatic: "Deep chromatic"
+        }
+    }
+}
+
 /// Defaults reproduce the existing player; these affect appearance only.
 struct PlayerBackgroundSettings: Codable, Equatable {
     var fadeStart = 0.75
@@ -9,6 +23,8 @@ struct PlayerBackgroundSettings: Codable, Equatable {
     var saturation = 1.0
     var gradient = 0.0
     var gradientColor: UInt32 = 0xFF000000
+    var gradientStyle: PlayerGradientStyle = .classic
+    var navBarCapsule = false
 
     init() {}
     init(from decoder: Decoder) throws {
@@ -20,14 +36,19 @@ struct PlayerBackgroundSettings: Codable, Equatable {
         saturation = try c.decodeIfPresent(Double.self, forKey: .saturation) ?? 1
         gradient = try c.decodeIfPresent(Double.self, forKey: .gradient) ?? 0
         gradientColor = try c.decodeIfPresent(UInt32.self, forKey: .gradientColor) ?? 0xFF000000
+        gradientStyle = (try? c.decodeIfPresent(PlayerGradientStyle.self, forKey: .gradientStyle)) ?? .classic
+        navBarCapsule = (try? c.decodeIfPresent(Bool.self, forKey: .navBarCapsule)) ?? false
     }
 }
 
 enum PlayerBackgroundControls {
     static let previewHeight = 180.0
     static let title = "Player artwork & background"
+    static let gradientStyle = "Backdrop gradient"
+    static let navBarCapsule = "Navigation bar contour"
+    static let navBarCapsuleDescription = "Adds an artwork-tinted capsule behind the bottom controls in the player."
     static let gradient = "Background gradient"
-    static let gradientColor = "Gradient colour"
+    static let gradientColor = "Gradient color"
     static let fade = "Artwork fade"
     static let blur = "Background blur"
     static let details = "Background details"

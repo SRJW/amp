@@ -414,6 +414,20 @@ private struct PlayerBackgroundSettingsGroup: View {
             settings.playerBackground = appearance
         })
     }
+    private var gradientStyle: Binding<PlayerGradientStyle> {
+        Binding(get: { settings.playerBackground.gradientStyle }, set: {
+            var appearance = settings.playerBackground
+            appearance.gradientStyle = $0
+            settings.playerBackground = appearance
+        })
+    }
+    private var navBarCapsule: Binding<Bool> {
+        Binding(get: { settings.playerBackground.navBarCapsule }, set: {
+            var appearance = settings.playerBackground
+            appearance.navBarCapsule = $0
+            settings.playerBackground = appearance
+        })
+    }
     var body: some View {
         SettingsGroup(L(PlayerBackgroundControls.title)) {
             VStack(spacing: Spacing.lg) {
@@ -428,6 +442,20 @@ private struct PlayerBackgroundSettingsGroup: View {
                         previewPalette = sampled
                     }
                 }
+                Picker(L(PlayerBackgroundControls.gradientStyle), selection: gradientStyle) {
+                    ForEach(PlayerGradientStyle.allCases) { style in
+                        Text(L(style.label)).tag(style)
+                    }
+                }
+                .accessibilityIdentifier("settingsPlayerGradientStyle")
+                VStack(alignment: .leading, spacing: Spacing.xs) {
+                    Toggle(L(PlayerBackgroundControls.navBarCapsule), isOn: navBarCapsule)
+                        .accessibilityIdentifier("settingsPlayerNavBarCapsule")
+                    Text(L(PlayerBackgroundControls.navBarCapsuleDescription))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                Divider()
                 slider(L(PlayerBackgroundControls.gradient), key: \.gradient, range: PlayerBackgroundControls.unitRange)
                 ColorPicker(L(PlayerBackgroundControls.gradientColor), selection: gradientColor, supportsOpacity: false)
                 slider(L(PlayerBackgroundControls.fade), key: \.fadeStart, range: PlayerBackgroundControls.unitRange)

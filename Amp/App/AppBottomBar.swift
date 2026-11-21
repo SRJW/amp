@@ -84,11 +84,16 @@ struct AppNavigationButtons: View {
     let width: CGFloat
     var inPlayer = false
     @Environment(\.playerForegroundInk) private var playerInk
+    @Environment(\.playerArtworkPresent) private var playerArtworkPresent
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(PlayerController.self) private var player
     @Environment(AppRouter.self) private var router
     @Environment(\.palette) private var palette
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(AppSettings.self) private var settings
     @GestureState private var dragX: CGFloat?
+    @State private var artworkDominant: UInt32 = LyricsPalette.fallback.artworkDominant
+    @State private var artworkRevision = 0
 
     private var selectedIndex: Int {
         if router.presentedTool != nil { return 3 }
@@ -103,7 +108,18 @@ struct AppNavigationButtons: View {
         router.activate([LibrarySection.library, .equalizer, .search][index])
     }
 
+    private var playerCapsuleFill: Color {
+        if !playerArtworkPresent {
+            return colorScheme == .light ? Color.black.opacity(0.06) : Color.white.opacity(0.10)
+        }
+        return PlayerBackdropPalette.navCapsuleColor(
+            for: Color(argb: artworkDominant),
+            style: settings.playerBackground.gradientStyle
+        )
+    }
+
     var body: some View {
+        let artworkURL = player.state.currentSong?.url
         ZStack {
             if !inPlayer {
                 selectionPill
@@ -113,9 +129,9 @@ struct AppNavigationButtons: View {
                               ?? width * PlayerLayoutMetrics.navigationCentresW[selectedIndex], y: 24)
                     .allowsHitTesting(false)
             }
-            button(L("Library"), section: .library, index: 0) { Image(systemName: "square.grid.2x2.fill") }
+            button(L("Library"), section: .library, index: 0) { PlayerLibraryGlyph().scaleEffect(PlayerLayoutMetrics.navigationIconScale) }
             button(L("Equalizer"), section: .equalizer, index: 1) { PlayerEqualizerGlyph().scaleEffect(PlayerLayoutMetrics.navigationIconScale) }
-            button(L("Search"), section: .search, index: 2) { Image(systemName: "magnifyingglass") }
+            button(L("Search"), section: .search, index: 2) { PlayerSearchGlyph().scaleEffect(PlayerLayoutMetrics.navigationIconScale) }
             Menu {
                 Section(L(AppNavigationMetrics.menuLabel)) {
                     ForEach(Tool.available) { tool in
@@ -138,7 +154,25 @@ struct AppNavigationButtons: View {
         .font(.system(size: 28 * PlayerLayoutMetrics.navigationIconScale, weight: .heavy))
         .buttonStyle(.plain)
         .frame(width: width, height: AppNavigationMetrics.buttonsHeight)
+        .background {
+            if inPlayer && settings.playerBackground.navBarCapsule {
+                Capsule()
+                    .fill(playerCapsuleFill)
+                    .frame(width: width, height: 54)
+                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: artworkDominant)
+                    .allowsHitTesting(false)
+            }
+        }
         .animation(reduceMotion ? nil : .spring(response: AppNavigationMetrics.selectionDuration, dampingFraction: 0.86), value: selectedIndex)
+        .onReceive(NotificationCenter.default.publisher(for: ArtworkLoader.didChange)) { note in
+            if note.object as? String == artworkURL?.path { artworkRevision += 1 }
+        }
+        .task(id: "\(inPlayer && settings.playerBackground.navBarCapsule)|\(artworkURL?.path ?? "")|\(artworkRevision)") {
+            guard inPlayer, settings.playerBackground.navBarCapsule, let artworkURL else { return }
+            let sampled = await LyricsPaletteCache.shared.palette(for: artworkURL)
+            guard !Task.isCancelled else { return }
+            artworkDominant = sampled.artworkDominant
+        }
         .simultaneousGesture(DragGesture(minimumDistance: 8)
             .updating($dragX) { value, state, _ in
                 guard !inPlayer, abs(value.translation.width) > abs(value.translation.height) else { return }
@@ -177,6 +211,11 @@ struct AppNavigationButtons: View {
     }
 
     private func tint(selected: Bool) -> Color {
-        inPlayer ? playerInk.opacity(selected ? 1 : 0.6) : (selected ? palette.primary : palette.onSurfaceVariant)
+        if inPlayer {
+            return settings.playerBackground.navBarCapsule
+                ? playerInk.opacity(0.88)
+                : playerInk.opacity(selected ? 1 : 0.6)
+        }
+        return selected ? palette.primary : palette.onSurfaceVariant
     }
 }
