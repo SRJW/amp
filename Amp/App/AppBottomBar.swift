@@ -107,12 +107,7 @@ struct AppNavigationButtons: View {
 
     var body: some View {
         ZStack {
-            if inPlayer {
-                Capsule()
-                    .fill(!playerArtworkPresent && colorScheme == .light ? Color.black.opacity(0.06) : Color.black.opacity(0.28))
-                    .frame(width: width, height: AppNavigationMetrics.capsuleHeight)
-                    .allowsHitTesting(false)
-            } else {
+            if !inPlayer {
                 selectionPill
                     .frame(width: width * AppNavigationMetrics.selectionWidthFraction - AppNavigationMetrics.selectionInset * 2,
                            height: AppNavigationMetrics.capsuleHeight - AppNavigationMetrics.selectionInset * 2)
@@ -145,6 +140,14 @@ struct AppNavigationButtons: View {
         .font(.system(size: 28 * PlayerLayoutMetrics.navigationIconScale, weight: .heavy))
         .buttonStyle(.plain)
         .frame(width: width, height: AppNavigationMetrics.buttonsHeight)
+        .background {
+            if inPlayer {
+                Capsule()
+                    .fill(!playerArtworkPresent && colorScheme == .light ? Color.black.opacity(0.06) : Color.black.opacity(0.28))
+                    .frame(width: width, height: 54)
+                    .allowsHitTesting(false)
+            }
+        }
         .animation(reduceMotion ? nil : .spring(response: AppNavigationMetrics.selectionDuration, dampingFraction: 0.86), value: selectedIndex)
         .simultaneousGesture(DragGesture(minimumDistance: 8)
             .updating($dragX) { value, state, _ in

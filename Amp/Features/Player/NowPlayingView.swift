@@ -59,14 +59,15 @@ struct NowPlayingView: View {
                     ProgressSection(song: song, screenWidth: width) { controls(state, width: width) }
                         .frame(width: width - 20, height: height * 0.18)
                         .position(x: width / 2, y: height * PlayerLayoutMetrics.transportCentreH)
+                    let navCentreY = AppNavigationMetrics.centreY(height: height, safeAreaBottom: navigationBottomInset)
                     Button { showsAudioDetails = true } label: {
                         Text(audioSummary(song)).font(.system(size: 10.5 * PlayerLayoutMetrics.technicalTextScale, weight: .bold))
                             .lineLimit(1).minimumScaleFactor(0.75)
                     }
-                    .frame(width: width - 24).position(x: width / 2, y: height * 0.895)
+                    .frame(width: width - 24).position(x: width / 2, y: min(height * 0.874, navCentreY - 43))
                     if !sharedNavigation {
                         referenceNavigation(width: width)
-                            .position(x: width / 2, y: AppNavigationMetrics.centreY(height: height, safeAreaBottom: navigationBottomInset))
+                            .position(x: width / 2, y: navCentreY)
                     }
                 }
                 .foregroundStyle(playerInk)
