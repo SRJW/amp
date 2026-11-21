@@ -3,7 +3,6 @@ import AVFoundation
 
 /// Full-bleed artwork player with waveform transport and compact library navigation.
 struct NowPlayingView: View {
-    @Environment(\.radioAvailable) private var radioAvailable
     @Environment(PlayerController.self) private var player
     @Environment(LibraryActions.self) private var actions
     @Environment(AppRouter.self) private var router
@@ -18,13 +17,11 @@ struct NowPlayingView: View {
     @State private var artworkDrag = 0.0
     @State private var artworkGestureMode = 0
     @State private var artworkGestureEntry: UUID?
-    @State private var artworkTarget: ArtworkTarget?
     let drag: PlayerDragState
     @State private var showsQueue = false
     @State private var showsLyrics = false
     @State private var showsMarks = false
     @State private var showsVisualizer = false
-    @State private var showsEqualizer = false
     @State private var showsAudioDetails = false
     @GestureState private var artworkGestureActive = false
 
@@ -112,16 +109,10 @@ struct NowPlayingView: View {
         .animation(.easeInOut(duration: 0.2), value: actions.message)
         .routerSheets(active: true)
         .sheet(isPresented: $showsQueue) { QueueSheet().preferredColorScheme(themeScheme) }
-        .sheet(item: $artworkTarget) { ArtworkPickerSheet(target: $0).preferredColorScheme(themeScheme) }
         .sheet(isPresented: $showsMarks) { MarksSheet().preferredColorScheme(themeScheme) }
         .sheet(isPresented: $showsAudioDetails) { AudioDetailsView().preferredColorScheme(themeScheme) }
         .fullScreenCover(isPresented: $showsVisualizer) { VisualizerView().preferredColorScheme(themeScheme) }
         .fullScreenCover(isPresented: $showsLyrics) { ExpandedLyrics(previous: { player.skipPrevious() }, next: next).preferredColorScheme(themeScheme) }
-        .sheet(isPresented: $showsEqualizer) {
-            NavigationStack {
-                EqualizerView().toolbar { Button("Done") { showsEqualizer = false } }
-            }.preferredColorScheme(themeScheme)
-        }
     }
 
     private func artworkInteraction(width: CGFloat) -> some View {
@@ -212,39 +203,17 @@ struct NowPlayingView: View {
     private func menu(width: CGFloat) -> some View {
         let song = player.state.currentSong
         return Menu {
-            Section(L("Track")) {
-                Button { router.songForDetails = song } label: { Label(L("Music information"), systemImage: "info.circle") }
-                Button { showsAudioDetails = true } label: { Label(L("Audio details"), systemImage: "waveform.badge.magnifyingglass") }
-                if let album = song.flatMap({ library.album($0.albumId) }) {
-                    Button { artworkTarget = .album(album) } label: { Label(L("Find a better cover"), systemImage: "photo.badge.magnifyingglass") }
-                }
+            Button { showsQueue = true } label: { Label(L("Queue"), systemImage: "list.bullet") }
+            Button { showsLyrics = true } label: { Label(L("Lyrics"), systemImage: "quote.bubble") }
+            Button { if let song { router.songsForPlaylist = [song] } } label: { Label(L("Add to playlist"), systemImage: "music.note.list") }
+            Button { showsVisualizer = true } label: { Label(L("Visualizer"), systemImage: "waveform") }
+            Button { showsMarks = true } label: {
+                Label(player.state.abLoop?.enabled == true ? L("Bookmarks & A–B loop (on)") : L("Bookmarks & A–B loop"), systemImage: "bookmark.square")
             }
-            Section(L("Library")) {
-                Button { addBookmark() } label: { Label(L("Bookmark this moment"), systemImage: "bookmark") }
-                Button { showsMarks = true } label: {
-                    Label(player.state.abLoop?.enabled == true ? L("Bookmarks & A–B loop (on)") : L("Bookmarks & A–B loop"), systemImage: "bookmark.square")
-                }
-                Button { if let song { router.songsForPlaylist = [song] } } label: { Label(L("Add to playlist"), systemImage: "music.note.list") }
-
-            }
-            Section(L("Playback")) {
-                Button { showsLyrics = true } label: { Label(L("Lyrics"), systemImage: "quote.bubble") }
-                Button { close() } label: { Label(L("Close player"), systemImage: "chevron.down") }
-                    .accessibilityIdentifier("closeNowPlaying")
-                if radioAvailable, let song {
-                    Button { router.showsNowPlaying = false; router.open(.radio(.song(song.id))) } label: { Label(L("Browse radio"), systemImage: "dot.radiowaves.left.and.right") }
-                }
-                if radioAvailable, let radio = actions.radio, let song, radio.startSongId == song.id || radio.suggested.contains(song.id) {
-                    Button { actions.refreshRadio() } label: { Label(L("New radio picks"), systemImage: "arrow.clockwise") }
-                }
-                Button { showsQueue = true } label: { Label(L("Queue"), systemImage: "music.note.list") }
-                Button { showsVisualizer = true } label: { Label(L("Visualizer"), systemImage: "waveform") }
-                Button { showsEqualizer = true } label: { Label(L("Equalizer"), systemImage: "slider.vertical.3") }
-                Button {
-                    close()
-                    router.open(.settingsPage(.playback))
-                } label: { Label(L("Playback settings"), systemImage: "play.circle") }
-            }
+            Button { router.songForDetails = song } label: { Label(L("Music information"), systemImage: "info.circle") }
+            Divider()
+            Button { close() } label: { Label(L("Close player"), systemImage: "chevron.down") }
+                .accessibilityIdentifier("closeNowPlaying")
         } label: {
             Image(systemName: PlayerButtonConstants.optionsSymbol)
                 .resizable().scaledToFit()
@@ -256,19 +225,9 @@ struct NowPlayingView: View {
                 .contentShape(Rectangle())
         }.accessibilityIdentifier("nowPlayingMenu")
         .menuStyle(.button)
+        .menuOrder(.fixed)
         .disabled(song == nil)
         .accessibilityLabel(PlayerButtonConstants.optionsLabel)
-    }
-
-    private func addBookmark() {
-        guard let song = player.state.currentSong else { return }
-        let position = player.currentPositionMs()
-        do {
-            _ = try AppServices.shared.database.addBookmark(songId: song.id, positionMs: position)
-            actions.show("Bookmarked \(formatDuration(position))")
-        } catch {
-            actions.show("Couldn't save the bookmark: \(error.localizedDescription)")
-        }
     }
 
     private func referenceOptions(_ song: Song, state: PlaybackState, width: CGFloat) -> some View {
