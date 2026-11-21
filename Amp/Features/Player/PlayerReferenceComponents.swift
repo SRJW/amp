@@ -142,19 +142,57 @@ struct PlayerFullBleedBackground<Artwork: View>: View, Animatable {
     }
 }
 
-struct PlayerEqualizerGlyph: View {
-    var body: some View {
-        HStack(alignment: .bottom, spacing: 3) {
-            RoundedRectangle(cornerRadius: 3).frame(width: 8, height: 8)
-            RoundedRectangle(cornerRadius: 3).frame(width: 8, height: 28)
-            RoundedRectangle(cornerRadius: 3).frame(width: 8, height: 20)
-        }.frame(width: 30, height: 30)
-    }
-}
-struct PlayerQueueGlyph: View {
+struct PlayerLibraryGlyph: View {
     var body: some View {
         VStack(spacing: 4) {
-            ForEach(0..<3) { _ in Capsule().frame(width: 27, height: 6) }
-        }.frame(width: 32, height: 32)
+            HStack(spacing: 4) {
+                RoundedRectangle(cornerRadius: 4.5, style: .continuous).frame(width: 14, height: 14)
+                RoundedRectangle(cornerRadius: 4.5, style: .continuous).frame(width: 14, height: 14)
+            }
+            HStack(spacing: 4) {
+                RoundedRectangle(cornerRadius: 4.5, style: .continuous).frame(width: 14, height: 14)
+                RoundedRectangle(cornerRadius: 4.5, style: .continuous).frame(width: 14, height: 14)
+            }
+        }
+        .frame(width: 32, height: 32)
+    }
+}
+
+struct PlayerEqualizerGlyph: View {
+    var body: some View {
+        HStack(alignment: .bottom, spacing: 2.5) {
+            Capsule().frame(width: 10, height: 11.5)
+            Capsule().frame(width: 10, height: 31)
+            Capsule().frame(width: 10, height: 25.5)
+        }
+        .frame(width: 35, height: 32, alignment: .bottom)
+    }
+}
+
+struct PlayerSearchGlyph: View {
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(lineWidth: 7.5)
+                .frame(width: 19, height: 19)
+                .position(x: 13.25, y: 13.25)
+            Path { path in
+                path.move(to: CGPoint(x: 20.0, y: 20.0))
+                path.addLine(to: CGPoint(x: 28.25, y: 28.25))
+            }
+            .stroke(style: StrokeStyle(lineWidth: 7.5, lineCap: .round))
+        }
+        .frame(width: 32, height: 32)
+    }
+}
+
+struct PlayerQueueGlyph: View {
+    var body: some View {
+        VStack(spacing: 3) {
+            ForEach(0..<3, id: \.self) { _ in
+                Capsule().frame(width: 31, height: 8.5)
+            }
+        }
+        .frame(width: 32, height: 32)
     }
 }

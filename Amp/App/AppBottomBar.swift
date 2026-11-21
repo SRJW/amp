@@ -115,9 +115,9 @@ struct AppNavigationButtons: View {
                               ?? width * PlayerLayoutMetrics.navigationCentresW[selectedIndex], y: 24)
                     .allowsHitTesting(false)
             }
-            button(L("Library"), section: .library, index: 0) { Image(systemName: "square.grid.2x2.fill") }
+            button(L("Library"), section: .library, index: 0) { PlayerLibraryGlyph().scaleEffect(PlayerLayoutMetrics.navigationIconScale) }
             button(L("Equalizer"), section: .equalizer, index: 1) { PlayerEqualizerGlyph().scaleEffect(PlayerLayoutMetrics.navigationIconScale) }
-            button(L("Search"), section: .search, index: 2) { Image(systemName: "magnifyingglass") }
+            button(L("Search"), section: .search, index: 2) { PlayerSearchGlyph().scaleEffect(PlayerLayoutMetrics.navigationIconScale) }
             Menu {
                 Section(L(AppNavigationMetrics.menuLabel)) {
                     ForEach(Tool.available) { tool in
