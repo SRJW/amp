@@ -41,6 +41,7 @@ struct MiniPlayer: View {
     @State private var frames = ArtworkSlideQueue<MiniPlayerFrame>()
     @State private var transitionProgress = 1.0
     @State private var settlement: Task<Void, Never>?
+    @State private var swipeTrackChangePulse = 0
 
     private var visibleFrame: MiniPlayerFrame {
         frames.current ?? MiniPlayerFrame(id: player.state.currentEntry?.id.uuidString ?? String(song.id), song: song)
@@ -96,6 +97,7 @@ struct MiniPlayer: View {
         .padding(.vertical, MiniPlayerMetrics.artworkVerticalInset)
         .frame(height: MiniPlayerMetrics.height)
         .contentShape(Rectangle())
+        .sensoryFeedback(.impact(weight: .medium, intensity: 0.75), trigger: swipeTrackChangePulse)
         .onChange(of: entry, initial: true) { _, _ in
             let frame = MiniPlayerFrame(id: entry?.uuidString ?? String(song.id), song: song)
             if frames.offer(frame, direction: player.artworkDirection) { animateTrackChange() }
@@ -144,6 +146,9 @@ struct MiniPlayer: View {
                 let delta = value.translation
                 if abs(delta.width) > abs(delta.height) * 1.3, abs(delta.width) >= MiniPlayerMetrics.swipeThreshold {
                     if delta.width < 0 { player.skipNext() } else { player.skipToPreviousItem() }
+                    if player.state.currentEntry?.id != entry {
+                        swipeTrackChangePulse += 1
+                    }
                 } else if -delta.height >= MiniPlayerMetrics.swipeThreshold, abs(delta.height) > abs(delta.width) * 1.3 {
                     onOpen()
                 }

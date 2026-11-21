@@ -28,12 +28,14 @@ struct PlayerSongReveal<Content: View>: View {
         return request
     }
 
+    private var showsAlphabetIndex: Bool { alphabetEnabled && songs.count >= 15 }
+
     var body: some View {
         ScrollViewReader { proxy in
             content
-                .padding(.trailing, alphabetEnabled ? SongAlphabetMetrics.width : 0)
+                .padding(.trailing, showsAlphabetIndex ? SongAlphabetMetrics.width : 0)
                 .overlay(alignment: .trailing) {
-                    if alphabetEnabled {
+                    if showsAlphabetIndex {
                         SongAlphabetIndex(songs: songs) { id in
                             alphabetTarget = id
                             withAnimation(reduceMotion ? nil : .easeOut(duration: SongAlphabetMetrics.scrollDuration)) {

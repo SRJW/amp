@@ -58,7 +58,10 @@ enum SongRowText {
         } else {
             format = ext.isEmpty ? (codec.isEmpty ? "audio" : codec) : ext
         }
-        return (song.durationMs > 0 ? formatDuration(song.durationMs) : "–:–") + " | " + format
+        var details = [format]
+        if song.bitrate > 0 { details.append(MediaFormats.bitrateText(song.bitrate)) }
+        if song.sampleRate > 0 { details.append(MediaFormats.sampleRateText(song.sampleRate)) }
+        return (song.durationMs > 0 ? formatDuration(song.durationMs) : "–:–") + " | " + details.joined(separator: " · ")
     }
     static func accessibilityLabel(_ song: Song, includingFileDetails: Bool) -> String {
         var parts = [song.title, song.artist]
@@ -85,7 +88,7 @@ struct TrackRow: View {
     @State private var swipe: CGFloat = 0
 
     var body: some View {
-        HStack(spacing: Spacing.md) {
+        HStack(spacing: Spacing.sm) {
             // One native recognizer pair owns playback taps and row swipes. The tap waits
             // for the horizontal pan to fail, so releasing a swipe cannot play this song.
             HStack(spacing: Spacing.md) {
@@ -131,25 +134,29 @@ struct TrackRow: View {
             .accessibilityAddTraits(.isButton)
             .accessibilityAction { onTap() }
             if showsActions {
-                Button { actions.toggleFavorite(song) } label: {
-                    Image(systemName: song.isFavorite ? "heart.fill" : "heart")
-                        .foregroundStyle(song.isFavorite ? palette.primary : palette.onSurfaceVariant)
-                        .frame(width: 32, height: 44)
+                HStack(spacing: 0) {
+                    Button { actions.toggleFavorite(song) } label: {
+                        Image(systemName: song.isFavorite ? "heart.fill" : "heart")
+                            .foregroundStyle(song.isFavorite ? palette.primary : palette.onSurfaceVariant)
+                            .frame(width: 34, height: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(song.isFavorite ? L("Remove from favorites") : L("Add to favorites"))
+                    Menu {
+                        SongActionItems(song: song, actions: actions)
+                    } label: {
+                        Image(systemName: "ellipsis").foregroundStyle(palette.onSurfaceVariant)
+                            .frame(width: 34, height: 44).contentShape(Rectangle())
+                    }
+                    .menuStyle(.button)
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(L("More options"))
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(song.isFavorite ? "Remove from favorites" : "Add to favorites")
-                Menu {
-                    SongActionItems(song: song, actions: actions)
-                } label: {
-                    Image(systemName: "ellipsis").foregroundStyle(palette.onSurfaceVariant)
-                        .frame(width: 44, height: 44).contentShape(Rectangle())
-                }
-                .menuStyle(.button)
-                .buttonStyle(.plain)
-                .accessibilityLabel("More actions")
             }
         }
-        .padding(.horizontal, Spacing.gutter)
+        .padding(.leading, Spacing.gutter)
+        .padding(.trailing, showsActions ? Spacing.sm : Spacing.gutter)
         .padding(.vertical, Spacing.xs)
         .offset(x: swipe)
         .background(alignment: swipe >= 0 ? .leading : .trailing) {

@@ -273,13 +273,9 @@ struct NowPlayingView: View {
 
     private func referenceOptions(_ song: Song, state: PlaybackState, width: CGFloat) -> some View {
         ZStack {
-            Button { actions.toggleFavorite(song) } label: {
-                Image(systemName: song.isFavorite ? "heart.fill" : "heart")
-                    .resizable().scaledToFit()
-                    .frame(width: width * PlayerLayoutMetrics.heartIconW, height: width * PlayerLayoutMetrics.heartIconW)
-                    .font(.system(size: 25, weight: .bold)).frame(width: 44, height: 44)
+            PlayerFavoriteButton(isFavorite: song.isFavorite, iconWidth: width * PlayerLayoutMetrics.heartIconW, ink: playerInk, reduceMotion: reduceMotion) {
+                actions.toggleFavorite(song)
             }
-            .accessibilityLabel(song.isFavorite ? "Remove from favorites" : "Add to favorites")
             .position(x: width * PlayerLayoutMetrics.secondaryCentresW[0], y: 24)
             PlayerShareButton(song: song, iconWidth: width * PlayerLayoutMetrics.secondaryIconW)
                 .position(x: width * PlayerLayoutMetrics.secondaryCentresW[1], y: 24)
@@ -383,6 +379,100 @@ struct NowPlayingView: View {
         ReferencePlayerBackdrop(song: song, artworkDrag: $artworkDrag)
     }
 
+}
+
+/// Apple Music–style favorite button: spring pop + radial micro-burst synchronized with tactile haptic feedback.
+private struct PlayerFavoriteButton: View {
+    let isFavorite: Bool
+    let iconWidth: CGFloat
+    let ink: Color
+    let reduceMotion: Bool
+    let action: () -> Void
+    @State private var addPulse = 0
+    @State private var removePulse = 0
+    @State private var popScale: CGFloat = 1
+    @State private var burstProgress: CGFloat = 0
+    @State private var showingBurst = false
+    @State private var animationTask: Task<Void, Never>?
+
+    var body: some View {
+        Button {
+            let adding = !isFavorite
+            action()
+            if adding {
+                addPulse += 1
+                playFavoriteAnimation()
+            } else {
+                removePulse += 1
+                playUnfavoriteAnimation()
+            }
+        } label: {
+            ZStack {
+                if showingBurst && !reduceMotion {
+                    Circle()
+                        .strokeBorder(ink.opacity(Double(max(0, 1 - burstProgress)) * 0.55), lineWidth: max(0.5, 2.2 * (1 - burstProgress)))
+                        .frame(width: iconWidth * (0.75 + burstProgress * 0.95), height: iconWidth * (0.75 + burstProgress * 0.95))
+                    ForEach(0..<6, id: \.self) { index in
+                        let angle = Double(index) * (.pi / 3) - .pi / 6
+                        let radius = iconWidth * (0.42 + burstProgress * 0.62)
+                        Circle()
+                            .fill(ink)
+                            .frame(width: max(1.5, 3.6 * (1 - burstProgress)), height: max(1.5, 3.6 * (1 - burstProgress)))
+                            .opacity(Double(max(0, 1 - burstProgress)))
+                            .offset(x: CGFloat(cos(angle)) * radius, y: CGFloat(sin(angle)) * radius)
+                    }
+                }
+                Image(systemName: isFavorite ? "heart.fill" : "heart")
+                    .resizable().scaledToFit()
+                    .frame(width: iconWidth, height: iconWidth)
+                    .font(.system(size: 25, weight: .bold))
+                    .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
+                    .scaleEffect(popScale)
+            }
+            .frame(width: 44, height: 44)
+            .contentShape(Rectangle())
+        }
+        .accessibilityLabel(isFavorite ? L("Remove from favorites") : L("Add to favorites"))
+        .sensoryFeedback(.success, trigger: addPulse)
+        .sensoryFeedback(.impact(flexibility: .soft, intensity: 0.55), trigger: removePulse)
+        .onDisappear { animationTask?.cancel() }
+    }
+
+    private func playFavoriteAnimation() {
+        animationTask?.cancel()
+        guard !reduceMotion else { return }
+        popScale = 0.78
+        burstProgress = 0
+        showingBurst = true
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.45)) {
+            popScale = 1.24
+        }
+        withAnimation(.easeOut(duration: 0.42)) {
+            burstProgress = 1
+        }
+        animationTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(140))
+            guard !Task.isCancelled else { return }
+            withAnimation(.spring(response: 0.30, dampingFraction: 0.65)) {
+                popScale = 1.0
+            }
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled else { return }
+            showingBurst = false
+            burstProgress = 0
+        }
+    }
+
+    private func playUnfavoriteAnimation() {
+        animationTask?.cancel()
+        showingBurst = false
+        burstProgress = 0
+        guard !reduceMotion else { return }
+        popScale = 0.86
+        withAnimation(.spring(response: 0.25, dampingFraction: 0.72)) {
+            popScale = 1.0
+        }
+    }
 }
 
 /// A toggle in the controls (shuffle, repeat): its icon dimmed when off, on a soft disc when on.
