@@ -18,31 +18,88 @@ struct PlayerFullBleedBackground<Artwork: View>: View, Animatable {
         set { blend = newValue }
     }
 
-    private func muted(_ color: Color) -> UIColor {
+    private struct BackdropStops {
+        let top: Color
+        let mid: Color
+        let bottom: Color
+    }
+
+    private func backdropStops(for color: Color) -> BackdropStops {
         var hue: CGFloat = 0, saturation: CGFloat = 0, brightness: CGFloat = 0, alpha: CGFloat = 0
         guard UIColor(color).getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: &alpha) else {
-            return UIColor(red: 0.50, green: 0.31, blue: 0.29, alpha: 1)
+            return BackdropStops(
+                top: Color(red: 0.28, green: 0.12, blue: 0.16),
+                mid: Color(red: 0.18, green: 0.08, blue: 0.18),
+                bottom: Color(red: 0.10, green: 0.06, blue: 0.16)
+            )
         }
-        let mutedHue = hue < 0.12 ? hue * 0.5 : hue
-        return UIColor(hue: mutedHue, saturation: saturation * 0.55,
-                       brightness: min(max(brightness, 0.50), 0.58), alpha: 1)
+        func wrapped(_ value: CGFloat) -> CGFloat {
+            let mod = value.truncatingRemainder(dividingBy: 1)
+            return mod < 0 ? mod + 1 : mod
+        }
+        if saturation < 0.08 {
+            let neutralSat = saturation * 0.4
+            return BackdropStops(
+                top: Color(uiColor: UIColor(hue: hue, saturation: neutralSat, brightness: 0.24, alpha: 1)),
+                mid: Color(uiColor: UIColor(hue: hue, saturation: neutralSat, brightness: 0.16, alpha: 1)),
+                bottom: Color(uiColor: UIColor(hue: hue, saturation: neutralSat, brightness: 0.10, alpha: 1))
+            )
+        }
+        let midShift: CGFloat
+        let bottomShift: CGFloat
+        if hue < 0.08 || hue > 0.88 {
+            // Warm crimsons/reds drift smoothly toward plum and deep nocturnal indigo.
+            midShift = -0.075
+            bottomShift = -0.175
+        } else if hue < 0.22 {
+            // Warm oranges/golds deepen toward burnished burgundy instead of muddy olive.
+            midShift = -0.055
+            bottomShift = -0.115
+        } else {
+            // Greens, teals, blues, and violets drift gently into deeper adjacent cool tones.
+            midShift = 0.04
+            bottomShift = 0.085
+        }
+        let topSat = min(max(saturation * 0.88, 0.55), 0.92)
+        let midSat = min(max(saturation * 0.92, 0.62), 0.95)
+        let botSat = min(max(saturation * 0.88, 0.58), 0.92)
+        let topBright = min(max(brightness * 0.64, 0.26), 0.38)
+        let midBright = min(max(brightness * 0.46, 0.19), 0.27)
+        let botBright = min(max(brightness * 0.32, 0.14), 0.21)
+        return BackdropStops(
+            top: Color(uiColor: UIColor(hue: wrapped(hue), saturation: topSat, brightness: topBright, alpha: 1)),
+            mid: Color(uiColor: UIColor(hue: wrapped(hue + midShift), saturation: midSat, brightness: midBright, alpha: 1)),
+            bottom: Color(uiColor: UIColor(hue: wrapped(hue + bottomShift), saturation: botSat, brightness: botBright, alpha: 1))
+        )
     }
+
+    private func chromaticGradient(for color: Color) -> LinearGradient {
+        let stops = backdropStops(for: color)
+        return LinearGradient(
+            stops: [
+                .init(color: stops.top, location: 0.0),
+                .init(color: stops.top, location: 0.34),
+                .init(color: stops.mid, location: 0.60),
+                .init(color: stops.bottom, location: 1.0)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
     var body: some View {
         GeometryReader { geometry in
-            let base = Color(uiColor: muted(dominant))
+            let fadeStart = appearance.fadeStart.clamped(0, 0.96)
+            let fadeSpan = 1 - fadeStart
             ZStack(alignment: .top) {
                 ZStack {
-                    LinearGradient(colors: [base, base, base.opacity(0.18)],
-                                   startPoint: .top, endPoint: .bottom)
-                        .background(Color(red: 0.10, green: 0.045, blue: 0.035))
+                    chromaticGradient(for: dominant)
                     if let secondaryDominant {
-                        let next = Color(uiColor: muted(secondaryDominant))
                         let phase = min(max(blend, 0), 1)
                         // Introduce the next palette near the cover first, then let
                         // it flow into the controls. Both ends settle to one colour.
                         let spread = 0.22 * sin(.pi * phase)
-                        LinearGradient(colors: [next, next, next.opacity(0.18)], startPoint: .top, endPoint: .bottom)
-                            .background(Color(red: 0.10, green: 0.045, blue: 0.035))
+                        chromaticGradient(for: secondaryDominant)
                             .mask {
                                 LinearGradient(colors: [
                                     .white.opacity(min(phase + spread, 1)),
@@ -65,10 +122,13 @@ struct PlayerFullBleedBackground<Artwork: View>: View, Animatable {
                     .frame(width: geometry.size.width, height: PlayerArtworkComposition.artworkHeight(in: geometry.size))
                     .clipped()
                     .mask {
-                        LinearGradient(stops: [.init(color: .white, location: 0),
-                                               .init(color: .white, location: appearance.fadeStart.clamped(0, 0.99)),
-                                               .init(color: .clear, location: 1)],
-                                       startPoint: .top, endPoint: .bottom)
+                        LinearGradient(stops: [
+                            .init(color: .white, location: 0),
+                            .init(color: .white, location: fadeStart),
+                            .init(color: .white.opacity(0.68), location: fadeStart + fadeSpan * 0.42),
+                            .init(color: .white.opacity(0.22), location: fadeStart + fadeSpan * 0.76),
+                            .init(color: .clear, location: 1)
+                        ], startPoint: .top, endPoint: .bottom)
                     }
                 if showsStatusProtection {
                 PlayerAdaptiveStatusBar(current: statusProfile ?? PlayerArtworkStatusProfile(solid: UIColor(dominant)),

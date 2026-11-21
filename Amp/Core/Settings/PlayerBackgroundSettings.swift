@@ -2,7 +2,7 @@ import Foundation
 
 /// Defaults reproduce the existing player; these affect appearance only.
 struct PlayerBackgroundSettings: Codable, Equatable {
-    var fadeStart = 0.75
+    var fadeStart = 0.58
     var blur = 24.0
     var details = 0.0
     var intensity = 1.0
@@ -13,7 +13,7 @@ struct PlayerBackgroundSettings: Codable, Equatable {
     init() {}
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        fadeStart = try c.decodeIfPresent(Double.self, forKey: .fadeStart) ?? 0.75
+        fadeStart = try c.decodeIfPresent(Double.self, forKey: .fadeStart) ?? 0.58
         blur = try c.decodeIfPresent(Double.self, forKey: .blur) ?? 24
         details = try c.decodeIfPresent(Double.self, forKey: .details) ?? 0
         intensity = try c.decodeIfPresent(Double.self, forKey: .intensity) ?? 1

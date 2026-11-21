@@ -84,6 +84,8 @@ struct AppNavigationButtons: View {
     let width: CGFloat
     var inPlayer = false
     @Environment(\.playerForegroundInk) private var playerInk
+    @Environment(\.playerArtworkPresent) private var playerArtworkPresent
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(AppRouter.self) private var router
     @Environment(\.palette) private var palette
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -105,7 +107,12 @@ struct AppNavigationButtons: View {
 
     var body: some View {
         ZStack {
-            if !inPlayer {
+            if inPlayer {
+                Capsule()
+                    .fill(!playerArtworkPresent && colorScheme == .light ? Color.black.opacity(0.06) : Color.black.opacity(0.28))
+                    .frame(width: width, height: AppNavigationMetrics.capsuleHeight)
+                    .allowsHitTesting(false)
+            } else {
                 selectionPill
                     .frame(width: width * AppNavigationMetrics.selectionWidthFraction - AppNavigationMetrics.selectionInset * 2,
                            height: AppNavigationMetrics.capsuleHeight - AppNavigationMetrics.selectionInset * 2)
@@ -177,6 +184,6 @@ struct AppNavigationButtons: View {
     }
 
     private func tint(selected: Bool) -> Color {
-        inPlayer ? playerInk.opacity(selected ? 1 : 0.6) : (selected ? palette.primary : palette.onSurfaceVariant)
+        inPlayer ? playerInk.opacity(selected ? 0.96 : 0.80) : (selected ? palette.primary : palette.onSurfaceVariant)
     }
 }
