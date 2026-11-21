@@ -118,13 +118,14 @@ struct AppNavigationButtons: View {
 
     private var usesArtworkControlPalette: Bool {
         playerArtworkPresent && settings.customTheme == nil &&
-            (settings.playerBackground.navBarCapsule || settings.playerBackground.gradientStyle == .deepChromatic || settings.theme == .artwork)
+            (settings.playerBackground.navBarCapsule || settings.playerBackground.gradientStyle != .classic || settings.theme == .artwork)
     }
 
     private var controlColors: PlayerBackdropPalette.ControlColors {
         PlayerBackdropPalette.controlColors(
             for: Color(argb: artworkDominant),
-            style: settings.playerBackground.gradientStyle
+            style: settings.playerBackground.gradientStyle,
+            scheme: colorScheme
         )
     }
 
@@ -139,7 +140,7 @@ struct AppNavigationButtons: View {
         if usesArtworkControlPalette {
             return settings.playerBackground.navBarCapsule
                 ? controlColors.navIcon
-                : controlColors.navIcon.opacity(selected ? 1 : 0.68)
+                : controlColors.accentInk.opacity(selected ? 1 : 0.68)
         }
         return settings.playerBackground.navBarCapsule
             ? playerInk.opacity(0.88)

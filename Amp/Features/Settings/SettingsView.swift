@@ -161,11 +161,13 @@ private struct SettingsGroup<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
-            Text(title)
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(palette.onSurfaceVariant)
-                .padding(.horizontal, Spacing.lg)
-                .accessibilityAddTraits(.isHeader)
+            if !title.isEmpty {
+                Text(title)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(palette.onSurfaceVariant)
+                    .padding(.horizontal, Spacing.lg)
+                    .accessibilityAddTraits(.isHeader)
+            }
             VStack(alignment: .leading, spacing: 0) { content }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(palette.surface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
@@ -286,7 +288,7 @@ private struct AppearanceSettingsView: View {
                 Toggle(L("Glass surfaces"), isOn: Binding(get: { settings.glassEnabled }, set: { settings.glassEnabled = $0 }))
                     .accessibilityIdentifier("settingsGlassEnabled").padding(Spacing.lg)
             }
-            PlayerBackgroundSettingsGroup()
+            PlayerBackgroundSettingsLink()
             Text(L("For system appearance and transparency options, open iPhone Settings → Accessibility → Display & Text Size. Liquid Glass options also depend on your iOS version."))
                 .font(.footnote).foregroundStyle(.secondary)
             Text(L("Import custom colors from a theme ZIP or manifest.json."))
@@ -392,9 +394,52 @@ private struct LanguageSettingsView: View {
     }
 }
 
-private struct PlayerBackgroundSettingsGroup: View {
+private struct PlayerBackgroundSettingsLink: View {
+    @Environment(AppSettings.self) private var settings
+    @Environment(\.palette) private var palette
+
+    private var summary: String {
+        let style = L(settings.playerBackground.gradientStyle.label)
+        if settings.playerBackground.navBarCapsule {
+            return "\(style) · \(L(PlayerBackgroundControls.navBarCapsule))"
+        }
+        return style
+    }
+
+    var body: some View {
+        SettingsGroup(L("Now Playing")) {
+            NavigationLink { PlayerBackgroundSettingsView() } label: {
+                HStack(spacing: Spacing.md) {
+                    SettingsIcon(symbol: "sparkles.rectangle.stack")
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(L(PlayerBackgroundControls.title))
+                            .font(.body.weight(.medium))
+                            .foregroundStyle(palette.onSurface)
+                        Text(summary)
+                            .font(.subheadline)
+                            .foregroundStyle(palette.onSurfaceVariant)
+                            .lineLimit(2)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(palette.onSurfaceVariant)
+                }
+                .padding(Spacing.lg)
+                .frame(minHeight: 56)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("settingsPlayerBackgroundEntry")
+        }
+    }
+}
+
+private struct PlayerBackgroundSettingsView: View {
     @Environment(AppSettings.self) private var settings
     @Environment(PlayerController.self) private var player
+    @Environment(\.palette) private var palette
+    @Environment(\.colorScheme) private var colorScheme
     @State private var previewPalette = LyricsPalette.fallback
 
     private var gradientColor: Binding<Color> {
@@ -407,6 +452,7 @@ private struct PlayerBackgroundSettingsGroup: View {
             settings.playerBackground = appearance
         })
     }
+
     private func value(_ key: WritableKeyPath<PlayerBackgroundSettings, Double>) -> Binding<Double> {
         Binding(get: { settings.playerBackground[keyPath: key] }, set: {
             var appearance = settings.playerBackground
@@ -414,13 +460,7 @@ private struct PlayerBackgroundSettingsGroup: View {
             settings.playerBackground = appearance
         })
     }
-    private var gradientStyle: Binding<PlayerGradientStyle> {
-        Binding(get: { settings.playerBackground.gradientStyle }, set: {
-            var appearance = settings.playerBackground
-            appearance.gradientStyle = $0
-            settings.playerBackground = appearance
-        })
-    }
+
     private var navBarCapsule: Binding<Bool> {
         Binding(get: { settings.playerBackground.navBarCapsule }, set: {
             var appearance = settings.playerBackground
@@ -428,50 +468,415 @@ private struct PlayerBackgroundSettingsGroup: View {
             settings.playerBackground = appearance
         })
     }
+
+    private var dominantColor: Color {
+        if player.state.currentSong != nil {
+            return Color(argb: previewPalette.artworkDominant)
+        }
+        return Color(red: 0.72, green: 0.36, blue: 0.34)
+    }
+
     var body: some View {
-        SettingsGroup(L(PlayerBackgroundControls.title)) {
-            VStack(spacing: Spacing.lg) {
-                if let song = player.state.currentSong {
-                    PlayerFullBleedBackground(dominant: Color(argb: previewPalette.artworkDominant), appearance: settings.playerBackground) {
-                        SongArtworkView(song: song, maxPixels: 600)
+        let appearance = settings.playerBackground
+        VStack(spacing: 0) {
+            pinnedPreviewHeader(appearance: appearance)
+            Rectangle()
+                .fill(palette.outline.opacity(0.35))
+                .frame(height: 0.5)
+            ScrollView {
+                VStack(spacing: 24) {
+                    SettingsGroup(L(PlayerBackgroundControls.blurStyleSection)) {
+                        ForEach(Array(PlayerGradientStyle.allCases.enumerated()), id: \.element.id) { index, style in
+                            if index > 0 { Divider().padding(.leading, 68) }
+                            SettingsChoice(
+                                title: L(style.label),
+                                subtitle: L(style.description),
+                                selected: appearance.gradientStyle == style,
+                                choose: {
+                                    var updated = settings.playerBackground
+                                    updated.gradientStyle = style
+                                    settings.playerBackground = updated
+                                }
+                            ) {
+                                PlayerBackgroundStyleSwatch(style: style, dominant: dominantColor)
+                            }
+                            .accessibilityIdentifier("settingsPlayerGradientStyle.\(style.rawValue)")
+                        }
                     }
-                    .frame(height: PlayerBackgroundControls.previewHeight).clipShape(RoundedRectangle(cornerRadius: Radius.medium))
-                    .task(id: song.url) {
-                        let sampled = await LyricsPaletteCache.shared.palette(for: song.url)
-                        guard !Task.isCancelled else { return }
-                        previewPalette = sampled
+                    .accessibilityIdentifier("settingsPlayerGradientStyle")
+
+                    SettingsGroup(L(PlayerBackgroundControls.controlsSection)) {
+                        VStack(alignment: .leading, spacing: Spacing.xs) {
+                            Toggle(L(PlayerBackgroundControls.navBarCapsule), isOn: navBarCapsule)
+                                .accessibilityIdentifier("settingsPlayerNavBarCapsule")
+                            Text(L(PlayerBackgroundControls.navBarCapsuleDescription))
+                                .font(.footnote)
+                                .foregroundStyle(palette.onSurfaceVariant)
+                        }
+                        .padding(Spacing.lg)
+                    }
+
+                    SettingsGroup(L(PlayerBackgroundControls.fineTuningSection)) {
+                        sliderRow(
+                            L(PlayerBackgroundControls.fade),
+                            description: L(PlayerBackgroundControls.fadeDescription),
+                            key: \.fadeStart,
+                            range: PlayerBackgroundControls.unitRange
+                        )
+                        Divider().padding(.leading, Spacing.lg)
+                        sliderRow(
+                            L(PlayerBackgroundControls.blur),
+                            description: L(PlayerBackgroundControls.blurDescription),
+                            key: \.blur,
+                            range: PlayerBackgroundControls.blurRange,
+                            percent: false
+                        )
+                        Divider().padding(.leading, Spacing.lg)
+                        sliderRow(
+                            L(PlayerBackgroundControls.details),
+                            description: L(PlayerBackgroundControls.detailsDescription),
+                            key: \.details,
+                            range: PlayerBackgroundControls.unitRange
+                        )
+                        Divider().padding(.leading, Spacing.lg)
+                        sliderRow(
+                            L(PlayerBackgroundControls.intensity),
+                            description: L(PlayerBackgroundControls.intensityDescription),
+                            key: \.intensity,
+                            range: PlayerBackgroundControls.unitRange
+                        )
+                        Divider().padding(.leading, Spacing.lg)
+                        sliderRow(
+                            L(PlayerBackgroundControls.saturation),
+                            description: L(PlayerBackgroundControls.saturationDescription),
+                            key: \.saturation,
+                            range: PlayerBackgroundControls.saturationRange
+                        )
+                        Divider().padding(.leading, Spacing.lg)
+                        VStack(alignment: .leading, spacing: Spacing.md) {
+                            sliderContent(
+                                L(PlayerBackgroundControls.gradient),
+                                description: L(PlayerBackgroundControls.gradientDescription),
+                                key: \.gradient,
+                                range: PlayerBackgroundControls.unitRange,
+                                percent: true
+                            )
+                            ColorPicker(L(PlayerBackgroundControls.gradientColor), selection: gradientColor, supportsOpacity: false)
+                        }
+                        .padding(Spacing.lg)
+                    }
+
+                    SettingsGroup("") {
+                        Button {
+                            settings.playerBackground = PlayerBackgroundSettings()
+                        } label: {
+                            HStack {
+                                Image(systemName: "arrow.counterclockwise")
+                                Text(L(PlayerBackgroundControls.reset))
+                            }
+                            .font(.body.weight(.medium))
+                            .foregroundStyle(palette.primary)
+                            .frame(maxWidth: .infinity, minHeight: 48)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
-                Picker(L(PlayerBackgroundControls.gradientStyle), selection: gradientStyle) {
-                    ForEach(PlayerGradientStyle.allCases) { style in
-                        Text(L(style.label)).tag(style)
-                    }
-                }
-                .accessibilityIdentifier("settingsPlayerGradientStyle")
-                VStack(alignment: .leading, spacing: Spacing.xs) {
-                    Toggle(L(PlayerBackgroundControls.navBarCapsule), isOn: navBarCapsule)
-                        .accessibilityIdentifier("settingsPlayerNavBarCapsule")
-                    Text(L(PlayerBackgroundControls.navBarCapsuleDescription))
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-                Divider()
-                slider(L(PlayerBackgroundControls.gradient), key: \.gradient, range: PlayerBackgroundControls.unitRange)
-                ColorPicker(L(PlayerBackgroundControls.gradientColor), selection: gradientColor, supportsOpacity: false)
-                slider(L(PlayerBackgroundControls.fade), key: \.fadeStart, range: PlayerBackgroundControls.unitRange)
-                slider(L(PlayerBackgroundControls.blur), key: \.blur, range: PlayerBackgroundControls.blurRange, percent: false)
-                slider(L(PlayerBackgroundControls.details), key: \.details, range: PlayerBackgroundControls.unitRange)
-                slider(L(PlayerBackgroundControls.intensity), key: \.intensity, range: PlayerBackgroundControls.unitRange)
-                slider(L(PlayerBackgroundControls.saturation), key: \.saturation, range: PlayerBackgroundControls.saturationRange)
-                Button(L(PlayerBackgroundControls.reset)) { settings.playerBackground = PlayerBackgroundSettings() }
-                    .frame(minHeight: 44)
-            }.padding(Spacing.lg)
+                .padding(Spacing.lg)
+                .padding(.bottom, AppNavigationMetrics.reservedHeight + Spacing.lg)
+            }
+        }
+        .modifier(ToolPageAppearance())
+        .navigationTitle(L(PlayerBackgroundControls.title))
+        .navigationBarTitleDisplayMode(.inline)
+        .task(id: player.state.currentSong?.url) {
+            guard let url = player.state.currentSong?.url else { return }
+            let sampled = await LyricsPaletteCache.shared.palette(for: url)
+            guard !Task.isCancelled else { return }
+            previewPalette = sampled
         }
     }
-    private func slider(_ title: String, key: WritableKeyPath<PlayerBackgroundSettings, Double>, range: ClosedRange<Double>, percent: Bool = true) -> some View {
-        VStack(alignment: .leading) {
+
+    private func pinnedPreviewHeader(appearance: PlayerBackgroundSettings) -> some View {
+        HStack(alignment: .center, spacing: Spacing.lg) {
+            PlayerBackgroundMiniPreview(
+                song: player.state.currentSong,
+                dominant: dominantColor,
+                appearance: appearance,
+                colorScheme: colorScheme,
+                usesArtworkControls: settings.customTheme == nil &&
+                    (appearance.navBarCapsule || appearance.gradientStyle != .classic || settings.theme == .artwork),
+                customPalette: settings.customTheme?.palette
+            )
+            VStack(alignment: .leading, spacing: Spacing.sm) {
+                Text(L("Live preview"))
+                    .font(.caption.weight(.semibold))
+                    .textCase(.uppercase)
+                    .foregroundStyle(palette.primary)
+                Text(L(appearance.gradientStyle.label))
+                    .font(.headline)
+                    .foregroundStyle(palette.onSurface)
+                Text(L(appearance.gradientStyle.description))
+                    .font(.caption)
+                    .foregroundStyle(palette.onSurfaceVariant)
+                    .fixedSize(horizontal: false, vertical: true)
+                VStack(alignment: .leading, spacing: 4) {
+                    previewMetric(L(PlayerBackgroundControls.fade), "\(Int(appearance.fadeStart * 100))%")
+                    previewMetric(L(PlayerBackgroundControls.blur), "\(Int(appearance.blur))")
+                    previewMetric(L(PlayerBackgroundControls.navBarCapsule), appearance.navBarCapsule ? L("On") : L("Off"))
+                }
+                .padding(.top, 2)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal, Spacing.lg)
+        .padding(.vertical, Spacing.md)
+        .background(palette.background)
+    }
+
+    private func previewMetric(_ title: String, _ value: String) -> some View {
+        HStack(spacing: 4) {
+            Text(title)
+                .font(.caption2)
+                .foregroundStyle(palette.onSurfaceVariant)
+                .lineLimit(1)
+            Spacer(minLength: 4)
+            Text(value)
+                .font(.caption2.weight(.semibold).monospacedDigit())
+                .foregroundStyle(palette.onSurface)
+        }
+    }
+
+    private func sliderRow(
+        _ title: String,
+        description: String,
+        key: WritableKeyPath<PlayerBackgroundSettings, Double>,
+        range: ClosedRange<Double>,
+        percent: Bool = true
+    ) -> some View {
+        sliderContent(title, description: description, key: key, range: range, percent: percent)
+            .padding(Spacing.lg)
+    }
+
+    private func sliderContent(
+        _ title: String,
+        description: String,
+        key: WritableKeyPath<PlayerBackgroundSettings, Double>,
+        range: ClosedRange<Double>,
+        percent: Bool
+    ) -> some View {
+        VStack(alignment: .leading, spacing: Spacing.xs) {
             LabeledContent(title, value: percent ? "\(Int(settings.playerBackground[keyPath: key] * 100))%" : "\(Int(settings.playerBackground[keyPath: key]))")
             Slider(value: value(key), in: range).accessibilityLabel(title)
+            Text(description)
+                .font(.caption)
+                .foregroundStyle(palette.onSurfaceVariant)
+        }
+    }
+}
+
+private struct PlayerBackgroundStyleSwatch: View {
+    let style: PlayerGradientStyle
+    let dominant: Color
+
+    var body: some View {
+        switch style {
+        case .classic:
+            Circle()
+                .fill(LinearGradient(colors: [dominant, Color(red: 0.10, green: 0.06, blue: 0.06)], startPoint: .top, endPoint: .bottom))
+                .overlay(Circle().strokeBorder(.white.opacity(0.18), lineWidth: 1))
+        case .deepChromatic:
+            let stops = PlayerBackdropPalette.deepStops(for: dominant)
+            Circle()
+                .fill(LinearGradient(colors: [stops.top, stops.mid, stops.bottom], startPoint: .top, endPoint: .bottom))
+                .overlay(Circle().strokeBorder(.white.opacity(0.22), lineWidth: 1))
+        case .frostedArtwork:
+            Circle()
+                .fill(
+                    RadialGradient(
+                        colors: [dominant.opacity(0.95), dominant.opacity(0.55), Color(red: 0.16, green: 0.12, blue: 0.14)],
+                        center: .topLeading,
+                        startRadius: 2,
+                        endRadius: 24
+                    )
+                )
+                .overlay {
+                    Image(systemName: "aqi.medium")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.white.opacity(0.88))
+                }
+                .overlay(Circle().strokeBorder(.white.opacity(0.24), lineWidth: 1))
+        }
+    }
+}
+
+private struct PlayerBackgroundMiniPreview: View {
+    let song: Song?
+    let dominant: Color
+    let appearance: PlayerBackgroundSettings
+    let colorScheme: ColorScheme
+    let usesArtworkControls: Bool
+    let customPalette: AppPalette?
+
+    private var controlColors: PlayerBackdropPalette.ControlColors? {
+        guard usesArtworkControls else { return nil }
+        return PlayerBackdropPalette.controlColors(
+            for: dominant,
+            style: appearance.gradientStyle,
+            scheme: colorScheme
+        )
+    }
+
+    private var buttonFill: Color {
+        if let controlColors { return controlColors.buttonFill }
+        if let customPalette { return customPalette.filledButton }
+        return .black
+    }
+
+    private var buttonIcon: Color {
+        if let controlColors { return controlColors.buttonIcon }
+        if let customPalette { return customPalette.onFilledButton }
+        return .white
+    }
+
+    private var navIconColor: Color {
+        if let controlColors {
+            return appearance.navBarCapsule ? controlColors.navIcon : controlColors.accentInk.opacity(0.85)
+        }
+        return .white.opacity(0.88)
+    }
+
+    private var accentInk: Color {
+        controlColors?.accentInk ?? .white
+    }
+
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            PlayerFullBleedBackground(
+                dominant: dominant,
+                appearance: appearance,
+                showsStatusProtection: false,
+                artworkHeightFraction: 0.56
+            ) {
+                if let song {
+                    SongArtworkView(song: song, maxPixels: 500)
+                } else {
+                    sampleArtwork
+                }
+            }
+            VStack(spacing: 4) {
+                Spacer(minLength: 0)
+                VStack(spacing: 1) {
+                    Text(song?.title ?? L("Live preview"))
+                        .font(.system(size: 8.5, weight: .bold))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                    Text(song?.artist ?? "amp")
+                        .font(.system(size: 6.5, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.76))
+                        .lineLimit(1)
+                }
+                .padding(.horizontal, 8)
+
+                // Mini waveform + 5 transport controls
+                ZStack {
+                    HStack(spacing: 1.8) {
+                        ForEach(Array([0.35, 0.72, 0.55, 0.92, 0.64, 0.48, 0.85, 0.96, 0.60, 0.78, 0.42, 0.68, 0.50, 0.80, 0.36].enumerated()), id: \.offset) { idx, level in
+                            Capsule()
+                                .fill(accentInk.opacity(idx < 7 ? 0.34 : 0.72))
+                                .frame(width: 2.2, height: CGFloat(level) * 24)
+                        }
+                    }
+                    HStack(spacing: 3) {
+                        Circle()
+                            .fill(buttonFill.opacity(colorScheme == .light ? 0.68 : 0.52))
+                            .frame(width: 11, height: 11)
+                        Circle()
+                            .fill(buttonFill)
+                            .frame(width: 16, height: 16)
+                            .overlay {
+                                Image(systemName: "backward.fill")
+                                    .font(.system(size: 6.5, weight: .black))
+                                    .foregroundStyle(buttonIcon)
+                            }
+                        Circle()
+                            .fill(buttonFill)
+                            .frame(width: 23, height: 23)
+                            .overlay {
+                                Image(systemName: "play.fill")
+                                    .font(.system(size: 9.5, weight: .black))
+                                    .foregroundStyle(buttonIcon)
+                            }
+                        Circle()
+                            .fill(buttonFill)
+                            .frame(width: 16, height: 16)
+                            .overlay {
+                                Image(systemName: "forward.fill")
+                                    .font(.system(size: 6.5, weight: .black))
+                                    .foregroundStyle(buttonIcon)
+                            }
+                        Circle()
+                            .fill(buttonFill.opacity(colorScheme == .light ? 0.68 : 0.52))
+                            .frame(width: 11, height: 11)
+                    }
+                }
+                .frame(height: 28)
+
+                Text("FLAC · 44.1 KHZ")
+                    .font(.system(size: 5, weight: .bold))
+                    .foregroundStyle(accentInk.opacity(0.80))
+                    .padding(.bottom, appearance.navBarCapsule ? 2 : 0)
+
+                // Mini 4-icon bottom navigation bar with live contour capsule
+                HStack {
+                    PlayerLibraryGlyph().scaleEffect(0.28).frame(width: 14, height: 14)
+                    Spacer()
+                    PlayerEqualizerGlyph().scaleEffect(0.28).frame(width: 14, height: 14)
+                    Spacer()
+                    PlayerSearchGlyph().scaleEffect(0.28).frame(width: 14, height: 14)
+                    Spacer()
+                    PlayerQueueGlyph().scaleEffect(0.28).frame(width: 14, height: 14)
+                }
+                .foregroundStyle(navIconColor)
+                .padding(.horizontal, 12)
+                .frame(height: 18)
+                .background {
+                    if appearance.navBarCapsule {
+                        Capsule()
+                            .fill(controlColors?.navCapsule ?? Color.black.opacity(0.55))
+                            .padding(.horizontal, 4)
+                    }
+                }
+                .padding(.bottom, 7)
+            }
+        }
+        .frame(width: 124, height: 204)
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .strokeBorder(.white.opacity(0.22), lineWidth: 1)
+        }
+        .shadow(color: .black.opacity(0.22), radius: 10, y: 4)
+    }
+
+    private var sampleArtwork: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.88, green: 0.56, blue: 0.48),
+                    Color(red: 0.68, green: 0.28, blue: 0.34),
+                    Color(red: 0.30, green: 0.16, blue: 0.28)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            Circle()
+                .fill(RadialGradient(colors: [.white.opacity(0.55), .clear], center: .center, startRadius: 2, endRadius: 56))
+                .offset(x: -18, y: -22)
+            Circle()
+                .fill(Color(red: 0.96, green: 0.72, blue: 0.62).opacity(0.45))
+                .frame(width: 72, height: 72)
+                .offset(x: 24, y: 12)
         }
     }
 }

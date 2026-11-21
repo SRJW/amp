@@ -3,6 +3,7 @@ import Foundation
 enum PlayerGradientStyle: String, CaseIterable, Codable, Identifiable {
     case classic
     case deepChromatic
+    case frostedArtwork
 
     var id: String { rawValue }
 
@@ -10,6 +11,15 @@ enum PlayerGradientStyle: String, CaseIterable, Codable, Identifiable {
         switch self {
         case .classic: "Classic"
         case .deepChromatic: "Deep chromatic"
+        case .frostedArtwork: "Frosted artwork"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .classic: "Soft muted single-tone fade beneath the album cover."
+        case .deepChromatic: "Rich 3-stop hue-shifted gradient that deepens at the bottom."
+        case .frostedArtwork: "Full-bleed blurred continuation of the album cover with a luminous haze."
         }
     }
 }
@@ -44,16 +54,25 @@ struct PlayerBackgroundSettings: Codable, Equatable {
 enum PlayerBackgroundControls {
     static let previewHeight = 180.0
     static let title = "Player artwork & background"
+    static let blurStyleSection = "Blur style"
+    static let controlsSection = "Controls & contour"
+    static let fineTuningSection = "Fine-tuning"
     static let gradientStyle = "Backdrop gradient"
     static let navBarCapsule = "Navigation bar contour"
     static let navBarCapsuleDescription = "Adds an artwork-tinted capsule behind the bottom controls in the player."
-    static let gradient = "Background gradient"
-    static let gradientColor = "Gradient color"
+    static let gradient = "Tint overlay"
+    static let gradientDescription = "Optional dark or colored wash over the lower edge."
+    static let gradientColor = "Tint color"
     static let fade = "Artwork fade"
+    static let fadeDescription = "Where the sharp cover begins to dissolve into the backdrop."
     static let blur = "Background blur"
+    static let blurDescription = "Softness of the blurred artwork layer."
     static let details = "Background details"
+    static let detailsDescription = "Amount of blurred cover texture visible in the backdrop."
     static let intensity = "Background intensity"
+    static let intensityDescription = "Overall brightness of the lower backdrop."
     static let saturation = "Background saturation"
+    static let saturationDescription = "Color vividness of the backdrop."
     static let reset = "Restore background defaults"
     static let blurRange = 0.0...60.0
     static let unitRange = 0.0...1.0

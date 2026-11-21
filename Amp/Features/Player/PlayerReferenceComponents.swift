@@ -70,10 +70,21 @@ enum PlayerBackdropPalette {
     }
 
     /// Unified artwork-harmonized colors shared across transport buttons, waveform, bitrate,
-    /// bottom navigation capsule, and navigation icons so every player control shifts together.
-    static func controlColors(for dominant: Color, style: PlayerGradientStyle) -> ControlColors {
+    /// bottom navigation capsule, and navigation icons so every player control shifts together
+    /// and adapts cleanly between Light and Dark appearance.
+    static func controlColors(for dominant: Color, style: PlayerGradientStyle, scheme: ColorScheme = .dark) -> ControlColors {
+        let isLight = scheme == .light
         var hue: CGFloat = 0, saturation: CGFloat = 0, brightness: CGFloat = 0, alpha: CGFloat = 0
         guard UIColor(dominant).getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: &alpha) else {
+            if isLight {
+                return ControlColors(
+                    buttonFill: Color(red: 0.92, green: 0.91, blue: 0.96),
+                    buttonIcon: Color(red: 0.14, green: 0.12, blue: 0.24),
+                    navCapsule: Color(red: 0.93, green: 0.92, blue: 0.96).opacity(0.88),
+                    navIcon: Color(red: 0.14, green: 0.12, blue: 0.24),
+                    accentInk: Color(red: 0.90, green: 0.91, blue: 0.98)
+                )
+            }
             return ControlColors(
                 buttonFill: Color(red: 0.11, green: 0.10, blue: 0.21),
                 buttonIcon: Color(red: 0.86, green: 0.88, blue: 0.99),
@@ -85,6 +96,15 @@ enum PlayerBackdropPalette {
         if saturation < 0.08 {
             let bgSat = saturation * 0.30
             let fgSat = saturation * 0.15
+            if isLight {
+                return ControlColors(
+                    buttonFill: Color(uiColor: UIColor(hue: hue, saturation: fgSat, brightness: 0.93, alpha: 1)),
+                    buttonIcon: Color(uiColor: UIColor(hue: hue, saturation: bgSat, brightness: 0.16, alpha: 1)),
+                    navCapsule: Color(uiColor: UIColor(hue: hue, saturation: fgSat, brightness: 0.94, alpha: 0.88)),
+                    navIcon: Color(uiColor: UIColor(hue: hue, saturation: bgSat, brightness: 0.16, alpha: 1)),
+                    accentInk: Color(uiColor: UIColor(hue: hue, saturation: fgSat, brightness: 0.94, alpha: 1))
+                )
+            }
             return ControlColors(
                 buttonFill: Color(uiColor: UIColor(hue: hue, saturation: bgSat, brightness: 0.16, alpha: 1)),
                 buttonIcon: Color(uiColor: UIColor(hue: hue, saturation: fgSat, brightness: 0.96, alpha: 1)),
@@ -102,25 +122,43 @@ enum PlayerBackdropPalette {
             shift = 0
         }
         let controlHue = wrapped(hue + shift)
-        let buttonSat = min(max(saturation * 0.65, 0.42), 0.68)
-        let buttonBright: CGFloat = style == .deepChromatic ? 0.21 : 0.19
-        let iconSat = min(max(saturation * 0.20, 0.14), 0.22)
-        let capSat = min(max(saturation * 0.62, 0.35), 0.68)
-        let capBright: CGFloat = style == .deepChromatic ? 0.14 : 0.16
-        let navIconSat = min(max(saturation * 0.22, 0.16), 0.24)
+        let isFrosted = style == .frostedArtwork
+        let accentSat = isFrosted ? min(max(saturation * 0.14, 0.08), 0.16) : min(max(saturation * 0.22, 0.16), 0.24)
+        let accentInk = Color(uiColor: UIColor(hue: controlHue, saturation: accentSat, brightness: isFrosted ? 0.97 : 0.94, alpha: 1))
+        if isLight {
+            let lightFillSat = isFrosted ? min(max(saturation * 0.18, 0.10), 0.22) : min(max(saturation * 0.24, 0.14), 0.28)
+            let darkInkSat = isFrosted ? min(max(saturation * 0.50, 0.28), 0.58) : min(max(saturation * 0.68, 0.42), 0.72)
+            let fillAlpha: CGFloat = isFrosted ? 0.84 : 0.96
+            let capAlpha: CGFloat = isFrosted ? 0.78 : 0.88
+            let inkColor = Color(uiColor: UIColor(hue: controlHue, saturation: darkInkSat, brightness: 0.20, alpha: 1))
+            return ControlColors(
+                buttonFill: Color(uiColor: UIColor(hue: controlHue, saturation: lightFillSat, brightness: 0.94, alpha: fillAlpha)),
+                buttonIcon: inkColor,
+                navCapsule: Color(uiColor: UIColor(hue: controlHue, saturation: lightFillSat, brightness: 0.92, alpha: capAlpha)),
+                navIcon: inkColor,
+                accentInk: accentInk
+            )
+        }
+        let buttonSat = isFrosted ? min(max(saturation * 0.45, 0.22), 0.50) : min(max(saturation * 0.65, 0.42), 0.68)
+        let buttonBright: CGFloat = style == .deepChromatic ? 0.21 : (isFrosted ? 0.16 : 0.19)
+        let buttonAlpha: CGFloat = isFrosted ? 0.72 : 1.0
+        let iconSat = isFrosted ? min(max(saturation * 0.14, 0.08), 0.16) : min(max(saturation * 0.20, 0.14), 0.22)
+        let capSat = isFrosted ? min(max(saturation * 0.42, 0.20), 0.48) : min(max(saturation * 0.62, 0.35), 0.68)
+        let capBright: CGFloat = style == .deepChromatic ? 0.14 : (isFrosted ? 0.14 : 0.16)
+        let capAlpha: CGFloat = isFrosted ? 0.68 : 0.84
         return ControlColors(
-            buttonFill: Color(uiColor: UIColor(hue: controlHue, saturation: buttonSat, brightness: buttonBright, alpha: 1)),
-            buttonIcon: Color(uiColor: UIColor(hue: controlHue, saturation: iconSat, brightness: 0.98, alpha: 1)),
-            navCapsule: Color(uiColor: UIColor(hue: controlHue, saturation: capSat, brightness: capBright, alpha: 0.84)),
-            navIcon: Color(uiColor: UIColor(hue: controlHue, saturation: navIconSat, brightness: 0.93, alpha: 1)),
-            accentInk: Color(uiColor: UIColor(hue: controlHue, saturation: navIconSat, brightness: 0.94, alpha: 1))
+            buttonFill: Color(uiColor: UIColor(hue: controlHue, saturation: buttonSat, brightness: buttonBright, alpha: buttonAlpha)),
+            buttonIcon: Color(uiColor: UIColor(hue: controlHue, saturation: iconSat, brightness: isFrosted ? 0.99 : 0.98, alpha: 1)),
+            navCapsule: Color(uiColor: UIColor(hue: controlHue, saturation: capSat, brightness: capBright, alpha: capAlpha)),
+            navIcon: Color(uiColor: UIColor(hue: controlHue, saturation: accentSat, brightness: isFrosted ? 0.96 : 0.93, alpha: 1)),
+            accentInk: accentInk
         )
     }
 
-    /// Artwork-tinted capsule color for the bottom player navigation bar: subtly darker and
-    /// less saturated than the lower backdrop while visibly shifting hue with every cover.
-    static func navCapsuleColor(for dominant: Color, style: PlayerGradientStyle) -> Color {
-        controlColors(for: dominant, style: style).navCapsule
+    /// Artwork-tinted capsule color for the bottom player navigation bar: adapts to Light/Dark
+    /// appearance while visibly shifting hue with every cover.
+    static func navCapsuleColor(for dominant: Color, style: PlayerGradientStyle, scheme: ColorScheme = .dark) -> Color {
+        controlColors(for: dominant, style: style, scheme: scheme).navCapsule
     }
 }
 
@@ -133,6 +171,7 @@ struct PlayerFullBleedBackground<Artwork: View>: View, Animatable {
     var secondaryStatusProfile: PlayerArtworkStatusProfile? = nil
     var safeAreaTop: CGFloat = 0
     var showsStatusProtection = true
+    var artworkHeightFraction: CGFloat? = nil
     @ViewBuilder var artwork: () -> Artwork
 
     var animatableData: Double {
@@ -170,14 +209,24 @@ struct PlayerFullBleedBackground<Artwork: View>: View, Animatable {
                 startPoint: .top,
                 endPoint: .bottom
             )
+        case .frostedArtwork:
+            Color(uiColor: muted(color)).opacity(0.75)
+                .background(Color(red: 0.08, green: 0.07, blue: 0.08))
         }
     }
 
     var body: some View {
         GeometryReader { geometry in
             let isDeep = appearance.gradientStyle == .deepChromatic
-            let effectiveFadeStart = (isDeep ? min(appearance.fadeStart, 0.58) : appearance.fadeStart).clamped(0, 0.96)
+            let isFrosted = appearance.gradientStyle == .frostedArtwork
+            let effectiveFadeStart: Double = {
+                if isFrosted { return min(appearance.fadeStart, 0.56).clamped(0, 0.94) }
+                if isDeep { return min(appearance.fadeStart, 0.58).clamped(0, 0.96) }
+                return appearance.fadeStart.clamped(0, 0.96)
+            }()
             let fadeSpan = 1 - effectiveFadeStart
+            let coverHeight = artworkHeightFraction.map { geometry.size.height * $0 }
+                ?? PlayerArtworkComposition.artworkHeight(in: geometry.size)
             ZStack(alignment: .top) {
                 ZStack {
                     backdropLayer(for: dominant)
@@ -194,7 +243,27 @@ struct PlayerFullBleedBackground<Artwork: View>: View, Animatable {
                                 ], startPoint: .top, endPoint: .bottom)
                             }
                     }
-                    if appearance.details > 0 {
+                    if isFrosted {
+                        let frostedBlur = max(appearance.blur * 1.45, 18)
+                        let frostedOpacity = 0.72 + appearance.details * 0.28
+                        artwork()
+                            .frame(width: geometry.size.width, height: geometry.size.height)
+                            .scaleEffect(1.18)
+                            .blur(radius: frostedBlur, opaque: true)
+                            .saturation(1.16)
+                            .opacity(frostedOpacity)
+                            .clipped()
+                        LinearGradient(
+                            stops: [
+                                .init(color: .clear, location: 0.0),
+                                .init(color: .black.opacity(0.14), location: 0.45),
+                                .init(color: .black.opacity(0.28), location: 0.78),
+                                .init(color: .black.opacity(0.36), location: 1.0)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    } else if appearance.details > 0 {
                         artwork()
                             .frame(width: geometry.size.width, height: geometry.size.height)
                             .clipped()
@@ -206,10 +275,18 @@ struct PlayerFullBleedBackground<Artwork: View>: View, Animatable {
                     Color.black.opacity(1 - appearance.intensity)
                 }.saturation(appearance.saturation)
                 artwork()
-                    .frame(width: geometry.size.width, height: PlayerArtworkComposition.artworkHeight(in: geometry.size))
+                    .frame(width: geometry.size.width, height: coverHeight)
                     .clipped()
                     .mask {
-                        if isDeep {
+                        if isFrosted {
+                            LinearGradient(stops: [
+                                .init(color: .white, location: 0),
+                                .init(color: .white, location: effectiveFadeStart),
+                                .init(color: .white.opacity(0.76), location: effectiveFadeStart + fadeSpan * 0.32),
+                                .init(color: .white.opacity(0.34), location: effectiveFadeStart + fadeSpan * 0.68),
+                                .init(color: .clear, location: 1)
+                            ], startPoint: .top, endPoint: .bottom)
+                        } else if isDeep {
                             LinearGradient(stops: [
                                 .init(color: .white, location: 0),
                                 .init(color: .white, location: effectiveFadeStart),
