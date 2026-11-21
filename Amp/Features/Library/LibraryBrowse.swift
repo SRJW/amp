@@ -113,13 +113,17 @@ struct SongBrowseRequest: Hashable, Sendable {
     /// Empty means all genres; the sentinel represents songs with no usable genre tag.
     var genre = ""
     var mood = LibraryMood.all
+    /// Empty means all formats; `LibraryBrowse.losslessFormat` matches lossless tracks; otherwise an uppercase format key (e.g. "MP3", "FLAC", "ALAC", "AAC").
+    var format = ""
 
     func results() -> [Song] {
         let search = SectionSearch(query)
         return songs.filter { song in
             let genres = Genres.parse(song.genre)
             let matchesGenre = genre.isEmpty || (genre == LibraryBrowse.untaggedGenre ? genres.isEmpty : genres.contains { SectionSearch.key($0) == genre })
-            return matchesGenre && mood.matches(song) && search.matches([song.title, song.artist, song.album, song.genre ?? ""])
+            let matchesFormat = format.isEmpty
+                || (format == LibraryBrowse.losslessFormat ? song.isLossless : LibraryBrowse.formatKey(for: song) == format)
+            return matchesGenre && matchesFormat && mood.matches(song) && search.matches([song.title, song.artist, song.album, song.genre ?? ""])
         }.map { song in
             let fact = facts[song.id] ?? LibraryBrowseFact(addedAt: song.dateModified)
             return BrowseEntry(value: song, id: song.id, title: song.title, artist: song.artist, album: song.album,
@@ -130,6 +134,8 @@ struct SongBrowseRequest: Hashable, Sendable {
 
 enum LibraryBrowse {
     static let untaggedGenre = "\u{0}"
+    static let losslessFormat = "\u{1}"
+
     static func genres(in songs: [Song]) -> [String] {
         var values: [String: String] = [:]
         for song in songs {
@@ -139,6 +145,20 @@ enum LibraryBrowse {
             }
         }
         return values.values.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+    }
+
+    static func formatKey(for song: Song) -> String {
+        let ext = (song.path as NSString).pathExtension.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let codec = song.codec?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() ?? ""
+        if codec == "ALAC" { return "ALAC" }
+        if codec == "AAC" || codec.hasPrefix("HE-AAC") { return "AAC" }
+        if !ext.isEmpty { return ext }
+        return codec
+    }
+
+    static func formats(in songs: [Song]) -> [String] {
+        Set(songs.map(formatKey).filter { !$0.isEmpty })
+            .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
     }
 }
 

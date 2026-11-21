@@ -18,8 +18,10 @@ struct AllSongsView: View {
     @State private var added = SongAddedPeriod.any
     @State private var genre = ""
     @State private var mood = LibraryMood.all
+    @State private var format = ""
     @State private var results: [Song]?
     @State private var genres: [String] = []
+    @State private var formats: [String] = []
     @FocusState private var searchFocused: Bool
 
     init(folderPath: String? = nil, category: LibraryCategory = .songs) {
@@ -45,13 +47,13 @@ struct AllSongsView: View {
         let name = (folderPath as NSString).lastPathComponent
         return name.isEmpty ? "Music folder" : name
     }
-    private var hasFilters: Bool { added != .any || !genre.isEmpty || mood != .all }
+    private var hasFilters: Bool { added != .any || !genre.isEmpty || mood != .all || !format.isEmpty }
     private var request: SongBrowseRequest {
         let now = LibraryDatabase.now()
         let facts = library.browseFacts
         let songs = added == .any ? scopedSongs : scopedSongs.filter { added.contains(facts[$0.id]?.addedAt ?? $0.dateModified, now: now) }
         return SongBrowseRequest(songs: songs, facts: facts, query: query,
-                                 sort: LibrarySort(rawValue: sort) ?? .title, genre: genre, mood: mood)
+                                 sort: LibrarySort(rawValue: sort) ?? .title, genre: genre, mood: mood, format: format)
     }
     private var selectedSongs: [Song] {
         SongBrowseRequest(songs: scopedSongs.filter { selected.contains($0.id) }, facts: library.browseFacts,
@@ -67,7 +69,7 @@ struct AllSongsView: View {
                     if showsFilters { filters }
                     if showsSearch {
                         VStack(spacing: Spacing.sm) {
-                            GlassSearchField(text: $query, prompt: "Search songs", focused: $searchFocused,
+                            GlassSearchField(text: $query, prompt: L("Search songs"), focused: $searchFocused,
                                              close: closeSearch, identifier: "sectionSearchField", historyScope: "songs")
                             if query.trimmed.isEmpty {
                                 RecentSearchesView(scope: "songs") { query = $0; searchFocused = true }
@@ -80,10 +82,10 @@ struct AllSongsView: View {
                     if category == .recentlyPlayed { recentCollections }
                     if let results {
                         if hasFilters || !query.trimmed.isEmpty {
-                            Text("\(results.count) \(results.count == 1 ? "match" : "matches")").font(.caption).foregroundStyle(.secondary)
+                            Text(results.count == 1 ? L("1 match") : L("%d matches", results.count)).font(.caption).foregroundStyle(.secondary)
                                 .padding(.horizontal, Spacing.gutter)
                         }
-                        SongList(songs: results, emptyMessage: scopedSongs.isEmpty ? "No songs found." : "No songs match these filters.",
+                        SongList(songs: results, emptyMessage: scopedSongs.isEmpty ? L("No songs found.") : L("No songs match these filters."),
                                  emptyIcon: "music.note", source: playbackSource, selection: selecting ? $selected : nil, showsFileDetails: true,
                                  onPlay: { SearchHistoryStore.shared.remember(query, in: "songs") })
                     } else { ProgressView().frame(maxWidth: .infinity).padding() }
@@ -100,21 +102,21 @@ struct AllSongsView: View {
             if !snapshot.query.isEmpty { try? await Task.sleep(for: .milliseconds(120)) }
             guard !Task.isCancelled else { return }
             let updated = await Task.detached(priority: .userInitiated) {
-                (snapshot.results(), LibraryBrowse.genres(in: snapshot.songs))
+                (snapshot.results(), LibraryBrowse.genres(in: snapshot.songs), LibraryBrowse.formats(in: snapshot.songs))
             }.value
             guard !Task.isCancelled else { return }
-            results = updated.0; genres = updated.1
+            results = updated.0; genres = updated.1; formats = updated.2
         }
         .refreshable { library.scan() }
         .onChange(of: library.songs) { _, songs in selected.formIntersection(Set(songs.map(\.id))) }
         .alert("Delete \(countLabel(pendingDeletion.count, "song")) from device?", isPresented: $confirmsDeletion) {
-            Button("Delete from device", role: .destructive) {
+            Button(L("Delete from device"), role: .destructive) {
                 let deleted = actions.deleteFromDevice(pendingDeletion)
                 selected.subtract(deleted)
                 pendingDeletion = []
                 if selected.isEmpty { selecting = false }
             }
-            Button("Cancel", role: .cancel) { pendingDeletion = [] }
+            Button(L("Cancel"), role: .cancel) { pendingDeletion = [] }
         } message: {
             Text("This permanently removes the selected audio files from amp, Files, the library and playlists. It cannot be undone. Separate copies elsewhere are kept.")
         }
@@ -137,11 +139,11 @@ struct AllSongsView: View {
                        play: { actions.playInOrder(results ?? [], source: playbackSource) },
                        search: { showsSearch = true; searchFocused = true },
                        select: { selecting.toggle(); if !selecting { selected.removeAll() } }) {
-            Picker("Sort by", selection: $sort) {
-                ForEach(LibrarySort.songs, id: \.rawValue) { Text($0.label).tag($0.rawValue) }
+            Picker(L("Sort by"), selection: $sort) {
+                ForEach(LibrarySort.songs, id: \.rawValue) { Text(L($0.label)).tag($0.rawValue) }
             }
-            Button(showsFilters ? "Hide filters" : "Show filters", systemImage: "line.3.horizontal.decrease") { showsFilters.toggle() }
-            Button("Import music", systemImage: "plus") { router.showsImporter = true }
+            Button(showsFilters ? L("Hide filters") : L("Show filters"), systemImage: "line.3.horizontal.decrease") { showsFilters.toggle() }
+            Button(L("Import music"), systemImage: "plus") { router.showsImporter = true }
         }
     }
 
@@ -163,36 +165,49 @@ struct AllSongsView: View {
     }
 
     private var filters: some View {
-        VStack(alignment: .leading, spacing: Spacing.sm) {
-            HStack(spacing: Spacing.sm) {
+        let columns = [GridItem(.flexible(), spacing: Spacing.sm), GridItem(.flexible(), spacing: Spacing.sm)]
+        return VStack(alignment: .leading, spacing: Spacing.sm) {
+            LazyVGrid(columns: columns, spacing: Spacing.sm) {
                 Menu {
-                    Picker("Date added", selection: $added) {
+                    Picker(L("Date added"), selection: $added) {
                         ForEach(SongAddedPeriod.allCases) { Text($0.description).tag($0) }
                     }
                 } label: { SongsFilterLabel(title: added.label, symbol: "calendar.badge.clock") }
                 Menu {
-                    Picker("Genre", selection: $genre) {
-                        Text("All genres").tag("")
-                        Text("Untagged").tag(LibraryBrowse.untaggedGenre)
+                    Picker(L("Format"), selection: $format) {
+                        Text(L("All formats")).tag("")
+                        Text(L("Lossless")).tag(LibraryBrowse.losslessFormat)
+                        ForEach(formats, id: \.self) { Text($0).tag($0) }
+                    }
+                } label: { SongsFilterLabel(title: formatTitle, symbol: "waveform") }
+                .accessibilityIdentifier("songsFormatFilter")
+                Menu {
+                    Picker(L("Genre"), selection: $genre) {
+                        Text(L("All genres")).tag("")
+                        Text(L("Untagged")).tag(LibraryBrowse.untaggedGenre)
                         ForEach(genres, id: \.self) { Text($0).tag(SectionSearch.key($0)) }
                     }
                 } label: { SongsFilterLabel(title: genreTitle, symbol: "guitars") }
                 Menu {
-                    Picker("Mood", selection: $mood) {
-                        ForEach(LibraryMood.allCases, id: \.rawValue) { Text($0 == .all ? "All moods" : $0.label).tag($0) }
+                    Picker(L("Mood"), selection: $mood) {
+                        ForEach(LibraryMood.allCases, id: \.rawValue) { Text($0 == .all ? L("All moods") : $0.label).tag($0) }
                     }
-                } label: { SongsFilterLabel(title: mood == .all ? "Mood" : mood.label, symbol: "sparkles") }
+                } label: { SongsFilterLabel(title: mood == .all ? L("Mood") : mood.label, symbol: "sparkles") }
             }
             if hasFilters {
-                Button("Clear filters") { added = .any; genre = ""; mood = .all }
+                Button(L("Clear filters")) { added = .any; genre = ""; mood = .all; format = "" }
                     .font(.caption).frame(minHeight: 44)
             }
         }.padding(.horizontal, Spacing.gutter)
     }
 
     private var genreTitle: String {
-        genre.isEmpty ? "Genre" : genre == LibraryBrowse.untaggedGenre ? "Untagged"
-            : genres.first { SectionSearch.key($0) == genre } ?? "Genre"
+        genre.isEmpty ? L("Genre") : genre == LibraryBrowse.untaggedGenre ? L("Untagged")
+            : genres.first { SectionSearch.key($0) == genre } ?? L("Genre")
+    }
+
+    private var formatTitle: String {
+        format.isEmpty ? L("Format") : format == LibraryBrowse.losslessFormat ? L("Lossless") : format
     }
 
     private var selectionActions: some View {
