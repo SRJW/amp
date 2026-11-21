@@ -16,6 +16,7 @@ struct WaveformSeekBar: View {
     private var scrolling: Bool { referenceStyle && scrollsWithPlayback }
     @State private var scrubAnchorMs: Int64?
     var barHeight: CGFloat = 56
+    var referenceInk: Color? = nil
     @Environment(\.playerForegroundInk) private var playerInk
     @Environment(\.palette) private var palette
     @Environment(\.playerReduceMotion) private var reduceMotion
@@ -62,8 +63,9 @@ struct WaveformSeekBar: View {
         }
         .overlay {
             if referenceStyle {
+                let ink = referenceInk ?? playerInk
                 GeometryReader { geometry in
-                Rectangle().fill(playerInk.opacity(0.7))
+                Rectangle().fill(ink.opacity(0.7))
                     .frame(width: 1)
                     .position(x: scrolling ? geometry.size.width / 2
                         : geometry.size.width * CGFloat(WaveformTimeline.fractionOf(previewMs ?? positionMs, durationMs)),
@@ -99,6 +101,7 @@ struct WaveformSeekBar: View {
     }
 
     private func draw(in context: inout GraphicsContext, size: CGSize) {
+        let ink = referenceInk ?? playerInk
         let barWidth: CGFloat = referenceStyle ? 7 : Self.barWidth
         let step = barWidth + Self.barGap
         let count = max(Int((size.width + Self.barGap) / step), 1)
@@ -136,11 +139,11 @@ struct WaveformSeekBar: View {
                 let height = max(CGFloat(level) * size.height * 0.75, 2)
                 let rect = CGRect(x: x - barWidth / 2, y: (size.height - height) / 2, width: barWidth, height: height)
                 let path = Path(roundedRect: rect, cornerRadius: barWidth / 2)
-                context.fill(path, with: .color(playerInk.opacity(0.70)))
+                context.fill(path, with: .color(ink.opacity(0.70)))
                 var played = context
                 played.clip(to: Path(CGRect(x: 0, y: 0, width: playedX, height: size.height)))
                 played.blendMode = .copy
-                played.fill(path, with: .color(playerInk.opacity(0.25)))
+                played.fill(path, with: .color(ink.opacity(0.25)))
             }
         } else {
             for (i, level) in bars.enumerated() {
@@ -148,13 +151,13 @@ struct WaveformSeekBar: View {
                 let height = max(CGFloat(level) * size.height * (referenceStyle ? 0.75 : 1), 2)
                 let rect = CGRect(x: x, y: (size.height - height) / 2, width: barWidth, height: height)
                 let path = Path(roundedRect: rect, cornerRadius: barWidth / 2)
-                context.fill(path, with: .color(referenceStyle ? playerInk.opacity(0.70) : palette.onSurfaceVariant.opacity(0.35)))
+                context.fill(path, with: .color(referenceStyle ? ink.opacity(0.70) : palette.onSurfaceVariant.opacity(0.35)))
                 // Clip at the exact playhead, including the partially played bar. Updating
                 // whole bars made static mode look as though it jumped every few seconds.
                 var played = context
                 played.clip(to: Path(CGRect(x: 0, y: 0, width: max(playedX, 0), height: size.height)))
                 played.blendMode = .copy
-                played.fill(path, with: .color(referenceStyle ? playerInk.opacity(0.25) : palette.primary))
+                played.fill(path, with: .color(referenceStyle ? ink.opacity(0.25) : palette.primary))
             }
         }
         for ms in bookmarks {

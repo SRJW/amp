@@ -9,6 +9,7 @@ struct NowPlayingView: View {
     @Environment(LibraryStore.self) private var library
     @Environment(AppSettings.self) private var settings
     @Environment(\.playerForegroundInk) private var playerInk
+    @Environment(\.playerArtworkPresent) private var playerArtworkPresent
     @Environment(\.colorScheme) private var themeScheme
     @Environment(\.palette) private var palette
     @Environment(\.playerReduceMotion) private var reduceMotion
@@ -17,6 +18,8 @@ struct NowPlayingView: View {
     @State private var artworkDrag = 0.0
     @State private var artworkGestureMode = 0
     @State private var artworkGestureEntry: UUID?
+    @State private var artworkDominant: UInt32 = LyricsPalette.fallback.artworkDominant
+    @State private var artworkRevision = 0
     let drag: PlayerDragState
     @State private var showsQueue = false
     @State private var showsLyrics = false
@@ -25,8 +28,20 @@ struct NowPlayingView: View {
     @State private var showsAudioDetails = false
     @GestureState private var artworkGestureActive = false
 
+    private var artworkControls: PlayerBackdropPalette.ControlColors? {
+        guard playerArtworkPresent, settings.customTheme == nil,
+              settings.playerBackground.navBarCapsule || settings.playerBackground.gradientStyle == .deepChromatic || settings.theme == .artwork else {
+            return nil
+        }
+        return PlayerBackdropPalette.controlColors(
+            for: Color(argb: artworkDominant),
+            style: settings.playerBackground.gradientStyle
+        )
+    }
+
     var body: some View {
         let state = player.state
+        let artworkURL = state.currentSong?.url
         GeometryReader { geometry in
             if let current = state.currentSong {
                 let song = library.songs.first(where: { $0.id == current.id }) ?? current
@@ -56,12 +71,13 @@ struct NowPlayingView: View {
                         .frame(width: width - 32).position(x: width / 2, y: height * 0.633)
                     referenceOptions(song, state: state, width: width)
                         .frame(width: width, height: 48).position(x: width / 2, y: height * PlayerLayoutMetrics.secondaryCentreH)
-                    ProgressSection(song: song, screenWidth: width) { controls(state, width: width) }
+                    ProgressSection(song: song, screenWidth: width, controlColors: artworkControls) { controls(state, width: width) }
                         .frame(width: width - 20, height: height * 0.18)
                         .position(x: width / 2, y: height * PlayerLayoutMetrics.transportCentreH)
                     let navCentreY = AppNavigationMetrics.centreY(height: height, safeAreaBottom: navigationBottomInset)
                     Button { showsAudioDetails = true } label: {
                         Text(audioSummary(song)).font(.system(size: 10.5 * PlayerLayoutMetrics.technicalTextScale, weight: .bold))
+                            .foregroundStyle(artworkControls?.accentInk.opacity(0.80) ?? playerInk)
                             .lineLimit(1).minimumScaleFactor(0.75)
                     }
                     .frame(width: width - 24)
@@ -72,6 +88,7 @@ struct NowPlayingView: View {
                     }
                 }
                 .foregroundStyle(playerInk)
+                .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: artworkDominant)
             } else {
                 ZStack {
                     EmptyState(message: "Nothing is playing. Pick a song from your library.", systemImage: "music.note")
@@ -89,6 +106,15 @@ struct NowPlayingView: View {
         .buttonStyle(.plain)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .modifier(PlayerForegroundMotion(drag: drag, externallyFaded: true))
+        .onReceive(NotificationCenter.default.publisher(for: ArtworkLoader.didChange)) { note in
+            if note.object as? String == artworkURL?.path { artworkRevision += 1 }
+        }
+        .task(id: "\(artworkURL?.path ?? "")|\(artworkRevision)") {
+            guard let artworkURL else { return }
+            let sampled = await LyricsPaletteCache.shared.palette(for: artworkURL)
+            guard !Task.isCancelled else { return }
+            artworkDominant = sampled.artworkDominant
+        }
         .onChange(of: artworkGestureActive) { _, active in
             guard !active else { return }
             Task { @MainActor in
@@ -289,9 +315,14 @@ struct NowPlayingView: View {
     private var themedControls: Bool { settings.customTheme != nil || settings.theme == .artwork }
 
     private func transport(_ symbol: String, identifier: String, label: String, size: CGFloat, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
+        let isSeek = symbol.hasPrefix("seek.")
+        let iconColor: Color = artworkControls.map { isSeek ? $0.buttonIcon.opacity(0.72) : $0.buttonIcon }
+            ?? (themedControls ? palette.onFilledButton : .white)
+        let circleFill: Color = artworkControls.map { isSeek ? $0.buttonFill.opacity(0.52) : $0.buttonFill }
+            ?? (themedControls ? palette.filledButton : .black)
+        return Button(action: action) {
             Group {
-                if symbol.hasPrefix("seek.") {
+                if isSeek {
                     HStack(spacing: -2) {
                         ForEach(0..<3) { _ in
                             Image(systemName: symbol == "seek.backward" ? "arrowtriangle.left.fill" : "arrowtriangle.right.fill")
@@ -309,10 +340,10 @@ struct NowPlayingView: View {
                 }
             }
                 .font(.system(size: size * 0.43, weight: .black))
-                .foregroundStyle(themedControls ? palette.onFilledButton : .white)
+                .foregroundStyle(iconColor)
                 .frame(width: size, height: size)
-                .background(themedControls ? palette.filledButton : .black, in: Circle())
-                .frame(minWidth: symbol.hasPrefix("seek.") ? PlayerButtonConstants.seekTouchSize : PlayerButtonConstants.touchSize,
+                .background(circleFill, in: Circle())
+                .frame(minWidth: isSeek ? PlayerButtonConstants.seekTouchSize : PlayerButtonConstants.touchSize,
                        minHeight: PlayerButtonConstants.touchSize)
                 .contentShape(Rectangle())
         }
@@ -463,6 +494,7 @@ private struct ToggleIcon: View {
 private struct ProgressSection<Controls: View>: View {
     let song: Song
     let screenWidth: CGFloat
+    var controlColors: PlayerBackdropPalette.ControlColors? = nil
     @ViewBuilder let controls: () -> Controls
     @Environment(PlayerController.self) private var player
     @Environment(AppSettings.self) private var settings
@@ -493,7 +525,8 @@ private struct ProgressSection<Controls: View>: View {
                                         guard player.state.currentEntry?.id == entryID else { return }
                                         player.seek(to: target)
                                     }, referenceStyle: true, scrollsWithPlayback: waveformMode == PlayerWaveformMode.scrolling.rawValue,
-                                    barHeight: geometry.size.height)
+                                    barHeight: geometry.size.height,
+                                    referenceInk: controlColors?.accentInk)
                         .id(entryID)
                         .transition(reduceMotion ? .opacity : .modifier(
                             active: WaveformArrival(amount: 0), identity: WaveformArrival(amount: 1)))
@@ -536,12 +569,14 @@ private struct ProgressSection<Controls: View>: View {
     }
 
     private func timeBadge(_ ms: Int64) -> some View {
-        Text(formatDuration(ms))
+        let foreground: Color = controlColors?.buttonIcon.opacity(0.88) ?? (themedBadges ? palette.onFilledButton : .white)
+        let background: Color = controlColors?.buttonFill.opacity(0.90) ?? (themedBadges ? palette.filledButton : .black)
+        return Text(formatDuration(ms))
             .font(.system(size: 14 * PlayerLayoutMetrics.timeTextScale, weight: .bold).monospacedDigit())
-            .foregroundStyle(themedBadges ? palette.onFilledButton : .white)
+            .foregroundStyle(foreground)
             .lineLimit(1).minimumScaleFactor(PlayerLayoutMetrics.timeMinimumScale)
             .frame(width: screenWidth * PlayerLayoutMetrics.timeBadgeW, height: PlayerLayoutMetrics.timeBadgeHeight)
-            .background(themedBadges ? palette.filledButton : .black, in: Capsule())
+            .background(background, in: Capsule())
     }
 }
 

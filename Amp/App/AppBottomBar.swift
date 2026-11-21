@@ -108,14 +108,23 @@ struct AppNavigationButtons: View {
         router.activate([LibrarySection.library, .equalizer, .search][index])
     }
 
+    private var usesArtworkControlPalette: Bool {
+        inPlayer && playerArtworkPresent && settings.customTheme == nil &&
+            (settings.playerBackground.navBarCapsule || settings.playerBackground.gradientStyle == .deepChromatic || settings.theme == .artwork)
+    }
+
+    private var controlColors: PlayerBackdropPalette.ControlColors {
+        PlayerBackdropPalette.controlColors(
+            for: Color(argb: artworkDominant),
+            style: settings.playerBackground.gradientStyle
+        )
+    }
+
     private var playerCapsuleFill: Color {
         if !playerArtworkPresent {
             return colorScheme == .light ? Color.black.opacity(0.06) : Color.white.opacity(0.10)
         }
-        return PlayerBackdropPalette.navCapsuleColor(
-            for: Color(argb: artworkDominant),
-            style: settings.playerBackground.gradientStyle
-        )
+        return controlColors.navCapsule
     }
 
     var body: some View {
@@ -159,16 +168,16 @@ struct AppNavigationButtons: View {
                 Capsule()
                     .fill(playerCapsuleFill)
                     .frame(width: width, height: 54)
-                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: artworkDominant)
                     .allowsHitTesting(false)
             }
         }
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: artworkDominant)
         .animation(reduceMotion ? nil : .spring(response: AppNavigationMetrics.selectionDuration, dampingFraction: 0.86), value: selectedIndex)
         .onReceive(NotificationCenter.default.publisher(for: ArtworkLoader.didChange)) { note in
             if note.object as? String == artworkURL?.path { artworkRevision += 1 }
         }
-        .task(id: "\(inPlayer && settings.playerBackground.navBarCapsule)|\(artworkURL?.path ?? "")|\(artworkRevision)") {
-            guard inPlayer, settings.playerBackground.navBarCapsule, let artworkURL else { return }
+        .task(id: "\(inPlayer && settings.customTheme == nil)|\(artworkURL?.path ?? "")|\(artworkRevision)") {
+            guard inPlayer, settings.customTheme == nil, let artworkURL else { return }
             let sampled = await LyricsPaletteCache.shared.palette(for: artworkURL)
             guard !Task.isCancelled else { return }
             artworkDominant = sampled.artworkDominant
@@ -212,6 +221,11 @@ struct AppNavigationButtons: View {
 
     private func tint(selected: Bool) -> Color {
         if inPlayer {
+            if usesArtworkControlPalette {
+                return settings.playerBackground.navBarCapsule
+                    ? controlColors.navIcon
+                    : controlColors.navIcon.opacity(selected ? 1 : 0.68)
+            }
             return settings.playerBackground.navBarCapsule
                 ? playerInk.opacity(0.88)
                 : playerInk.opacity(selected ? 1 : 0.6)

@@ -56,15 +56,42 @@ enum PlayerBackdropPalette {
         )
     }
 
-    /// Artwork-tinted capsule color for the bottom player navigation bar: subtly darker and
-    /// less saturated than the lower backdrop while visibly shifting hue with every cover.
-    static func navCapsuleColor(for dominant: Color, style: PlayerGradientStyle) -> Color {
+    struct ControlColors: Equatable {
+        /// Deep artwork-tinted fill for transport button circles and time pills.
+        let buttonFill: Color
+        /// Soft pastel artwork-tinted ink for icons inside transport buttons and time pills.
+        let buttonIcon: Color
+        /// Deep artwork-tinted fill for the bottom navigation capsule.
+        let navCapsule: Color
+        /// Soft pastel artwork-tinted ink for the four bottom navigation icons.
+        let navIcon: Color
+        /// Soft pastel artwork-tinted ink for the waveform bars and audio technical summary.
+        let accentInk: Color
+    }
+
+    /// Unified artwork-harmonized colors shared across transport buttons, waveform, bitrate,
+    /// bottom navigation capsule, and navigation icons so every player control shifts together.
+    static func controlColors(for dominant: Color, style: PlayerGradientStyle) -> ControlColors {
         var hue: CGFloat = 0, saturation: CGFloat = 0, brightness: CGFloat = 0, alpha: CGFloat = 0
         guard UIColor(dominant).getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: &alpha) else {
-            return Color(red: 0.09, green: 0.06, blue: 0.15).opacity(0.86)
+            return ControlColors(
+                buttonFill: Color(red: 0.11, green: 0.10, blue: 0.21),
+                buttonIcon: Color(red: 0.86, green: 0.88, blue: 0.99),
+                navCapsule: Color(red: 0.09, green: 0.06, blue: 0.15).opacity(0.84),
+                navIcon: Color(red: 0.78, green: 0.80, blue: 0.94),
+                accentInk: Color(red: 0.80, green: 0.82, blue: 0.95)
+            )
         }
         if saturation < 0.08 {
-            return Color(uiColor: UIColor(hue: hue, saturation: saturation * 0.3, brightness: 0.12, alpha: 0.78))
+            let bgSat = saturation * 0.30
+            let fgSat = saturation * 0.15
+            return ControlColors(
+                buttonFill: Color(uiColor: UIColor(hue: hue, saturation: bgSat, brightness: 0.16, alpha: 1)),
+                buttonIcon: Color(uiColor: UIColor(hue: hue, saturation: fgSat, brightness: 0.96, alpha: 1)),
+                navCapsule: Color(uiColor: UIColor(hue: hue, saturation: bgSat, brightness: 0.12, alpha: 0.84)),
+                navIcon: Color(uiColor: UIColor(hue: hue, saturation: fgSat, brightness: 0.91, alpha: 1)),
+                accentInk: Color(uiColor: UIColor(hue: hue, saturation: fgSat, brightness: 0.92, alpha: 1))
+            )
         }
         let shift: CGFloat
         if style == .deepChromatic {
@@ -74,10 +101,26 @@ enum PlayerBackdropPalette {
         } else {
             shift = 0
         }
-        let capHue = wrapped(hue + shift)
-        let capSat = min(max(saturation * 0.62, 0.32), 0.68)
-        let capBright = style == .deepChromatic ? 0.13 : 0.16
-        return Color(uiColor: UIColor(hue: capHue, saturation: capSat, brightness: capBright, alpha: 0.80))
+        let controlHue = wrapped(hue + shift)
+        let buttonSat = min(max(saturation * 0.65, 0.42), 0.68)
+        let buttonBright: CGFloat = style == .deepChromatic ? 0.21 : 0.19
+        let iconSat = min(max(saturation * 0.20, 0.14), 0.22)
+        let capSat = min(max(saturation * 0.62, 0.35), 0.68)
+        let capBright: CGFloat = style == .deepChromatic ? 0.14 : 0.16
+        let navIconSat = min(max(saturation * 0.22, 0.16), 0.24)
+        return ControlColors(
+            buttonFill: Color(uiColor: UIColor(hue: controlHue, saturation: buttonSat, brightness: buttonBright, alpha: 1)),
+            buttonIcon: Color(uiColor: UIColor(hue: controlHue, saturation: iconSat, brightness: 0.98, alpha: 1)),
+            navCapsule: Color(uiColor: UIColor(hue: controlHue, saturation: capSat, brightness: capBright, alpha: 0.84)),
+            navIcon: Color(uiColor: UIColor(hue: controlHue, saturation: navIconSat, brightness: 0.93, alpha: 1)),
+            accentInk: Color(uiColor: UIColor(hue: controlHue, saturation: navIconSat, brightness: 0.94, alpha: 1))
+        )
+    }
+
+    /// Artwork-tinted capsule color for the bottom player navigation bar: subtly darker and
+    /// less saturated than the lower backdrop while visibly shifting hue with every cover.
+    static func navCapsuleColor(for dominant: Color, style: PlayerGradientStyle) -> Color {
+        controlColors(for: dominant, style: style).navCapsule
     }
 }
 
