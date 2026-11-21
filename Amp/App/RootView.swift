@@ -13,6 +13,7 @@ struct RootView: View {
     @Environment(WifiTransferStore.self) private var transfer
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.palette) private var palette
+    @Environment(\.colorScheme) private var themeScheme
     @Environment(\.playerReduceMotion) private var reduceMotion
     @State private var releases = ReleaseChecker.shared
     @State private var chrome = LibraryChromeState()
@@ -92,7 +93,7 @@ struct RootView: View {
             Text(library.errorMessage ?? "")
         }
         .fullScreenCover(isPresented: Binding(get: { !settings.introductionCompleted }, set: { if !$0 { settings.introductionCompleted = true } })) {
-            IntroductionView(firstLaunch: true)
+            IntroductionView(firstLaunch: true).preferredColorScheme(themeScheme)
         }
         .onChange(of: fixTags.isRunning) { wasRunning, running in
             guard wasRunning, !running, !fixTags.inPlaceScope.isEmpty else { return }
@@ -106,6 +107,7 @@ struct RootView: View {
             settings.introductionCompleted && !router.showsNowPlaying && !router.showsSearch ? releases.prompt : nil
         }, set: { if $0 == nil { releases.dismissPrompt() } })) { release in
             AppUpdatePrompt(release: release, checker: releases)
+                .preferredColorScheme(themeScheme)
         }
         .onAppear { library.scan(); Task { await releases.checkOnOpen() } }
         .onChange(of: scenePhase) { _, phase in
@@ -224,6 +226,7 @@ private struct RouterSheets: ViewModifier {
     @Environment(LibraryActions.self) private var actions
     let active: Bool
     @Environment(AppRouter.self) private var router
+    @Environment(\.colorScheme) private var themeScheme
 
     func body(content: Content) -> some View {
         content
@@ -237,13 +240,13 @@ private struct RouterSheets: ViewModifier {
                 Text("Permanently delete “\(song.title)” from amp's folder in Files, the library and playlists? This cannot be undone. Separate copies elsewhere are not deleted.")
             }
             .sheet(item: Binding(get: { active ? router.songsForPlaylist.map(SongBatch.init) : nil }, set: { router.songsForPlaylist = $0?.songs })) { batch in
-                AddToPlaylistSheet(songs: batch.songs)
+                AddToPlaylistSheet(songs: batch.songs).preferredColorScheme(themeScheme)
             }
             .sheet(item: Binding(get: { active ? router.songForDetails : nil }, set: { router.songForDetails = $0 })) { song in
-                SongDetailsSheet(song: song)
+                SongDetailsSheet(song: song).preferredColorScheme(themeScheme)
             }
             .sheet(item: Binding(get: { active ? router.songForTagEdit : nil }, set: { router.songForTagEdit = $0 })) { song in
-                EditTagsSheet(song: song)
+                EditTagsSheet(song: song).preferredColorScheme(themeScheme)
             }
     }
 }

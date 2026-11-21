@@ -2,19 +2,38 @@ import SwiftUI
 
 struct ReleaseCheckView: View {
     @State private var checker = ReleaseChecker.shared
+    @Environment(\.palette) private var palette
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: Spacing.md) {
                 switch checker.state {
-                case .idle: Text("Check GitHub Releases for a newer build.")
-                case .checking: ProgressView("Checking releases…")
+                case .idle:
+                    Text(L("Check GitHub Releases for a newer build."))
+                        .foregroundStyle(palette.onSurface)
+                case .checking:
+                    ProgressView(L("Checking releases…"))
+                        .foregroundStyle(palette.onSurface)
+                        .tint(palette.primary)
                 case .current:
-                    Label("You have the latest published release for this variant", systemImage: "checkmark.circle")
-                case .failed(let message): Text(message).foregroundStyle(.secondary)
+                    Label(L("You have the latest published release for this variant"), systemImage: "checkmark.circle")
+                        .foregroundStyle(palette.onSurface)
+                case .failed(let message):
+                    Text(message)
+                        .foregroundStyle(palette.onSurfaceVariant)
                 case .available(let release):
-                    Label("\(release.tag_name) is available", systemImage: "arrow.down.circle").font(.headline)
-                    if let notes = release.body?.nonBlank { Text(notes).font(.subheadline).lineLimit(8) }
-                    Text("Install the IPA using SideStore or AltStore. amp cannot install itself.").font(.footnote).foregroundStyle(.secondary)
+                    Label("\(release.tag_name) \(L("is available"))", systemImage: "arrow.down.circle")
+                        .font(.headline)
+                        .foregroundStyle(palette.onSurface)
+                    if let notes = release.body?.nonBlank {
+                        Text(LocalizedStringKey(notes))
+                            .font(.footnote)
+                            .foregroundStyle(palette.onSurface)
+                            .textSelection(.enabled)
+                    }
+                    Text(L("Install the IPA using SideStore or AltStore. amp cannot install itself."))
+                        .font(.footnote)
+                        .foregroundStyle(palette.onSurfaceVariant)
                 }
             }
             .fixedSize(horizontal: false, vertical: true)
@@ -22,29 +41,32 @@ struct ReleaseCheckView: View {
             .padding(Spacing.lg)
             if case .available(let release) = checker.state {
                 Divider().padding(.leading, Spacing.lg)
-                if let notes = release.body?.nonBlank {
-                    Text(LocalizedStringKey(notes)).font(.footnote).padding(Spacing.lg)
-                }
                 Link(destination: release.html_url) {
-                    SettingsActionLabel(title: "Release notes", icon: "doc.text", accessory: "arrow.up.right")
+                    SettingsActionLabel(title: L("Release notes"), icon: "doc.text", accessory: "arrow.up.right")
                 }
                 if let url = release.download(animated: BuildVariant.animated) {
                     Divider().padding(.leading, Spacing.lg)
                     Link(destination: url) {
-                        SettingsActionLabel(title: "Download \(BuildVariant.animated ? "animated" : "static") IPA", icon: "arrow.down.circle", accessory: "arrow.up.right")
+                        SettingsActionLabel(
+                            title: BuildVariant.animated ? L("Download animated IPA") : L("Download static IPA"),
+                            icon: "arrow.down.circle",
+                            accessory: "arrow.up.right"
+                        )
                     }
                 }
             }
             Divider().padding(.leading, Spacing.lg)
             Button { Task { await checker.check(manual: true) } } label: {
-                SettingsActionLabel(title: "Check for updates", icon: "arrow.clockwise")
+                SettingsActionLabel(title: L("Check for updates"), icon: "arrow.clockwise")
             }.disabled(checker.state == .checking)
             Divider().padding(.leading, Spacing.lg)
             Link(destination: URL(string: "https://github.com/SRJW/amp/releases")!) {
-                SettingsActionLabel(title: "All releases", icon: "shippingbox", accessory: "arrow.up.right")
+                SettingsActionLabel(title: L("All releases"), icon: "shippingbox", accessory: "arrow.up.right")
             }
             if let checkedAt = checker.checkedAt {
-                Text("Last checked \(checkedAt.formatted())").font(.caption).foregroundStyle(.secondary)
+                Text("\(L("Last checked")) \(checkedAt.formatted())")
+                    .font(.caption)
+                    .foregroundStyle(palette.onSurfaceVariant)
                     .padding([.horizontal, .bottom], Spacing.lg)
             }
         }

@@ -8,6 +8,8 @@ struct AlbumsView: View {
 struct LibraryOverviewView: View {
     @Environment(AppRouter.self) private var router
     @Environment(LibraryStore.self) private var library
+    @Environment(\.palette) private var palette
+    @Environment(\.colorScheme) private var themeScheme
     @State private var releases = ReleaseChecker.shared
     @AppStorage(LibraryCustomizationPreferences.orderKey) private var storedOrder = LibraryCustomizationPreferences.defaultOrder
     @AppStorage(LibraryCustomizationPreferences.hiddenKey) private var hiddenSections = ""
@@ -17,9 +19,28 @@ struct LibraryOverviewView: View {
             VStack(alignment: .leading, spacing: Spacing.sm) {
                 if case .available(let release) = releases.state {
                     Button { router.open(.settingsPage(.about)) } label: {
-                        Label("amp \(release.tag_name) is available", systemImage: "arrow.down.circle")
-                            .padding(Spacing.lg)
+                        HStack(spacing: Spacing.md) {
+                            Image(systemName: "arrow.down.circle.fill")
+                                .foregroundStyle(palette.primary)
+                            Text("amp \(release.tag_name) \(L("is available"))")
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(palette.onSurface)
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(palette.onSurfaceVariant)
+                        }
+                        .padding(.horizontal, Spacing.lg)
+                        .padding(.vertical, Spacing.md)
+                        .background(palette.surface, in: RoundedRectangle(cornerRadius: Radius.medium, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: Radius.medium, style: .continuous)
+                                .strokeBorder(palette.outline.opacity(0.35), lineWidth: 1)
+                        }
                     }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, Spacing.gutter)
+                    .padding(.bottom, Spacing.xs)
                 }
                 if LibraryCategory.visible(order: storedOrder, hidden: hiddenSections).isEmpty {
                     Text(L(LibraryCustomizationText.empty)).foregroundStyle(.secondary).padding(.horizontal, Spacing.gutter)
@@ -49,7 +70,7 @@ struct LibraryOverviewView: View {
                 .accessibilityLabel(L("Library options"))
             }
         }
-        .sheet(isPresented: $showsOrder) { LibraryCustomizationView() }
+        .sheet(isPresented: $showsOrder) { LibraryCustomizationView().preferredColorScheme(themeScheme) }
     }
 
     private func customize() { showsOrder = true }

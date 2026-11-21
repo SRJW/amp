@@ -608,6 +608,7 @@ private struct MetadataSettingsView: View {
 }
 
 private struct AboutSettingsView: View {
+    @Environment(\.colorScheme) private var themeScheme
     @State private var showingIntroduction = false
     var body: some View {
         SettingsPage {
@@ -663,7 +664,7 @@ private struct AboutSettingsView: View {
             SettingsGroup(L("Updates")) { ReleaseCheckView() }
         }
         .navigationTitle(L("About amp"))
-        .sheet(isPresented: $showingIntroduction) { IntroductionView() }
+        .sheet(isPresented: $showingIntroduction) { IntroductionView().preferredColorScheme(themeScheme) }
     }
 }
 
