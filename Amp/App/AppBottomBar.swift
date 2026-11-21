@@ -117,15 +117,17 @@ struct AppNavigationButtons: View {
     }
 
     private var usesArtworkControlPalette: Bool {
-        playerArtworkPresent && settings.customTheme == nil &&
-            (settings.playerBackground.navBarCapsule || settings.playerBackground.gradientStyle != .classic || settings.theme == .artwork)
+        guard playerArtworkPresent, settings.customTheme == nil else { return false }
+        let bg = settings.playerBackground
+        return bg.controlColorStyle == .monochrome || bg.navBarCapsule || bg.gradientStyle != .classic || settings.theme == .artwork
     }
 
     private var controlColors: PlayerBackdropPalette.ControlColors {
         PlayerBackdropPalette.controlColors(
             for: Color(argb: artworkDominant),
             style: settings.playerBackground.gradientStyle,
-            scheme: colorScheme
+            scheme: colorScheme,
+            colorStyle: settings.playerBackground.controlColorStyle
         )
     }
 

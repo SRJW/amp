@@ -69,11 +69,34 @@ enum PlayerBackdropPalette {
         let accentInk: Color
     }
 
-    /// Unified artwork-harmonized colors shared across transport buttons, waveform, bitrate,
-    /// bottom navigation capsule, and navigation icons so every player control shifts together
-    /// and adapts cleanly between Light and Dark appearance.
-    static func controlColors(for dominant: Color, style: PlayerGradientStyle, scheme: ColorScheme = .dark) -> ControlColors {
+    /// Unified control colors shared across transport buttons, waveform, bitrate,
+    /// bottom navigation capsule, and navigation icons, supporting both artwork-tinted
+    /// and pure black & white modes across Light and Dark appearance.
+    static func controlColors(
+        for dominant: Color,
+        style: PlayerGradientStyle,
+        scheme: ColorScheme = .dark,
+        colorStyle: PlayerControlColorStyle = .tinted
+    ) -> ControlColors {
         let isLight = scheme == .light
+        if colorStyle == .monochrome {
+            if isLight {
+                return ControlColors(
+                    buttonFill: .white,
+                    buttonIcon: Color(red: 0.06, green: 0.06, blue: 0.07),
+                    navCapsule: Color.white.opacity(0.90),
+                    navIcon: Color(red: 0.06, green: 0.06, blue: 0.07),
+                    accentInk: .white
+                )
+            }
+            return ControlColors(
+                buttonFill: Color(red: 0.06, green: 0.06, blue: 0.07),
+                buttonIcon: .white,
+                navCapsule: Color(red: 0.06, green: 0.06, blue: 0.07).opacity(0.86),
+                navIcon: .white,
+                accentInk: .white
+            )
+        }
         var hue: CGFloat = 0, saturation: CGFloat = 0, brightness: CGFloat = 0, alpha: CGFloat = 0
         guard UIColor(dominant).getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: &alpha) else {
             if isLight {

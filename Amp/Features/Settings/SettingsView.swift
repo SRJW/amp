@@ -469,6 +469,14 @@ private struct PlayerBackgroundSettingsView: View {
         })
     }
 
+    private var controlColorStyle: Binding<PlayerControlColorStyle> {
+        Binding(get: { settings.playerBackground.controlColorStyle }, set: {
+            var appearance = settings.playerBackground
+            appearance.controlColorStyle = $0
+            settings.playerBackground = appearance
+        })
+    }
+
     private var dominantColor: Color {
         if player.state.currentSong != nil {
             return Color(argb: previewPalette.artworkDominant)
@@ -511,6 +519,23 @@ private struct PlayerBackgroundSettingsView: View {
                                 .accessibilityIdentifier("settingsPlayerNavBarCapsule")
                             Text(L(PlayerBackgroundControls.navBarCapsuleDescription))
                                 .font(.footnote)
+                                .foregroundStyle(palette.onSurfaceVariant)
+                        }
+                        .padding(Spacing.lg)
+                        Divider().padding(.leading, Spacing.lg)
+                        VStack(alignment: .leading, spacing: Spacing.sm) {
+                            Text(L(PlayerBackgroundControls.controlColorStyle))
+                                .font(.body)
+                                .foregroundStyle(palette.onSurface)
+                            Picker(L(PlayerBackgroundControls.controlColorStyle), selection: controlColorStyle) {
+                                ForEach(PlayerControlColorStyle.allCases) { style in
+                                    Text(L(style.label)).tag(style)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+                            .accessibilityIdentifier("settingsPlayerControlColorStyle")
+                            Text(L(PlayerBackgroundControls.controlColorStyleDescription))
+                                .font(.caption)
                                 .foregroundStyle(palette.onSurfaceVariant)
                         }
                         .padding(Spacing.lg)
@@ -612,7 +637,7 @@ private struct PlayerBackgroundSettingsView: View {
                 appearance: appearance,
                 colorScheme: colorScheme,
                 usesArtworkControls: settings.customTheme == nil &&
-                    (appearance.navBarCapsule || appearance.gradientStyle != .classic || settings.theme == .artwork),
+                    (appearance.controlColorStyle == .monochrome || appearance.navBarCapsule || appearance.gradientStyle != .classic || settings.theme == .artwork),
                 customPalette: settings.customTheme?.palette
             )
             VStack(alignment: .leading, spacing: Spacing.sm) {
@@ -628,8 +653,8 @@ private struct PlayerBackgroundSettingsView: View {
                     .foregroundStyle(palette.onSurfaceVariant)
                     .fixedSize(horizontal: false, vertical: true)
                 VStack(alignment: .leading, spacing: 4) {
-                    previewMetric(L(PlayerBackgroundControls.fade), "\(Int(appearance.fadeStart * 100))%")
-                    previewMetric(L(PlayerBackgroundControls.blur), "\(Int(appearance.blur))")
+                    previewMetric(L(PlayerBackgroundControls.controlColorStyle), L(appearance.controlColorStyle.label))
+                    previewMetric(L(PlayerBackgroundControls.buttonOpacity), "\(Int(appearance.buttonOpacity * 100))%")
                     previewMetric(L(PlayerBackgroundControls.navBarCapsule), appearance.navBarCapsule ? L("On") : L("Off"))
                 }
                 .padding(.top, 2)
@@ -730,7 +755,8 @@ private struct PlayerBackgroundMiniPreview: View {
         return PlayerBackdropPalette.controlColors(
             for: dominant,
             style: appearance.gradientStyle,
-            scheme: colorScheme
+            scheme: colorScheme,
+            colorStyle: appearance.controlColorStyle
         )
     }
 

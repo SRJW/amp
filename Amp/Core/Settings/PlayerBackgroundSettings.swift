@@ -24,6 +24,20 @@ enum PlayerGradientStyle: String, CaseIterable, Codable, Identifiable {
     }
 }
 
+enum PlayerControlColorStyle: String, CaseIterable, Codable, Identifiable {
+    case tinted
+    case monochrome
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .tinted: "Tinted"
+        case .monochrome: "Black & white"
+        }
+    }
+}
+
 /// Defaults reproduce the existing player; these affect appearance only.
 struct PlayerBackgroundSettings: Codable, Equatable {
     var fadeStart = 0.75
@@ -35,6 +49,7 @@ struct PlayerBackgroundSettings: Codable, Equatable {
     var gradientColor: UInt32 = 0xFF000000
     var gradientStyle: PlayerGradientStyle = .classic
     var navBarCapsule = false
+    var controlColorStyle: PlayerControlColorStyle = .tinted
     var buttonOpacity = 1.0
 
     init() {}
@@ -49,6 +64,7 @@ struct PlayerBackgroundSettings: Codable, Equatable {
         gradientColor = try c.decodeIfPresent(UInt32.self, forKey: .gradientColor) ?? 0xFF000000
         gradientStyle = (try? c.decodeIfPresent(PlayerGradientStyle.self, forKey: .gradientStyle)) ?? .classic
         navBarCapsule = (try? c.decodeIfPresent(Bool.self, forKey: .navBarCapsule)) ?? false
+        controlColorStyle = (try? c.decodeIfPresent(PlayerControlColorStyle.self, forKey: .controlColorStyle)) ?? .tinted
         buttonOpacity = (try? c.decodeIfPresent(Double.self, forKey: .buttonOpacity)) ?? 1.0
     }
 }
@@ -62,6 +78,8 @@ enum PlayerBackgroundControls {
     static let gradientStyle = "Backdrop gradient"
     static let navBarCapsule = "Navigation bar contour"
     static let navBarCapsuleDescription = "Adds an artwork-tinted capsule behind the bottom controls in the player."
+    static let controlColorStyle = "Control colors"
+    static let controlColorStyleDescription = "Choose whether Play, skip, and bottom bar controls are tinted by the cover or pure black & white."
     static let buttonOpacity = "Control button opacity"
     static let buttonOpacityDescription = "Opacity of the circles behind Play, Pause, and skip controls. Set to 0% for borderless icons."
     static let gradient = "Tint overlay"

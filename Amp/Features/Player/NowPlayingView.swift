@@ -29,14 +29,16 @@ struct NowPlayingView: View {
     @GestureState private var artworkGestureActive = false
 
     private var artworkControls: PlayerBackdropPalette.ControlColors? {
-        guard playerArtworkPresent, settings.customTheme == nil,
-              settings.playerBackground.navBarCapsule || settings.playerBackground.gradientStyle != .classic || settings.theme == .artwork else {
+        guard playerArtworkPresent, settings.customTheme == nil else { return nil }
+        let bg = settings.playerBackground
+        guard bg.controlColorStyle == .monochrome || bg.navBarCapsule || bg.gradientStyle != .classic || settings.theme == .artwork else {
             return nil
         }
         return PlayerBackdropPalette.controlColors(
             for: Color(argb: artworkDominant),
-            style: settings.playerBackground.gradientStyle,
-            scheme: themeScheme
+            style: bg.gradientStyle,
+            scheme: themeScheme,
+            colorStyle: bg.controlColorStyle
         )
     }
 
