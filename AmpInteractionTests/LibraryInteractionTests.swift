@@ -3,27 +3,32 @@ import UIKit
 
 final class LibraryInteractionTests: XCTestCase {
     @MainActor func testGlassContactKeepsButtonActionsAndCancelsVerticalExit() {
-        let app = launch("player")
-        let library = app.buttons["appSection.library"]
-        let equalizer = app.buttons["appSection.equalizer"]
-        XCTAssertTrue(library.waitForExistence(timeout: 30))
-        equalizer.press(forDuration: 0.30)
-        let selected = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in equalizer.isSelected }, object: nil)
-        XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 10), .completed,
-                       "Observing a hold must not consume the button's actual action")
-        library.tap()
-        XCTAssertTrue(library.isSelected)
-        let start = library.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-        start.press(forDuration: 0.10, thenDragTo: start.withOffset(CGVector(dx: 0, dy: -140)))
-        XCTAssertTrue(library.isSelected, "Leaving vertically must cancel the lens without changing section")
-        let play = app.buttons["miniPlayerPlayPause"]
-        XCTAssertTrue(play.waitForExistence(timeout: 10))
-        let oldLabel = play.label
-        play.tap()
-        let toggled = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in play.label != oldLabel }, object: nil)
-        XCTAssertEqual(XCTWaiter.wait(for: [toggled], timeout: 10), .completed,
-                       "The bar's window observer must not intercept mini-player controls")
-        XCTAssertFalse(app.buttons["nowPlayingTitle"].exists)
+        for mode in ["light", "dark"] {
+            let app = launch("player-" + mode)
+            let library = app.buttons["appSection.library"]
+            let equalizer = app.buttons["appSection.equalizer"]
+            XCTAssertTrue(library.waitForExistence(timeout: 30))
+            equalizer.press(forDuration: 0.30)
+            let selected = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in equalizer.isSelected }, object: nil)
+            XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 10), .completed,
+                           "Observing a hold must not consume the button's actual action")
+            library.tap()
+            XCTAssertTrue(library.isSelected)
+            let start = library.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            start.press(forDuration: 0.10, thenDragTo: start.withOffset(CGVector(dx: 0, dy: -140)))
+            XCTAssertTrue(library.isSelected, "Leaving vertically must cancel the lens without changing section")
+            let play = app.buttons["miniPlayerPlayPause"]
+            XCTAssertTrue(play.waitForExistence(timeout: 10))
+            let oldLabel = play.label
+            play.tap()
+            let toggled = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in play.label != oldLabel }, object: nil)
+            XCTAssertEqual(XCTWaiter.wait(for: [toggled], timeout: 10), .completed,
+                           "The bar's window observer must not intercept mini-player controls")
+            XCTAssertFalse(app.buttons["nowPlayingTitle"].exists)
+            let shot = XCTAttachment(screenshot: app.screenshot())
+            shot.name = "Glass controls in " + mode; shot.lifetime = .keepAlways; add(shot)
+            app.terminate()
+        }
     }
 
     @MainActor func testMissingArtworkHasReadableTitleInLightAndDarkMode() {
