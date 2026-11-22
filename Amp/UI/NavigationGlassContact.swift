@@ -93,8 +93,27 @@ struct NavigationGlassTouchObserver: UIViewRepresentable {
         }
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
             guard isTrackingEnabled, window != nil, bounds.width > 0, !isHidden else { return false }
+            let point = touch.location(in: self)
             let outset = (AppNavigationMetrics.capsuleHeight - AppNavigationMetrics.buttonsHeight) / 2
-            return bounds.insetBy(dx: 0, dy: -outset).contains(touch.location(in: self))
+            let centres = PlayerLayoutMetrics.navigationCentresW
+            let sectionEdge = min(bounds.width * (centres[2] + centres[3]) / 2,
+                                  bounds.width * centres[3] - AppNavigationMetrics.buttonsHeight / 2)
+            // The fourth button is a native Menu, not a draggable tab. Its own
+            // gestures must never participate in our decorative contact tracking.
+            guard bounds.insetBy(dx: 0, dy: -outset).contains(point), point.x < sectionEdge,
+                  let hit = touch.view, let owner = controller(owning: self),
+                  controller(owning: hit) === owner else { return false }
+            // Geometry alone is insufficient: popovers can overlap the bar but
+            // belong to a different presentation/controller (e.g. Settings row).
+            return true
+        }
+        private func controller(owning view: UIView) -> UIViewController? {
+            var responder: UIResponder? = view
+            while let current = responder {
+                if let controller = current as? UIViewController { return controller }
+                responder = current.next
+            }
+            return nil
         }
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
                                shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool { true }
@@ -130,7 +149,8 @@ struct NavigationGlassTouchObserver: UIViewRepresentable {
         var receive: ((UITouch, ContactPhase) -> Void)?
         private var trackedTouch: UITouch?
         override func canPrevent(_ preventedGestureRecognizer: UIGestureRecognizer) -> Bool { false }
-        override func canBePrevented(by preventingGestureRecognizer: UIGestureRecognizer) -> Bool { false }
+        // Yield immediately if a native control or system presentation takes over.
+        override func canBePrevented(by preventingGestureRecognizer: UIGestureRecognizer) -> Bool { true }
         override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
             guard trackedTouch == nil, let touch = touches.first else { return }
             trackedTouch = touch; receive?(touch, .began)

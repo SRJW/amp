@@ -31,6 +31,26 @@ final class LibraryInteractionTests: XCTestCase {
         }
     }
 
+    @MainActor func testNativeMenuSettingsWorksAfterWifiTransferWithoutSwitchingTabs() {
+        let app = launch("player-light")
+        let menu = app.buttons["appMenu"]
+        XCTAssertTrue(menu.waitForExistence(timeout: 30))
+        for _ in 0..<2 {
+            menu.tap()
+            let wifi = app.buttons["appMenu.wifiTransfer"]
+            XCTAssertTrue(wifi.waitForExistence(timeout: 5))
+            wifi.tap()
+            XCTAssertTrue(app.buttons["Start transfer"].waitForExistence(timeout: 10))
+            menu.tap()
+            let settings = app.buttons["appMenu.settings"]
+            XCTAssertTrue(settings.waitForExistence(timeout: 5))
+            settings.tap()
+            XCTAssertTrue(app.buttons["settingsMusicLibrary"].waitForExistence(timeout: 10),
+                          "A menu row over the navigation bar must open Settings, not feed the glass lens")
+            XCTAssertFalse(app.textFields["librarySearchField"].exists)
+        }
+    }
+
     @MainActor func testMissingArtworkHasReadableTitleInLightAndDarkMode() {
         for mode in ["light", "dark"] {
             let app = launch("player-" + mode)
