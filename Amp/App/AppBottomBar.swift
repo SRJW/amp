@@ -195,7 +195,6 @@ struct AppNavigationButtons: View {
                     withAnimation(reduceMotion ? nil : .spring(response: 0.26, dampingFraction: 0.82)) { contact = sample }
                 } else {
                     var instant = Transaction(animation: nil)
-                    instant.disablesAnimations = true
                     withTransaction(instant) { contact = sample }
                 }
             }, ended: { sample, cancelled in
@@ -246,8 +245,7 @@ private struct AppNavigationBarContent: View, Animatable {
         ZStack {
             Capsule().fill(selectionFallbackFill)
                 .frame(width: lensWidth, height: lensHeight)
-                .position(x: usesFloatingLens ? width * PlayerLayoutMetrics.navigationCentresW[selectedIndex]
-                          : contact?.lensX ?? width * PlayerLayoutMetrics.navigationCentresW[selectedIndex], y: 24)
+                .position(x: contact?.lensX ?? width * PlayerLayoutMetrics.navigationCentresW[selectedIndex], y: 24)
                 .opacity((1 - blend) * (contact == nil || !usesFloatingLens ? 1 : 0))
                 .animation(environment.accessibilityReduceMotion ? nil : .easeOut(duration: 0.16), value: contact != nil)
                 .allowsHitTesting(false)
@@ -295,6 +293,7 @@ private struct AppNavigationBarContent: View, Animatable {
         .overlay {
             raisedLens
                 .frame(width: lensWidth * lensScaleX, height: lensHeight * lensScaleY)
+                .animation(environment.accessibilityReduceMotion ? nil : .interactiveSpring(response: 0.16, dampingFraction: 0.86), value: contact?.speed)
                 .position(x: contact?.lensX ?? width * PlayerLayoutMetrics.navigationCentresW[selectedIndex], y: 24)
                 .opacity((1 - blend) * (contact == nil ? 0 : 1))
                 .animation(environment.accessibilityReduceMotion ? nil : .spring(response: 0.26, dampingFraction: 0.82), value: contact != nil)
