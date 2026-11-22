@@ -61,13 +61,27 @@ final class LibraryInteractionTests: XCTestCase {
         let mini = app.buttons["openNowPlaying"]
         XCTAssertTrue(mini.waitForExistence(timeout: 30))
         let identifiers = ["appSection.library", "appSection.equalizer", "appSection.search", "appMenu"]
-        let libraryFrames = identifiers.map { app.buttons[$0].frame }
+        func navigationFrames() -> [String: CGRect] {
+            // One AX snapshot keeps all four measurements from the same frame.
+            // Re-resolving each element separately can exceed the waiter's entire
+            // timeout on a busy simulator before reaching the fourth button.
+            guard let snapshot = try? app.snapshot() else { return [:] }
+            var frames: [String: CGRect] = [:]
+            func collect(_ item: XCUIElementSnapshot) {
+                if item.elementType == .button, identifiers.contains(item.identifier) { frames[item.identifier] = item.frame }
+                item.children.forEach(collect)
+            }
+            collect(snapshot)
+            return frames
+        }
+        let initialFrames = navigationFrames()
+        XCTAssertEqual(Set(initialFrames.keys), Set(identifiers))
+        let libraryFrames = identifiers.map { initialFrames[$0] ?? .zero }
         for identifier in identifiers { XCTAssertEqual(app.buttons.matching(identifier: identifier).count, 1) }
         func navigationMatchesLibrary() -> Bool {
-            zip(identifiers, libraryFrames).allSatisfy { identifier, expected in
-                let button = app.buttons[identifier]
-                guard button.exists else { return false }
-                let actual = button.frame
+            let measured = navigationFrames()
+            return zip(identifiers, libraryFrames).allSatisfy { identifier, expected in
+                guard let actual = measured[identifier] else { return false }
                 return abs(actual.midX - expected.midX) < 0.5 && abs(actual.midY - expected.midY) < 0.5
                     && abs(actual.width - expected.width) < 0.5 && abs(actual.height - expected.height) < 0.5
             }
@@ -77,7 +91,7 @@ final class LibraryInteractionTests: XCTestCase {
         for identifier in identifiers { XCTAssertEqual(app.buttons.matching(identifier: identifier).count, 1,
                                                        "The transition must reuse one persistent navigation row") }
         let aligned = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in navigationMatchesLibrary() }, object: nil)
-        XCTAssertEqual(XCTWaiter.wait(for: [aligned], timeout: 10), .completed,
+        XCTAssertEqual(XCTWaiter.wait(for: [aligned], timeout: 20), .completed,
                        "The full player must preserve every Library navigation button's screen coordinates and size")
         for (identifier, expected) in zip(identifiers, libraryFrames) {
             let actual = app.buttons[identifier].frame
