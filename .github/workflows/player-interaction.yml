@@ -131,6 +131,7 @@ jobs:
         if [ "${{ inputs.scope }}" = 'navigation-alignment-only' ]; then
           test_filters=(
             -only-testing:AmpInteractionTests/LibraryInteractionTests/testLibraryAndPlayerNavigationShareScreenCoordinates
+            -only-testing:AmpInteractionTests/LibraryInteractionTests/testGlassContactKeepsButtonActionsAndCancelsVerticalExit
           )
         elif [ "${{ inputs.scope }}" = 'library-reveal-only' ]; then
           test_filters=(
@@ -159,6 +160,7 @@ jobs:
               -only-testing:AmpInteractionTests/LibraryInteractionTests/testMissingArtworkHasReadableTitleInLightAndDarkMode
               -only-testing:AmpInteractionTests/LibraryInteractionTests/testIntroductionShowsSixFeaturePagesAndFinishes
               -only-testing:AmpInteractionTests/LibraryInteractionTests/testLibraryAndPlayerNavigationShareScreenCoordinates
+              -only-testing:AmpInteractionTests/LibraryInteractionTests/testGlassContactKeepsButtonActionsAndCancelsVerticalExit
               -only-testing:AmpInteractionTests/LibraryInteractionTests/testPlayerTitleScrollsToAnOffscreenSong
               -only-testing:AmpInteractionTests/LibraryInteractionTests/testMiniPlayerScrubsAndSwipesWithoutOpeningThePlayer
               -only-testing:AmpInteractionTests/LibraryInteractionTests/testLibraryVisibilityPersistsAndPlayerTitleRevealsUnfilteredAllSongs

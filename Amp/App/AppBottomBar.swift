@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 enum AppNavigationMetrics {
     static let duration = 0.3
@@ -94,18 +95,13 @@ struct AppNavigationButtons: View {
     @Environment(\.palette) private var palette
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(AppSettings.self) private var settings
-    @GestureState private var dragX: CGFloat?
+    @State private var contact: NavigationGlassContact?
     @State private var artworkDominant: UInt32 = LyricsPalette.fallback.artworkDominant
     @State private var artworkRevision = 0
 
     private var selectedIndex: Int {
         if router.presentedTool != nil { return 3 }
         switch router.section { case .library: return 0; case .equalizer: return 1; case .search: return 2 }
-    }
-    private func nearestSectionIndex(_ x: CGFloat) -> Int {
-        (0..<3).min {
-            abs(width * PlayerLayoutMetrics.navigationCentresW[$0] - x) < abs(width * PlayerLayoutMetrics.navigationCentresW[$1] - x)
-        } ?? 0
     }
     private func activate(_ index: Int) {
         router.activate([LibrarySection.library, .equalizer, .search][index])
@@ -164,7 +160,7 @@ struct AppNavigationButtons: View {
             hasPresentedTool: router.presentedTool != nil,
             showsPlayerCapsule: settings.playerBackground.navBarCapsule,
             glassEnabled: settings.glassEnabled,
-            dragX: dragX,
+            contact: contact,
             playerCapsuleFill: playerCapsuleFill,
             selectionFallbackFill: palette.onSurface.opacity(0.10),
             librarySelectedColor: libraryTint(selected: true),
@@ -187,15 +183,35 @@ struct AppNavigationButtons: View {
             guard !Task.isCancelled else { return }
             artworkDominant = sampled.artworkDominant
         }
-        .simultaneousGesture(DragGesture(minimumDistance: 8)
-            .updating($dragX) { value, state, _ in
-                guard resolvedProgress < 0.5, abs(value.translation.width) > abs(value.translation.height) else { return }
-                state = value.location.x
-            }
-            .onEnded { value in
-                guard resolvedProgress < 0.5, abs(value.translation.width) > abs(value.translation.height) else { return }
-                withAnimation(reduceMotion ? nil : .smooth(duration: AppNavigationMetrics.selectionDuration)) { activate(nearestSectionIndex(value.location.x)) }
+        .background {
+            NavigationGlassTouchObserver(enabled: resolvedProgress < 0.5, changed: { sample in
+                guard abs(sample.width - width) < 0.5 else { return }
+                let height = AppNavigationMetrics.buttonsHeight
+                guard sample.point.y >= -height / 2, sample.point.y <= height * 1.5 else {
+                    withAnimation(reduceMotion ? nil : .easeOut(duration: 0.16)) { contact = nil }
+                    return
+                }
+                if contact == nil {
+                    withAnimation(reduceMotion ? nil : .spring(response: 0.26, dampingFraction: 0.82)) { contact = sample }
+                } else {
+                    var instant = Transaction(animation: nil)
+                    instant.disablesAnimations = true
+                    withTransaction(instant) { contact = sample }
+                }
+            }, ended: { sample, cancelled in
+                let destination = !cancelled && abs(sample.width - width) < 0.5
+                    ? sample.draggedSection(height: AppNavigationMetrics.buttonsHeight) : nil
+                withAnimation(reduceMotion ? nil : .spring(response: 0.30, dampingFraction: 0.82)) {
+                    contact = nil
+                    if let destination { activate(destination) }
+                }
             })
+            .accessibilityHidden(true)
+        }
+        .onChange(of: resolvedProgress >= 0.5) { _, presented in if presented { contact = nil } }
+        .onChange(of: width) { _, _ in contact = nil }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in contact = nil }
+
     }
 }
 
@@ -209,7 +225,7 @@ private struct AppNavigationBarContent: View, Animatable {
     let hasPresentedTool: Bool
     let showsPlayerCapsule: Bool
     let glassEnabled: Bool
-    let dragX: CGFloat?
+    let contact: NavigationGlassContact?
     let playerCapsuleFill: Color
     let selectionFallbackFill: Color
     let librarySelectedColor: Color
@@ -228,15 +244,12 @@ private struct AppNavigationBarContent: View, Animatable {
     var body: some View {
         let blend = PlayerCoverGeometry.chromeOpacity(playerProgress)
         ZStack {
-            selectionPill
-                .frame(width: width * AppNavigationMetrics.selectionWidthFraction - AppNavigationMetrics.selectionInset * 2,
-                       height: AppNavigationMetrics.capsuleHeight - AppNavigationMetrics.selectionInset * 2)
-                .scaleEffect(x: dragX == nil || environment.accessibilityReduceMotion ? 1 : 1.08,
-                             y: dragX == nil || environment.accessibilityReduceMotion ? 1 : 0.96)
-                .animation(environment.accessibilityReduceMotion ? nil : .spring(response: 0.26, dampingFraction: 0.82), value: dragX != nil)
-                .position(x: dragX.map { min(max($0, width * PlayerLayoutMetrics.navigationCentresW[0]), width * PlayerLayoutMetrics.navigationCentresW[2]) }
-                          ?? width * PlayerLayoutMetrics.navigationCentresW[selectedIndex], y: 24)
-                .opacity(1 - blend)
+            Capsule().fill(selectionFallbackFill)
+                .frame(width: lensWidth, height: lensHeight)
+                .position(x: usesFloatingLens ? width * PlayerLayoutMetrics.navigationCentresW[selectedIndex]
+                          : contact?.lensX ?? width * PlayerLayoutMetrics.navigationCentresW[selectedIndex], y: 24)
+                .opacity((1 - blend) * (contact == nil || !usesFloatingLens ? 1 : 0))
+                .animation(environment.accessibilityReduceMotion ? nil : .easeOut(duration: 0.16), value: contact != nil)
                 .allowsHitTesting(false)
             button(L("Library"), section: .library, index: 0, blend: blend) { PlayerLibraryGlyph().scaleEffect(PlayerLayoutMetrics.navigationIconScale) }
             button(L("Equalizer"), section: .equalizer, index: 1, blend: blend) { PlayerEqualizerGlyph().scaleEffect(PlayerLayoutMetrics.navigationIconScale) }
@@ -253,7 +266,7 @@ private struct AppNavigationBarContent: View, Animatable {
             } label: {
                 navigationLabel(L("Menu")) { PlayerQueueGlyph().scaleEffect(PlayerLayoutMetrics.navigationIconScale) }
                     .foregroundStyle(blendedColor(
-                        from: selectedIndex == 3 ? librarySelectedColor : libraryIdleColor,
+                        from: libraryColor(at: 3),
                         to: playerIdleColor,
                         amount: blend
                     ))
@@ -279,13 +292,39 @@ private struct AppNavigationBarContent: View, Animatable {
                     .allowsHitTesting(false)
             }
         }
+        .overlay {
+            raisedLens
+                .frame(width: lensWidth * lensScaleX, height: lensHeight * lensScaleY)
+                .position(x: contact?.lensX ?? width * PlayerLayoutMetrics.navigationCentresW[selectedIndex], y: 24)
+                .opacity((1 - blend) * (contact == nil ? 0 : 1))
+                .animation(environment.accessibilityReduceMotion ? nil : .spring(response: 0.26, dampingFraction: 0.82), value: contact != nil)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        }
     }
 
-    @ViewBuilder private var selectionPill: some View {
-        if #available(iOS 26.0, *), glassEnabled {
-            Capsule().fill(.clear)
-                .glassEffect(.clear.interactive(), in: .capsule)
-        } else { Capsule().fill(selectionFallbackFill) }
+    private var lensWidth: CGFloat { width * AppNavigationMetrics.selectionWidthFraction - AppNavigationMetrics.selectionInset * 2 }
+    private var lensHeight: CGFloat { AppNavigationMetrics.capsuleHeight - AppNavigationMetrics.selectionInset * 2 }
+    private var lensScaleX: CGFloat {
+        guard let contact, !environment.accessibilityReduceMotion else { return 1 }
+        return 1.14 + contact.speed * 0.10
+    }
+    private var lensScaleY: CGFloat {
+        guard let contact, !environment.accessibilityReduceMotion else { return 1 }
+        return 1.22 - contact.speed * 0.06
+    }
+    private func libraryColor(at index: Int) -> Color {
+        let focus = contact?.focus(at: index) ?? (selectedIndex == index ? 1 : 0)
+        return blendedColor(from: libraryIdleColor, to: librarySelectedColor, amount: focus)
+    }
+    private var usesFloatingLens: Bool {
+        if #available(iOS 26.0, *) { return glassEnabled && !environment.accessibilityReduceTransparency }
+        return false
+    }
+    @ViewBuilder private var raisedLens: some View {
+        if #available(iOS 26.0, *), usesFloatingLens {
+            Capsule().fill(.clear).glassEffect(.clear.interactive(), in: .capsule)
+        } else { Color.clear }
     }
 
     private func navigationLabel<Icon: View>(_ title: String, @ViewBuilder icon: () -> Icon) -> some View {
@@ -297,11 +336,10 @@ private struct AppNavigationBarContent: View, Animatable {
     }
 
     private func button<Icon: View>(_ title: String, section: LibrarySection, index: Int, blend: Double, @ViewBuilder icon: () -> Icon) -> some View {
-        let isLibrarySelected = selectedIndex == index
         let isPlayerSelected = !hasPresentedTool && activeSectionIndex == index
         return Button { onSelectSection(section) } label: { navigationLabel(title, icon: icon) }
             .foregroundStyle(blendedColor(
-                from: isLibrarySelected ? librarySelectedColor : libraryIdleColor,
+                from: libraryColor(at: index),
                 to: isPlayerSelected ? playerSelectedColor : playerIdleColor,
                 amount: blend
             ))
