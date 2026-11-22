@@ -162,7 +162,7 @@ struct AppNavigationButtons: View {
             glassEnabled: settings.glassEnabled,
             contact: contact,
             playerCapsuleFill: playerCapsuleFill,
-            selectionFallbackFill: palette.onSurface.opacity(0.10),
+            selectionFallbackFill: Color.black.opacity(colorScheme == .dark ? 0.24 : 0.07),
             librarySelectedColor: libraryTint(selected: true),
             libraryIdleColor: libraryTint(selected: false),
             playerSelectedColor: playerTint(selected: true),
