@@ -64,9 +64,8 @@ struct NavigationGlassTouchObserver: UIViewRepresentable {
         private var contact: NavigationGlassContact?
         private var lastTime: TimeInterval = 0
         private lazy var observer: PassiveContactRecognizer = {
-            let recognizer = PassiveContactRecognizer(target: self, action: #selector(receive(_:)))
-            recognizer.minimumPressDuration = 0
-            recognizer.allowableMovement = .greatestFiniteMagnitude
+            let recognizer = PassiveContactRecognizer(target: nil, action: nil)
+            recognizer.receive = { [weak self] touch, phase in self?.receive(touch, phase: phase) }
             recognizer.cancelsTouchesInView = false
             recognizer.delaysTouchesBegan = false; recognizer.delaysTouchesEnded = false
             recognizer.delegate = self
@@ -99,34 +98,60 @@ struct NavigationGlassTouchObserver: UIViewRepresentable {
         }
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
                                shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool { true }
-        @objc private func receive(_ recognizer: UILongPressGestureRecognizer) {
-            let point = recognizer.location(in: self)
-            let time = ProcessInfo.processInfo.systemUptime
-            switch recognizer.state {
+        private func receive(_ touch: UITouch, phase: ContactPhase) {
+            let point = touch.location(in: self)
+            let time = touch.timestamp
+            switch phase {
             case .began:
                 let sample = NavigationGlassContact(start: point, point: point, velocityX: 0, width: bounds.width)
                 contact = sample; lastTime = time; changed?(sample)
-            case .changed, .ended:
+            case .moved, .ended:
                 guard var sample = contact else { return }
                 let dt = max(time - lastTime, 1.0 / 240)
                 let velocity = (point.x - sample.point.x) / CGFloat(dt)
                 sample.velocityX = sample.velocityX * 0.7 + velocity * 0.3
                 sample.point = point; lastTime = time; contact = sample
-                if recognizer.state == .ended {
+                if phase == .ended {
                     contact = nil; ended?(sample, false)
                 } else { changed?(sample) }
-            case .cancelled, .failed:
+            case .cancelled:
                 guard let sample = contact else { return }
                 contact = nil
                 let callback = ended
                 DispatchQueue.main.async { callback?(sample, true) }
-            default: break
             }
         }
     }
-    /// This recognizer is observational: it must never win against an actual control.
-    private final class PassiveContactRecognizer: UILongPressGestureRecognizer {
+    private enum ContactPhase { case began, moved, ended, cancelled }
+
+    /// Never enter a recognized state: the native controls remain the only tap /
+    /// menu recognizers. Raw touch callbacks can still drive the decorative lens.
+    private final class PassiveContactRecognizer: UIGestureRecognizer {
+        var receive: ((UITouch, ContactPhase) -> Void)?
+        private var trackedTouch: UITouch?
         override func canPrevent(_ preventedGestureRecognizer: UIGestureRecognizer) -> Bool { false }
         override func canBePrevented(by preventingGestureRecognizer: UIGestureRecognizer) -> Bool { false }
+        override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
+            guard trackedTouch == nil, let touch = touches.first else { return }
+            trackedTouch = touch; receive?(touch, .began)
+        }
+        override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
+            guard let touch = trackedTouch, touches.contains(touch) else { return }
+            receive?(touch, .moved)
+        }
+        override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
+            guard let touch = trackedTouch, touches.contains(touch) else { return }
+            trackedTouch = nil; receive?(touch, .ended)
+            state = .failed
+        }
+        override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) {
+            guard let touch = trackedTouch else { return }
+            trackedTouch = nil; receive?(touch, .cancelled)
+            state = .failed
+        }
+        override func reset() {
+            if let touch = trackedTouch { trackedTouch = nil; receive?(touch, .cancelled) }
+            super.reset()
+        }
     }
 }
