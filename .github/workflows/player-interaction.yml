@@ -128,6 +128,26 @@ jobs:
     - name: Run real cover swipe and dismissal checks
       if: ${{ inputs.scope != 'animation-only' }}
       run: |
+        glass_recording_pid=""
+        glass_recording_attempt=0
+        stop_glass_recording() {
+          if [ -n "$glass_recording_pid" ]; then
+            kill -INT "$glass_recording_pid" >/dev/null 2>&1 || true
+            wait "$glass_recording_pid" 2>/dev/null || true
+            glass_recording_pid=""
+          fi
+        }
+        start_glass_recording() {
+          if [ "${{ inputs.scope }}" = 'navigation-alignment-only' ]; then
+            glass_recording_attempt=$((glass_recording_attempt + 1))
+            xcrun simctl io "$UI_SIMULATOR_ID" recordVideo --codec=h264 \
+              "build/navigation-glass-$glass_recording_attempt.mov" \
+              > "build/navigation-glass-$glass_recording_attempt.log" 2>&1 &
+            glass_recording_pid=$!
+          fi
+        }
+        trap stop_glass_recording EXIT
+        start_glass_recording
         if [ "${{ inputs.scope }}" = 'navigation-alignment-only' ]; then
           test_filters=(
             -only-testing:AmpInteractionTests/LibraryInteractionTests/testLibraryAndPlayerNavigationShareScreenCoordinates
@@ -183,6 +203,7 @@ jobs:
           # case started. Assertion failures and all other failures stay failures.
           if grep -q 'Timed out waiting for AX loaded notification' build/ui-tests.log \
             && ! grep -q 'Test Case .* started' build/ui-tests.log; then
+            stop_glass_recording
             mv build/ui-tests.log build/ui-tests-attempt-1.log
             mv build/InteractionResults.xcresult build/InteractionResults-attempt-1.xcresult
             xcrun simctl shutdown "$UI_SIMULATOR_ID" >/dev/null 2>&1 || true
@@ -192,6 +213,7 @@ jobs:
             defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool NO
         open -a Simulator --args -CurrentDeviceUDID "$UI_SIMULATOR_ID"
             xcrun simctl bootstatus "$UI_SIMULATOR_ID" -b > build/ui-boot-retry.log 2>&1
+            start_glass_recording
             if ! run_interactions; then
               python3 Tools/report_native_interactions.py build/ui-tests.log
               exit 1
@@ -245,6 +267,8 @@ jobs:
           build/InteractionResults-attempt-1.xcresult
           build/BlendResults.xcresult
           build/ui-tests.log
+          build/navigation-glass-*.mov
+          build/navigation-glass-*.log
           build/ui-tests-attempt-1.log
           build/ui-boot*.log
           build/unit-boot.log
