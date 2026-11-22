@@ -160,11 +160,11 @@ extension View {
 
     /// A floating glass surface: Liquid Glass on iOS 26, a material elsewhere.
     @ViewBuilder
-    func glassSurface(cornerRadius: CGFloat, enabled: Bool = true) -> some View {
+    func glassSurface(cornerRadius: CGFloat, enabled: Bool = true, interactive: Bool = false) -> some View {
         if !enabled {
             self.background(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous).fill(.background.secondary))
         } else if #available(iOS 26.0, *) {
-            self.glassEffect(.regular, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            self.glassEffect(interactive ? .regular.interactive() : .regular, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         } else {
             self.background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         }

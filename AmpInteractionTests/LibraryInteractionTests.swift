@@ -176,7 +176,7 @@ final class LibraryInteractionTests: XCTestCase {
         XCTAssertTrue(alphabet.waitForExistence(timeout: 10))
         print("Alphabet frame before drag: \(alphabet.frame); value: \(String(describing: alphabet.value))")
         alphabet.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.05))
-            .press(forDuration: 0.05, thenDragTo: alphabet.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.94)))
+            .press(forDuration: 0.05, thenDragTo: alphabet.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.99)))
         print("Alphabet frame after drag: \(alphabet.frame); value: \(String(describing: alphabet.value))")
         let atEnd = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
             target.exists && target.isHittable
@@ -188,7 +188,7 @@ final class LibraryInteractionTests: XCTestCase {
         XCTAssertEqual(title.label, "ZZZ offscreen song")
         title.tap()
         XCTAssertTrue(alphabet.waitForExistence(timeout: 10))
-        alphabet.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.94))
+        alphabet.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.99))
             .press(forDuration: 0.05, thenDragTo: alphabet.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.01)))
         let atStart = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
             !(target.exists && target.isHittable)
@@ -320,7 +320,11 @@ final class LibraryInteractionTests: XCTestCase {
         if app.keyboards.firstMatch.waitForExistence(timeout: 5) {
             let keyboardTop = app.keyboards.firstMatch.frame.minY
             let artworkBottom = app.buttons["openNowPlayingArtwork"].frame.maxY
-            XCTAssertLessThan(keyboardTop - artworkBottom, 30, "No empty navigation capsule may remain between the mini player and keyboard")
+            // AX's keyboard frame excludes iOS's predictive row on some runtimes.
+            // Allow that system-owned row, then assert the app's entire nav is absent.
+            let keyHeight = app.keyboards.firstMatch.buttons["a"].frame.height
+            XCTAssertLessThan(keyboardTop - artworkBottom, 30 + keyHeight,
+                              "Only the native predictive row may separate mini player and keyboard")
             XCTAssertFalse(app.buttons["appSection.library"].exists, "Hide the entire navigation row, including its surface, while typing")
             let shot = XCTAttachment(screenshot: app.screenshot())
             shot.name = "Search keyboard without empty navigation capsule"; shot.lifetime = .keepAlways
@@ -590,6 +594,12 @@ final class LibraryInteractionTests: XCTestCase {
         XCTAssertTrue(field.waitForExistence(timeout: 10))
         dismissKeyboardIntroduction(in: app)
         field.tap(); field.typeText("History fixture\n")
+        // Commit through the real Clear control and verify the query has reached
+        // history before force-terminating the process.
+        let clear = page.buttons["searchClearButton"]
+        XCTAssertTrue(clear.waitForExistence(timeout: 5))
+        clear.tap()
+        XCTAssertTrue(page.buttons["recentSearch.History fixture"].waitForExistence(timeout: 5))
         app.terminate(); app.launch()
         XCTAssertTrue(search.waitForExistence(timeout: 30))
         search.tap()

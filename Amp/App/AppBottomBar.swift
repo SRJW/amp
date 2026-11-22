@@ -40,17 +40,12 @@ struct AppBottomBar: View {
                 }
             }
             .frame(height: AppNavigationMetrics.stripHeight)
-            .background {
-                Color.clear.glassSurface(cornerRadius: MiniPlayerMetrics.cornerRadius, enabled: settings.glassEnabled)
-                    .allowsHitTesting(false)
-            }
-            .clipShape(RoundedRectangle(cornerRadius: MiniPlayerMetrics.cornerRadius, style: .continuous))
+            .modifier(FloatingControlGlass(enabled: settings.glassEnabled, cornerRadius: MiniPlayerMetrics.cornerRadius))
             if !keyboardVisible {
             GeometryReader { geometry in
                 if showsButtons { AppNavigationButtons(width: geometry.size.width) }
             }
             .frame(height: AppNavigationMetrics.buttonsHeight)
-            .background { Color.clear.frame(height: AppNavigationMetrics.capsuleHeight).chromeSurface(enabled: settings.glassEnabled).allowsHitTesting(false) }
             }
         }
         .padding(.horizontal, AppNavigationMetrics.horizontalInset).padding(.bottom, AppNavigationMetrics.bottomPadding)
@@ -236,6 +231,9 @@ private struct AppNavigationBarContent: View, Animatable {
             selectionPill
                 .frame(width: width * AppNavigationMetrics.selectionWidthFraction - AppNavigationMetrics.selectionInset * 2,
                        height: AppNavigationMetrics.capsuleHeight - AppNavigationMetrics.selectionInset * 2)
+                .scaleEffect(x: dragX == nil || environment.accessibilityReduceMotion ? 1 : 1.08,
+                             y: dragX == nil || environment.accessibilityReduceMotion ? 1 : 0.96)
+                .animation(environment.accessibilityReduceMotion ? nil : .spring(response: 0.26, dampingFraction: 0.82), value: dragX != nil)
                 .position(x: dragX.map { min(max($0, width * PlayerLayoutMetrics.navigationCentresW[0]), width * PlayerLayoutMetrics.navigationCentresW[2]) }
                           ?? width * PlayerLayoutMetrics.navigationCentresW[selectedIndex], y: 24)
                 .opacity(1 - blend)
@@ -267,8 +265,12 @@ private struct AppNavigationBarContent: View, Animatable {
             .position(x: width * PlayerLayoutMetrics.navigationCentresW[3], y: 24)
         }
         .font(.system(size: 28 * PlayerLayoutMetrics.navigationIconScale, weight: .heavy))
-        .buttonStyle(.plain)
+        .buttonStyle(FloatingControlPressStyle(enabled: playerProgress < 0.5))
         .frame(width: width, height: AppNavigationMetrics.buttonsHeight)
+        .modifier(FloatingControlGlass(enabled: glassEnabled,
+                                       cornerRadius: AppNavigationMetrics.capsuleHeight / 2,
+                                       verticalOutset: (AppNavigationMetrics.capsuleHeight - AppNavigationMetrics.buttonsHeight) / 2,
+                                       surfaceOpacity: 1 - blend))
         .background {
             if showsPlayerCapsule {
                 Capsule()
