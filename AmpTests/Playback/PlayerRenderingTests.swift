@@ -544,7 +544,8 @@ final class PlayerRenderingTests: XCTestCase {
     }
     private struct CoverRenderHost: View {
         let selection: CoverRenderSelection
-        var body: some View { ReferencePlayerBackdrop(song: selection.song, artworkDrag: .constant(0)).environment(AppSettings()) }
+        var body: some View { ReferencePlayerBackdrop(song: selection.song, artworkDrag: .constant(0))
+                .environment(AppSettings()).environment(AppRouter()) }
     }
 
     func testPlayerDominantColourIsNotReplacedByTheDarkLyricsSurface() {

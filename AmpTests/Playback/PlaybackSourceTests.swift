@@ -35,10 +35,8 @@ final class PlaybackSourceTests: XCTestCase {
         let router = AppRouter()
         router.showsSearch = true
         router.showsNowPlaying = true
-        router.presentedTool = .settings
         router.reveal(.playlist(9))
         XCTAssertFalse(router.showsNowPlaying)
-        XCTAssertNil(router.presentedTool)
         XCTAssertFalse(router.showsSearch)
         XCTAssertEqual(router.section, .library)
         XCTAssertEqual(router.paths[.library]?.count, 1)
