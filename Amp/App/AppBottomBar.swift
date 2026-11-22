@@ -40,7 +40,7 @@ struct AppBottomBar: View {
                 }
             }
             .frame(height: AppNavigationMetrics.stripHeight)
-            .modifier(FloatingControlGlass(enabled: settings.glassEnabled))
+            .modifier(FloatingControlGlass(enabled: settings.glassEnabled, cornerRadius: MiniPlayerMetrics.cornerRadius))
             if !keyboardVisible {
             GeometryReader { geometry in
                 if showsButtons { AppNavigationButtons(width: geometry.size.width) }

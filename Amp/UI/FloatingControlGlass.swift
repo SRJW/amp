@@ -4,6 +4,7 @@ import SwiftUI
 /// its touches. A detached, non-hit-testable background cannot provide this response.
 struct FloatingControlGlass: ViewModifier {
     let enabled: Bool
+    var cornerRadius: CGFloat? = nil
     var active = true
     var verticalOutset: CGFloat = 0
     var surfaceOpacity: Double = 1
@@ -29,7 +30,11 @@ struct FloatingControlGlass: ViewModifier {
     }
 
     @ViewBuilder private func surface<Control: View>(_ control: Control, interactive: Bool) -> some View {
-        if !enabled {
+        if let cornerRadius {
+            // Restore the earlier mini-player silhouette, keeping native contact
+            // response on the live control rather than a detached background.
+            control.glassSurface(cornerRadius: cornerRadius, enabled: enabled, interactive: interactive)
+        } else if !enabled {
             control.background(.background.secondary, in: Capsule())
         } else if #available(iOS 26.0, *) {
             control.glassEffect(interactive ? .regular.interactive() : .regular, in: .capsule)

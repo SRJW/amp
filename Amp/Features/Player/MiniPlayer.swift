@@ -6,7 +6,7 @@ enum MiniPlayerMetrics {
     static let height: CGFloat = ArtworkSize.miniPlayer + artworkVerticalInset * 2
     static let horizontalInset: CGFloat = 14
     static let columnSpacing: CGFloat = 10
-    static let cornerRadius: CGFloat = height / 2
+    static let cornerRadius: CGFloat = 32
     static let artworkCornerRadius: CGFloat = 12
     static let titleSize: CGFloat = 16
     static let subtitleSize: CGFloat = 13
