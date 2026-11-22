@@ -1,26 +1,30 @@
-# Interactive Liquid Glass for the floating controls
+# Floating controls: appearance and interaction
 
-Reference: the supplied `video_2026-11-21_07-06-54.mp4`. Scope: the existing floating mini player and four-icon navigation. Keep all navigation metrics, icon centres, hit-target sizes, mini-player height and existing functions.
+The November 22 light/dark reference videos guide the contact response of amp’s existing four-icon bar. Navigation centres, icon sizes, safe-area positioning and the player layout remain unchanged; labels remain accessibility-only.
 
-## Changes
+## Current implementation
 
-- `FloatingControlGlass` applies iOS 26's native `.regular.interactive()` glass to the actual control container, in a real capsule. Previously the material was a detached non-hit-testable background. The system now owns contact refraction, highlights and the elastic material response.
-- The navigation surface now belongs to the persistent navigation row. Its reserved slot in `AppBottomBar` no longer paints a second capsule. A symmetrical visual outset gives the material its original 60 pt height around the unchanged 48 pt row, without changing layout measurements.
-- The current continuous player-transition progress is preserved. During the dissolve, only the material fades; the existing interpolation of icon colours and the listener's optional player capsule remain intact.
-- Dragging stretches only the selection lens, about its own centre. Icon geometry is untouched. The lens returns with a spring, and Reduce Motion suppresses that deformation.
-- A press changes control ink intensity slightly, without scaling or translating the icon. Play/Pause uses the native SF Symbol replacement transition. Existing metadata slides, cover dissolves, scrubbing, swipe gestures and swipe haptics remain.
-- The mini player's glass ends are fully rounded. No final clip cuts off the interactive glass's edge highlights.
+- `FloatingControlGlass` applies native iOS 26 interactive glass to the floating control surface. The persistent navigation row owns one material; its reserved layout slot paints no duplicate capsule. The existing Now Playing dissolve interpolates material opacity and icon colours.
+- The mini player retains the earlier build-160 outline: a 32 pt continuous corner radius at its existing 96 pt height (`8f29145`). Artwork/text dimensions, metadata slides, cover dissolves, Play/Pause symbol replacement, scrubbing, swipe gestures and haptics remain.
+- A subdued well marks selection at rest. During a section touch, a clear native glass lens above the glyphs follows the finger, previews the nearest section and changes proportions with filtered velocity. Release settles with a spring. Glyph frames never move or scale.
+- Contact observation is passive: native Buttons own taps and holds; only a horizontal drag to a different section commits a destination. Vertical exits, resizing, backgrounding and player presentation clear the preview. Reduce Motion suppresses deformation; Reduce Transparency and older iOS versions use the background well.
 
-The new implementation was rebased onto `4cd2795` before publication. It preserves the newer menu, localisation, artwork palettes, player background preferences, widget redesign and appearance propagation. On pre-iOS 26 systems the existing material fallback remains; the transparency preference remains available.
+## November 22 menu regression
 
-## Validation
+The listener’s 17:09 recording shows a magnifying bubble over native menu rows and repeated failure to open Settings from Wi-Fi Transfer. Build 193’s native navigation test also failed at Menu → Settings.
 
-The ten Python tooling checks pass. The existing native navigation test compares all four buttons' screen coordinates and sizes between Library and Now Playing. Mini-player tests exercise opening, scrubbing and track swipes. A stale test of the removed drawer was adapted to the actual native tool-menu route; the numeric-first index test now drags to Z instead of Y. Search history is verified before force-terminating, and the keyboard check accounts for iOS's predictive row rather than treating it as app navigation.
+`d120205` changes `NavigationGlassContact.swift`: contact tracking accepts only the first three section buttons, excludes the native Menu’s hit area, and requires the touched view to belong to the same view controller as the navigation probe. This prevents overlapping popover rows from entering the decorative lens through a rectangle-only check. The observer also yields when a native recognizer takes over.
 
-The exported IPA passes device compilation and FlareStore patch verification for both bundles, with one injected load per executable and preserved entitlements. Native unit tests in run 45064952522 have passed; full UI and rendering results are still being collected. In focused run 45064350040, all sixteen individual frame comparisons passed (centre X/Y and width/height for all four buttons), as did return-to-Library alignment, menu/settings navigation, Search and the selection drag. The overall case failed only its initial 10-second polling predicate: eight separate AX resolutions exceeded the entire deadline on the busy runner. Revision `9862a34` now reads one consistent AX tree snapshot, retaining the same 0.5 pt tolerance and all sixteen concrete assertions. Its focused rerun is 45066529591 and is pending. The earlier renderer fixture needed its own AppRouter after the router ownership change in the baseline, and the source-navigation test no longer models the removed drawer as an open settings tool.
+`testNativeMenuSettingsWorksAfterWifiTransferWithoutSwitchingTabs` repeats Wi-Fi → Settings twice through the real native menu. The focused workflow includes this regression alongside light/dark button response, vertical cancellation, mini-player Play/Pause, all four navigation frame comparisons and section dragging. Simulator video is retained for visual inspection.
 
-Final export: `v0.1.0-amp.189`, app code equivalent to 188 (subsequent changes only repair test fixtures). SHA-256: `1373c8541ba4bd1cf57ec557ff0b751dbf89f68d7403272779a516cbc300feb7`. One release IPA, `amp.ipa`.
+## Validation and delivery
 
-## Reverting only this appearance change
+The ten local Python tooling tests pass and `git diff --check` is clean. The earlier mini-player outline export 190 and focused verification 45066529591 passed device compilation, native interaction and rendering checks. Build 193 exported successfully but failed Menu → Settings; it is not a validated fix for this issue.
 
-The visual implementation is isolated in `36ac8b6` and `1fcf316`, on top of baseline `4cd2795`. Revert the newer commit first, then the older one, and build a new version. Keep the later source-navigation test fix (`2a508d9`). This restores the previous floating surfaces and press styling without reverting the other recent features, changing the app identity or migrating/deleting user data. Install the replacement IPA as an update using the same FlareStore Profile App-ID; uninstalling is unnecessary.
+Build **194** (run **45077395553**, source `d120205`) passed device compilation, all three native UI cases and all **39** rendering checks. The saved simulator recording confirms both Wi-Fi → Settings transitions, dismissing the menu without leaving a magnifying lens over its text. The native system menu retains its own brief opening/closing material transition. Navigation geometry, section dragging, light/dark native button actions, vertical cancellation and mini-player Play/Pause all pass.
+
+One release asset: `https://github.com/SRJW/amp/releases/download/v0.1.0-amp.194/amp.ipa`. Bundle identifiers remain `com.amp` and `com.amp.playerwidget`, build 194. The app and widget each contain one patch load, with preserved entitlements. SHA-256: `afc663415df1bff0d9e39f650a6deff74d5b92cbf30a2b6bab7b1f11e17771b6`. Re-sign this single IPA in FlareStore with the same Profile App-ID before installing as an update.
+
+## Reverting appearance changes
+
+Keep rollback scoped to visual implementation, preserving later features, test-fixture repairs and the listener’s data. To remove the later contact lens, revert its implementation commits in reverse order (`d120205`, `90149d4`, `819848e`, `be73c15`, `30c4d4d`), resolving any test-source context changes. Keep `8f29145` to retain the preferred mini-player outline. To remove the underlying native glass work as well, also revert `8f29145`, `1fcf316`, then `36ac8b6`. Build a newer IPA and install it as an update with the same FlareStore Profile App-ID; uninstalling is unnecessary.
