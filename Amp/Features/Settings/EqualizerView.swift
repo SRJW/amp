@@ -4,6 +4,7 @@ import SwiftUI
 /// band nodes, the active band count, and the selected band's type, frequency, gain and Q.
 struct EqualizerView: View {
     @Environment(SoundStore.self) private var sound
+    @Environment(AppRouter.self) private var router
     @Environment(\.palette) private var palette
     @State private var savingPreset = false
     @State private var presetName = ""
@@ -82,7 +83,13 @@ struct EqualizerView: View {
                               binding: Binding(get: { band.q }, set: { sound.setBandQ(selected, $0) }), range: Equalizer.minQ...Equalizer.maxQ)
             }.toolSectionAppearance()
             .disabled(!settings.isEqEnabled)
-        }.modifier(ToolPageAppearance())
+        }
+        .contentMargins(
+            .bottom,
+            router.presentedTool != nil ? AppNavigationMetrics.reservedHeight + Spacing.lg : Spacing.xxl,
+            for: .scrollContent
+        )
+        .modifier(ToolPageAppearance())
         .navigationTitle(L("Equalizer"))
         .alert(L("Save custom preset"), isPresented: $savingPreset) {
             TextField(L("Preset name"), text: $presetName)
