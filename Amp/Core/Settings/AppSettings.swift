@@ -132,6 +132,10 @@ final class AppSettings {
         }
     }
 
+    func persistNow() {
+        store.saveNow(stored)
+    }
+
     private func update(_ change: (inout Stored) -> Void) {
         change(&stored)
         store.save(stored)

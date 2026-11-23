@@ -208,10 +208,15 @@ final class LyricsStore {
         lookupTask?.cancel()
         lookupID = UUID()
         cancelSearch()
+        savedLyrics = nil
+        online = OnlineView(songId: song.id, lookup: .idle)
+        publish()
+        let track = song.lyricsTrack
         let repository = repository
         Task {
-            await repository.forget(song.lyricsTrack)
-            online = OnlineView(songId: song.id, lookup: .idle)
+            await repository.forget(track)
+            guard self.song?.lyricsTrack == track else { return }
+            savedLyrics = await repository.saved(track)
             publish()
         }
     }

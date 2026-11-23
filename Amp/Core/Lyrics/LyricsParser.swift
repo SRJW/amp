@@ -84,9 +84,12 @@ enum LyricsParser {
                 rest = rest.substring16(from: match.range.location + match.range.length)
             }
             if stamps.isEmpty { continue }
-            let words = parseWords(rest, offset: offset)
-            let content = words.map { $0.map(\.text).joined().trimmed } ?? rest.trimmed
-            for stamp in stamps { synced.append(LyricLine(timeMs: max(stamp - offset, 0), text: content, words: words)) }
+            for stamp in stamps {
+                let lineTimeMs = max(stamp - offset, 0)
+                let words = parseWords(rest, lineTimeMs: lineTimeMs, offset: offset)
+                let content = words.map { $0.map(\.text).joined().trimmed } ?? rest.trimmed
+                synced.append(LyricLine(timeMs: lineTimeMs, text: content, words: words))
+            }
         }
         if !synced.isEmpty { return .synced(stableSorted(synced) { $0.timeMs < $1.timeMs }) }
         var plain = rawLines.map { $0.replacingOccurrences(of: #"\s+$"#, with: "", options: .regularExpression) }
@@ -97,10 +100,16 @@ enum LyricsParser {
     }
 
     /// Words of a line with `<mm:ss.xx>` stamps before them; nil if the line has no word timing.
-    private static func parseWords(_ content: String, offset: Int64) -> [LyricWord]? {
+    private static func parseWords(_ content: String, lineTimeMs: Int64, offset: Int64) -> [LyricWord]? {
         let stamps = wordTime.matches(in: content)
         if stamps.isEmpty { return nil }
         var words: [LyricWord] = []
+        if let first = stamps.first, first.range.location > 0 {
+            let leading = content.substring16(0, first.range.location)
+            if !leading.isBlank {
+                words.append(LyricWord(timeMs: lineTimeMs, text: leading))
+            }
+        }
         for (index, match) in stamps.enumerated() {
             guard let time = toMs(match, in: content) else { continue }
             let start = match.range.location + match.range.length

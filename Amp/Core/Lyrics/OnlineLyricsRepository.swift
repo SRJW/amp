@@ -227,7 +227,9 @@ actor OnlineLyricsRepository {
                                  status: candidate.instrumental ? .instrumental : .found, candidate: candidate, fetchedAtMs: now(), userChosen: true)
         await cache.put(entry)
         selections[track.songId] = entry
-        return .found(candidate, fromCache: false, userChosen: true, fetchedAtMs: entry.fetchedAtMs)
+        return candidate.instrumental
+            ? .instrumental
+            : .found(candidate, fromCache: false, userChosen: true, fetchedAtMs: entry.fetchedAtMs)
     }
 
     /// Forgets what was fetched for [track] (the file's own lyrics, or a new lookup, take over).

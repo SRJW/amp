@@ -124,6 +124,8 @@ private struct LyricsPanelContent: View {
                 LyricsTimingEditor(song: song, lyrics: lyrics, context: context, preferences: store.timingPreferences)
             }
         }
+        .onChange(of: song.id) { _, _ in timingContext = nil }
+        .onChange(of: store.current?.sourceID) { _, _ in timingContext = nil }
         .task(id: song.id) { store.shown(song) }
         .sheet(isPresented: $searching, onDismiss: { store.closeSearch() }) {
             searchSheet.task { if !searchText.isBlank { searchLyrics(searchText) } }

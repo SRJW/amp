@@ -217,11 +217,7 @@ struct PlayerFullBleedBackground<Artwork: View>: View, Animatable {
         GeometryReader { geometry in
             let isDeep = appearance.gradientStyle == .deepChromatic
             let isFrosted = appearance.gradientStyle == .frostedArtwork
-            let effectiveFadeStart: Double = {
-                if isFrosted { return min(appearance.fadeStart, 0.56).clamped(0, 0.94) }
-                if isDeep { return min(appearance.fadeStart, 0.58).clamped(0, 0.96) }
-                return appearance.fadeStart.clamped(0, 0.96)
-            }()
+            let effectiveFadeStart = appearance.fadeStart.clamped(0, 0.96)
             let fadeSpan = 1 - effectiveFadeStart
             let coverHeight = artworkHeightFraction.map { geometry.size.height * $0 }
                 ?? PlayerArtworkComposition.artworkHeight(in: geometry.size)
@@ -242,7 +238,7 @@ struct PlayerFullBleedBackground<Artwork: View>: View, Animatable {
                             }
                     }
                     if isFrosted {
-                        let frostedBlur = max(appearance.blur * 1.45, 18)
+                        let frostedBlur = max(appearance.blur * 1.45, 0)
                         let frostedOpacity = 0.72 + appearance.details * 0.28
                         artwork()
                             .frame(width: geometry.size.width, height: geometry.size.height)

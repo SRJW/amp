@@ -88,6 +88,7 @@ final class ReleaseChecker {
     private let defaults: UserDefaults
     private let animated: Bool
     private var cooldown: Date?
+    private var cooldownIsRateLimit = false
     private var openedAt: Date?
     private var offeredThisSession: Set<String> = []
     private(set) var prompt: AppRelease?
@@ -138,8 +139,12 @@ final class ReleaseChecker {
         guard state != .checking else { return }
         let now = Date()
         if let cooldown, cooldown > now {
-            if manual { state = .failed("GitHub is rate-limiting requests. Try again after \(cooldown.formatted(date: .omitted, time: .shortened)).") }
-            return
+            if cooldownIsRateLimit {
+                if manual { state = .failed("GitHub is rate-limiting requests. Try again after \(cooldown.formatted(date: .omitted, time: .shortened)).") }
+                return
+            } else if !manual {
+                return
+            }
         }
         if !manual, let checkedAt, now.timeIntervalSince(checkedAt) < Self.interval { return }
         state = .checking
@@ -150,9 +155,12 @@ final class ReleaseChecker {
             if response.statusCode == 403 || response.statusCode == 429 {
                 let retry = response.value(forHTTPHeaderField: "Retry-After").flatMap(TimeInterval.init) ?? 3600
                 cooldown = response.value(forHTTPHeaderField: "X-RateLimit-Reset").flatMap(TimeInterval.init).map(Date.init(timeIntervalSince1970:)) ?? now.addingTimeInterval(retry)
+                cooldownIsRateLimit = true
                 state = .failed("GitHub temporarily limited update checks. Your app and music still work; try later.")
                 return
             }
+            cooldown = nil
+            cooldownIsRateLimit = false
             let releases: [AppRelease]
             if response.statusCode == 304, let saved = defaults.data(forKey: Self.prefix + "releases") {
                 releases = try JSONDecoder().decode([AppRelease].self, from: saved)
@@ -169,6 +177,7 @@ final class ReleaseChecker {
         } catch {
             state = .failed("Couldn’t check GitHub Releases. Check your connection and try again.")
             cooldown = now.addingTimeInterval(60)
+            cooldownIsRateLimit = false
         }
     }
 }

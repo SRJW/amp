@@ -123,41 +123,43 @@ struct WaveformSeekBar: View {
                 context.fill(Path(CGRect(x: x - 1, y: 0, width: 2, height: size.height)), with: .color(palette.onSurfaceVariant))
             }
         }
-        if scrolling {
-            let geometry = scrollingGeometry(size.width)
-            let position = previewMs ?? positionMs
-            for index in geometry.visibleBars(positionMs: position) {
-                let time = Double(index) * geometry.barDurationMs
-                guard time <= Double(durationMs) else { continue }
-                let x = CGFloat(geometry.x(timeMs: time, positionMs: position))
-                let level: Float
-                if let levels, !levels.isEmpty {
-                    let from = min(Int(time / Double(max(durationMs, 1)) * Double(levels.count)), levels.count - 1)
-                    let to = min(max(from + 1, Int((time + geometry.barDurationMs) / Double(max(durationMs, 1)) * Double(levels.count))), levels.count)
-                    level = levels[from..<to].max() ?? 0
-                } else { level = 0.12 }
-                let height = max(CGFloat(level) * size.height * 0.75, 2)
-                let rect = CGRect(x: x - barWidth / 2, y: (size.height - height) / 2, width: barWidth, height: height)
-                let path = Path(roundedRect: rect, cornerRadius: barWidth / 2)
-                context.fill(path, with: .color(ink.opacity(0.70)))
-                var played = context
-                played.clip(to: Path(CGRect(x: 0, y: 0, width: playedX, height: size.height)))
-                played.blendMode = .copy
-                played.fill(path, with: .color(ink.opacity(0.25)))
-            }
-        } else {
-            for (i, level) in bars.enumerated() {
-                let x = CGFloat(i) * step
-                let height = max(CGFloat(level) * size.height * (referenceStyle ? 0.75 : 1), 2)
-                let rect = CGRect(x: x, y: (size.height - height) / 2, width: barWidth, height: height)
-                let path = Path(roundedRect: rect, cornerRadius: barWidth / 2)
-                context.fill(path, with: .color(referenceStyle ? ink.opacity(0.70) : palette.onSurfaceVariant.opacity(0.35)))
-                // Clip at the exact playhead, including the partially played bar. Updating
-                // whole bars made static mode look as though it jumped every few seconds.
-                var played = context
-                played.clip(to: Path(CGRect(x: 0, y: 0, width: max(playedX, 0), height: size.height)))
-                played.blendMode = .copy
-                played.fill(path, with: .color(referenceStyle ? ink.opacity(0.25) : palette.primary))
+        context.drawLayer { barContext in
+            if scrolling {
+                let geometry = scrollingGeometry(size.width)
+                let position = previewMs ?? positionMs
+                for index in geometry.visibleBars(positionMs: position) {
+                    let time = Double(index) * geometry.barDurationMs
+                    guard time <= Double(durationMs) else { continue }
+                    let x = CGFloat(geometry.x(timeMs: time, positionMs: position))
+                    let level: Float
+                    if let levels, !levels.isEmpty {
+                        let from = min(Int(time / Double(max(durationMs, 1)) * Double(levels.count)), levels.count - 1)
+                        let to = min(max(from + 1, Int((time + geometry.barDurationMs) / Double(max(durationMs, 1)) * Double(levels.count))), levels.count)
+                        level = levels[from..<to].max() ?? 0
+                    } else { level = 0.12 }
+                    let height = max(CGFloat(level) * size.height * 0.75, 2)
+                    let rect = CGRect(x: x - barWidth / 2, y: (size.height - height) / 2, width: barWidth, height: height)
+                    let path = Path(roundedRect: rect, cornerRadius: barWidth / 2)
+                    barContext.fill(path, with: .color(ink.opacity(0.70)))
+                    var played = barContext
+                    played.clip(to: Path(CGRect(x: 0, y: 0, width: playedX, height: size.height)))
+                    played.blendMode = .copy
+                    played.fill(path, with: .color(ink.opacity(0.25)))
+                }
+            } else {
+                for (i, level) in bars.enumerated() {
+                    let x = CGFloat(i) * step
+                    let height = max(CGFloat(level) * size.height * (referenceStyle ? 0.75 : 1), 2)
+                    let rect = CGRect(x: x, y: (size.height - height) / 2, width: barWidth, height: height)
+                    let path = Path(roundedRect: rect, cornerRadius: barWidth / 2)
+                    barContext.fill(path, with: .color(referenceStyle ? ink.opacity(0.70) : palette.onSurfaceVariant.opacity(0.35)))
+                    // Clip at the exact playhead, including the partially played bar. Updating
+                    // whole bars made static mode look as though it jumped every few seconds.
+                    var played = barContext
+                    played.clip(to: Path(CGRect(x: 0, y: 0, width: max(playedX, 0), height: size.height)))
+                    played.blendMode = .copy
+                    played.fill(path, with: .color(referenceStyle ? ink.opacity(0.25) : palette.primary))
+                }
             }
         }
         for ms in bookmarks {

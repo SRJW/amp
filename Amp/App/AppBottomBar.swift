@@ -108,9 +108,7 @@ struct AppNavigationButtons: View {
     }
 
     private var usesArtworkControlPalette: Bool {
-        guard playerArtworkPresent, settings.customTheme == nil else { return false }
-        let bg = settings.playerBackground
-        return bg.controlColorStyle == .monochrome || bg.navBarCapsule || bg.gradientStyle != .classic || settings.theme == .artwork
+        playerArtworkPresent && settings.customTheme == nil
     }
 
     private var controlColors: PlayerBackdropPalette.ControlColors {
@@ -131,7 +129,10 @@ struct AppNavigationButtons: View {
 
     private func playerTint(selected: Bool) -> Color {
         if usesArtworkControlPalette {
-            return settings.playerBackground.navBarCapsule
+            // When Glass is active, the translucent capsule sits on Now Playing's dark backdrop,
+            // so keep light accentInk instead of dark Light Mode ink meant for an opaque light pill.
+            let useOpaqueCapsuleInk = settings.playerBackground.navBarCapsule && !settings.glassEnabled
+            return useOpaqueCapsuleInk
                 ? controlColors.navIcon.opacity(selected ? 1 : 0.72)
                 : controlColors.accentInk.opacity(selected ? 1 : 0.68)
         }
@@ -256,8 +257,9 @@ private struct AppNavigationBarContent: View, Animatable {
                     .modifier(FloatingControlGlass(enabled: glassEnabled,
                                                    verticalOutset: (AppNavigationMetrics.capsuleHeight - AppNavigationMetrics.buttonsHeight) / 2,
                                                    surfaceOpacity: barOpacity))
-                if showsPlayerCapsule && !glassEnabled && blend > 0.001 {
-                    Capsule().fill(playerCapsuleFill)
+                if showsPlayerCapsule && blend > 0.001 {
+                    let tintOpacity = glassEnabled ? (environment.colorScheme == .light ? 0.14 : 0.24) : 1.0
+                    Capsule().fill(playerCapsuleFill.opacity(tintOpacity))
                         .frame(width: width, height: AppNavigationMetrics.capsuleHeight)
                         .opacity(blend)
                 }

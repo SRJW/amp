@@ -9,6 +9,7 @@ struct RootView: View {
     @Environment(LibraryActions.self) private var actions
     @Environment(AppRouter.self) private var router
     @Environment(SoundStore.self) private var sound
+    @Environment(TransitionSettingsStore.self) private var transitions
     @Environment(FixTagsStore.self) private var fixTags
     @Environment(WifiTransferStore.self) private var transfer
     @Environment(\.scenePhase) private var scenePhase
@@ -114,6 +115,8 @@ struct RootView: View {
                 transfer.stop(.backgrounded)
                 player.persistNow()
                 sound.persistNow()
+                settings.persistNow()
+                transitions.persistNow()
             }
         }
     }
@@ -267,7 +270,7 @@ struct AddToPlaylistSheet: View {
     var body: some View {
         NavigationStack {
             List {
-                Button { creating = true } label: { Label("New playlist", systemImage: "plus") }
+                Button { newName = ""; creating = true } label: { Label("New playlist", systemImage: "plus") }
                 ForEach(library.playlists) { playlist in
                     Button {
                         actions.add(songs, to: playlist)
@@ -290,9 +293,11 @@ struct AddToPlaylistSheet: View {
             .toolbar { Button("Cancel") { dismiss() } }
             .alert("New playlist", isPresented: $creating) {
                 TextField("Name", text: $newName)
-                Button("Cancel", role: .cancel) {}
+                Button("Cancel", role: .cancel) { newName = "" }
                 Button("Create") {
-                    actions.createPlaylist(newName, songs: songs)
+                    let chosen = newName
+                    newName = ""
+                    actions.createPlaylist(chosen, songs: songs)
                     dismiss()
                 }
             }
@@ -308,8 +313,12 @@ private struct NewPlaylistAlert: View {
 
     var body: some View {
         TextField("Name", text: $name)
-        Button("Cancel", role: .cancel) {}
-        Button("Create") { actions.createPlaylist(name) }
+        Button("Cancel", role: .cancel) { name = "" }
+        Button("Create") {
+            let chosen = name
+            name = ""
+            actions.createPlaylist(chosen)
+        }
     }
 }
 

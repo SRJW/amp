@@ -107,13 +107,21 @@ final class TransitionSettingsStore {
         return choice
     }
 
-    private func changed() {
-        store.save(Stored(
+    func persistNow() {
+        store.saveNow(snapshot())
+    }
+
+    private func snapshot() -> Stored {
+        Stored(
             global: config.global,
             collections: Dictionary(uniqueKeysWithValues: config.collections.map { ($0.key.key, $0.value) }),
             pairs: Dictionary(uniqueKeysWithValues: config.pairs.map { ($0.key.key, $0.value) }),
             disabledCollections: config.disabledCollections.map(\.key).sorted()
-        ))
+        )
+    }
+
+    private func changed() {
+        store.save(snapshot())
         onChange?()
     }
 }

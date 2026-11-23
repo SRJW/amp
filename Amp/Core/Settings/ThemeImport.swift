@@ -127,9 +127,11 @@ enum ZipReader {
     /// Raw DEFLATE (what Compression calls ZLIB) into exactly [size] bytes.
     static func inflate(_ data: Data, size: Int) throws -> Data {
         guard size > 0 else { return Data() }
+        guard !data.isEmpty else { throw ThemeImportError.notATheme("the zip entry couldn't be decompressed") }
         var output = [UInt8](repeating: 0, count: size)
-        let written = data.withUnsafeBytes { source in
-            compression_decode_buffer(&output, size, source.bindMemory(to: UInt8.self).baseAddress!, data.count, nil, COMPRESSION_ZLIB)
+        let written = data.withUnsafeBytes { source -> Int in
+            guard let base = source.bindMemory(to: UInt8.self).baseAddress else { return 0 }
+            return compression_decode_buffer(&output, size, base, data.count, nil, COMPRESSION_ZLIB)
         }
         guard written == size else { throw ThemeImportError.notATheme("the zip entry couldn't be decompressed") }
         return Data(output)

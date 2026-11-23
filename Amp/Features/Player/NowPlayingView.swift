@@ -24,6 +24,7 @@ struct NowPlayingView: View {
     @State private var showsQueue = false
     @State private var showsLyrics = false
     @State private var showsMarks = false
+    @State private var marksRevision = 0
     @State private var showsVisualizer = false
     @State private var showsAudioDetails = false
     @GestureState private var artworkGestureActive = false
@@ -31,9 +32,6 @@ struct NowPlayingView: View {
     private var artworkControls: PlayerBackdropPalette.ControlColors? {
         guard playerArtworkPresent, settings.customTheme == nil else { return nil }
         let bg = settings.playerBackground
-        guard bg.controlColorStyle == .monochrome || bg.navBarCapsule || bg.gradientStyle != .classic || settings.theme == .artwork else {
-            return nil
-        }
         return PlayerBackdropPalette.controlColors(
             for: Color(argb: artworkDominant),
             style: bg.gradientStyle,
@@ -74,7 +72,7 @@ struct NowPlayingView: View {
                         .frame(width: width - 32).position(x: width / 2, y: height * 0.633)
                     referenceOptions(song, state: state, width: width)
                         .frame(width: width, height: 48).position(x: width / 2, y: height * PlayerLayoutMetrics.secondaryCentreH)
-                    ProgressSection(song: song, screenWidth: width, controlColors: artworkControls) { controls(state, width: width) }
+                    ProgressSection(song: song, screenWidth: width, marksRevision: marksRevision, controlColors: artworkControls) { controls(state, width: width) }
                         .frame(width: width - 20, height: height * 0.18)
                         .position(x: width / 2, y: height * PlayerLayoutMetrics.transportCentreH)
                     let navCentreY = AppNavigationMetrics.centreY(height: height, safeAreaBottom: navigationBottomInset)
@@ -140,7 +138,7 @@ struct NowPlayingView: View {
         .animation(.easeInOut(duration: 0.2), value: actions.message)
         .routerSheets(active: true)
         .sheet(isPresented: $showsQueue) { QueueSheet().preferredColorScheme(themeScheme) }
-        .sheet(isPresented: $showsMarks) { MarksSheet().preferredColorScheme(themeScheme) }
+        .sheet(isPresented: $showsMarks, onDismiss: { marksRevision += 1 }) { MarksSheet().preferredColorScheme(themeScheme) }
         .sheet(isPresented: $showsAudioDetails) { AudioDetailsView().preferredColorScheme(themeScheme) }
         .fullScreenCover(isPresented: $showsVisualizer) { VisualizerView().preferredColorScheme(themeScheme) }
         .fullScreenCover(isPresented: $showsLyrics) { ExpandedLyrics(previous: { player.skipPrevious() }, next: next).preferredColorScheme(themeScheme) }
@@ -499,6 +497,7 @@ private struct ToggleIcon: View {
 private struct ProgressSection<Controls: View>: View {
     let song: Song
     let screenWidth: CGFloat
+    var marksRevision: Int = 0
     var controlColors: PlayerBackdropPalette.ControlColors? = nil
     @ViewBuilder let controls: () -> Controls
     @Environment(PlayerController.self) private var player
@@ -557,11 +556,13 @@ private struct ProgressSection<Controls: View>: View {
         }
         .onChange(of: entryID) { _, _ in previewMs = nil }
         .onChange(of: waveformMode) { _, _ in previewMs = nil }
+        .task(id: "\(song.id)|\(marksRevision)") {
+            bookmarks = ((try? AppServices.shared.database.bookmarks(songId: song.id)) ?? []).map(\.positionMs)
+        }
         .task(id: entryID) {
             levels = nil
             levelsSongID = nil
             previewMs = nil
-            bookmarks = ((try? AppServices.shared.database.bookmarks(songId: song.id)) ?? []).map(\.positionMs)
             let result = await AppServices.shared.waveforms.waveform(song)
             guard !Task.isCancelled, player.state.currentEntry?.id == entryID else { return }
             if case .ready(let loaded) = result {

@@ -2,7 +2,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 import UIKit
 
-enum SettingsPageRoute: String, Hashable { case appearance, language, visualizer, playback, library, metadata, about }
+enum SettingsPageRoute: String, Hashable { case appearance, language, visualizer, playback, library, metadata, about, playerBackground, imageCredits }
 
 struct SettingsDestinationView: View {
     let page: SettingsPageRoute
@@ -16,6 +16,8 @@ struct SettingsDestinationView: View {
             case .library: LibrarySettingsView()
             case .metadata: MetadataSettingsView()
             case .about: AboutSettingsView()
+            case .playerBackground: PlayerBackgroundSettingsView()
+            case .imageCredits: ImageCreditsView()
             }
         }.modifier(ToolPageAppearance())
     }
@@ -61,7 +63,6 @@ private struct SettingsPage<Content: View>: View {
         ScrollView {
             VStack(spacing: 26) { content }
                 .padding(Spacing.lg)
-                .padding(.bottom, AppNavigationMetrics.reservedHeight + Spacing.lg)
         }
         .modifier(ToolPageAppearance())
         .navigationBarTitleDisplayMode(.inline)
@@ -408,7 +409,7 @@ private struct PlayerBackgroundSettingsLink: View {
 
     var body: some View {
         SettingsGroup(L("Now Playing")) {
-            NavigationLink { PlayerBackgroundSettingsView() } label: {
+            NavigationLink(value: Route.settingsPage(.playerBackground)) {
                 HStack(spacing: Spacing.md) {
                     SettingsIcon(symbol: "sparkles.rectangle.stack")
                     VStack(alignment: .leading, spacing: 2) {
@@ -486,6 +487,7 @@ private struct PlayerBackgroundSettingsView: View {
 
     var body: some View {
         let appearance = settings.playerBackground
+        let blurActive = appearance.gradientStyle == .frostedArtwork || appearance.details > 0
         VStack(spacing: 0) {
             pinnedPreviewHeader(appearance: appearance)
             Rectangle()
@@ -558,11 +560,15 @@ private struct PlayerBackgroundSettingsView: View {
                         Divider().padding(.leading, Spacing.lg)
                         sliderRow(
                             L(PlayerBackgroundControls.blur),
-                            description: L(PlayerBackgroundControls.blurDescription),
+                            description: blurActive
+                                ? L(PlayerBackgroundControls.blurDescription)
+                                : L("Increase Background details above 0% or use Frosted artwork to adjust blur."),
                             key: \.blur,
                             range: PlayerBackgroundControls.blurRange,
                             percent: false
                         )
+                        .opacity(blurActive ? 1 : 0.48)
+                        .disabled(!blurActive)
                         Divider().padding(.leading, Spacing.lg)
                         sliderRow(
                             L(PlayerBackgroundControls.details),
@@ -615,7 +621,6 @@ private struct PlayerBackgroundSettingsView: View {
                     }
                 }
                 .padding(Spacing.lg)
-                .padding(.bottom, AppNavigationMetrics.reservedHeight + Spacing.lg)
             }
         }
         .modifier(ToolPageAppearance())
@@ -636,8 +641,8 @@ private struct PlayerBackgroundSettingsView: View {
                 dominant: dominantColor,
                 appearance: appearance,
                 colorScheme: colorScheme,
-                usesArtworkControls: settings.customTheme == nil &&
-                    (appearance.controlColorStyle == .monochrome || appearance.navBarCapsule || appearance.gradientStyle != .classic || settings.theme == .artwork),
+                glassEnabled: settings.glassEnabled,
+                usesArtworkControls: settings.customTheme == nil,
                 customPalette: settings.customTheme?.palette
             )
             VStack(alignment: .leading, spacing: Spacing.sm) {
@@ -747,6 +752,7 @@ private struct PlayerBackgroundMiniPreview: View {
     let dominant: Color
     let appearance: PlayerBackgroundSettings
     let colorScheme: ColorScheme
+    let glassEnabled: Bool
     let usesArtworkControls: Bool
     let customPalette: AppPalette?
 
@@ -780,9 +786,16 @@ private struct PlayerBackgroundMiniPreview: View {
 
     private var navIconColor: Color {
         if let controlColors {
-            return appearance.navBarCapsule ? controlColors.navIcon : controlColors.accentInk.opacity(0.85)
+            let useOpaqueCapsuleInk = appearance.navBarCapsule && !glassEnabled
+            return useOpaqueCapsuleInk ? controlColors.navIcon : controlColors.accentInk.opacity(0.85)
         }
         return .white.opacity(0.88)
+    }
+
+    private var navCapsuleFill: Color {
+        let base = controlColors?.navCapsule ?? Color.black.opacity(0.55)
+        guard glassEnabled else { return base }
+        return base.opacity(colorScheme == .light ? 0.24 : 0.36)
     }
 
     private var accentInk: Color {
@@ -892,7 +905,12 @@ private struct PlayerBackgroundMiniPreview: View {
                 .background {
                     if appearance.navBarCapsule {
                         Capsule()
-                            .fill(controlColors?.navCapsule ?? Color.black.opacity(0.55))
+                            .fill(navCapsuleFill)
+                            .overlay {
+                                if glassEnabled {
+                                    Capsule().strokeBorder(.white.opacity(0.22), lineWidth: 0.6)
+                                }
+                            }
                             .padding(.horizontal, 4)
                     }
                 }
@@ -1093,7 +1111,7 @@ private struct AboutSettingsView: View {
                     .font(.footnote).foregroundStyle(.secondary).padding([.horizontal, .bottom], Spacing.lg)
             }
             SettingsGroup(L("Project")) {
-                NavigationLink { ImageCreditsView() } label: {
+                NavigationLink(value: Route.settingsPage(.imageCredits)) {
                     SettingsActionLabel(title: L("Image credits"), icon: "photo.on.rectangle")
                 }
                 Divider().padding(.leading, Spacing.lg)
@@ -1212,15 +1230,16 @@ struct PlaybackSettingsView: View {
             isTransitionsEnabled
         }, set: { enabled in
             var global = transitions.config.global
+            // Keep masterEnabled true so per-album / per-playlist Transition Studio rules remain active.
+            global.masterEnabled = true
             if enabled {
-                global.masterEnabled = true
                 if global.defaultChoice.specOrNil == nil {
                     var spec = TransitionSpec.preset(.fade)
                     spec.durationMs = 4_000
                     global.defaultChoice = .custom(spec)
                 }
             } else {
-                global.masterEnabled = false
+                global.defaultChoice = .off
             }
             transitions.setGlobal(global)
         })
@@ -1381,8 +1400,6 @@ struct PlaybackSettingsView: View {
                 }
                 .padding(Spacing.lg)
             }
-            .opacity(isTransitionsEnabled ? 1 : 0.48)
-            .disabled(!isTransitionsEnabled)
 
             SettingsGroup(L("Waveform")) {
                 Picker(L("Mode"), selection: $waveformMode) {
