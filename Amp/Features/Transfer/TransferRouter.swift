@@ -106,7 +106,7 @@ final class TransferRouter: @unchecked Sendable {
         switch request.path {
         case "/":
             return request.method == "GET" || request.method == "HEAD"
-                ? HttpResponse(status: HttpStatus.ok, contentType: "text/html; charset=utf-8", body: page) : methodNotAllowed()
+                ? HttpResponse(status: HttpStatus.ok, contentType: "text/html; charset=utf-8", body: request.method == "HEAD" ? Data() : page) : methodNotAllowed()
         case "/api/pair", "/api/check", "/api/upload":
             return await api(request, body)
         default:
@@ -155,13 +155,17 @@ final class TransferRouter: @unchecked Sendable {
         guard let length = request.contentLength else { return .error(HttpStatus.lengthRequired, "Content-Length required") }
         if length > limits.maxFileBytes { return tooLarge() }
         if length == 0 { return .error(HttpStatus.badRequest, "Empty file") }
-        guard let name = TransferFiles.sanitize(decodedName(request)) else { return unsupported() }
+        guard let name = TransferFiles.sanitize(decodedName(request)) else {
+            return await skip(body, length) ? unsupported() : nil
+        }
         let acquired = lock.withLock { () -> Bool in
             guard uploading < limits.maxConcurrentUploads else { return false }
             uploading += 1
             return true
         }
-        if !acquired { return .error(HttpStatus.tooManyRequests, "Busy: the phone is already receiving files, this one will be retried") }
+        if !acquired {
+            return await skip(body, length) ? .error(HttpStatus.tooManyRequests, "Busy: the phone is already receiving files, this one will be retried") : nil
+        }
         events.onUploadStarted()
         defer {
             lock.withLock { uploading -= 1 }
@@ -177,11 +181,11 @@ final class TransferRouter: @unchecked Sendable {
                 return await skip(body, length) ? .json(HttpStatus.ok, [("status", "duplicate"), ("message", Self.duplicateMessage)]) : nil
             case .insufficientSpace:
                 registry.failed(registry.begin(name, length), Self.noSpaceMessage)
-                return noSpace()
+                return await skip(body, length) ? noSpace() : nil
             }
         } catch {
             registry.failed(registry.begin(name, length), "Could not create the file on the phone: \(error.localizedDescription)")
-            return .error(HttpStatus.internalError, "Could not create the file on the phone")
+            return await skip(body, length) ? .error(HttpStatus.internalError, "Could not create the file on the phone") : nil
         }
     }
 

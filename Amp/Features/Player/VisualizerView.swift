@@ -1,3 +1,4 @@
+import AVFoundation
 import SwiftUI
 
 /// The visualizer: what is playing as spectrum bars, a circle of spokes around the artwork, or a
@@ -95,6 +96,9 @@ struct VisualizerView: View {
         }
         .onChange(of: settings.visualizer) { _, new in engine?.apply(new) }
         .onChange(of: scenePhase) { _, phase in setTapActive(phase == .active && engine != nil) }
+        .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.routeChangeNotification).receive(on: RunLoop.main)) { _ in
+            engine?.outputLatency = player.engine.outputLatency
+        }
     }
 
     private func setTapActive(_ active: Bool) {

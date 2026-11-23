@@ -77,7 +77,9 @@ enum RadioEngine {
         switch seed {
         case .song(let id): found = profile.tracks[id].map { [$0] } ?? []
         case .album(let id): found = profile.tracks.values.filter { $0.albumId == id }
-        case .artist(let id): found = profile.tracks.values.filter { $0.artistId == id }
+        case .artist(let id):
+            let credited = profile.artistSongIds[id] ?? []
+            found = profile.tracks.values.filter { $0.artistId == id || credited.contains($0.songId) }
         }
         return found.sorted { $0.songId < $1.songId }
     }

@@ -167,8 +167,11 @@ struct ArtistDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             Menu {
-                Button { primary.reversed().forEach { actions.playNext($0) } } label: { Label("Play next", systemImage: "text.line.first.and.arrowtriangle.forward") }
-                Button { primary.forEach { actions.addToQueue($0) } } label: { Label("Add to queue", systemImage: "text.badge.plus") }
+                let queueTracks = primary.isEmpty ? featured : primary
+                Button { queueTracks.reversed().forEach { actions.playNext($0) } } label: { Label("Play next", systemImage: "text.line.first.and.arrowtriangle.forward") }
+                    .disabled(queueTracks.isEmpty)
+                Button { queueTracks.forEach { actions.addToQueue($0) } } label: { Label("Add to queue", systemImage: "text.badge.plus") }
+                    .disabled(queueTracks.isEmpty)
                 Button { actions.fixTags(primary + featured + unverified) } label: { Label("Fix tags online", systemImage: "wand.and.stars") }
                 if radioAvailable { Button { router.open(.radio(.artist(artistId))) } label: { Label("Browse radio", systemImage: "dot.radiowaves.left.and.right") } }
                 if let artist = library.artist(artistId) {
@@ -299,7 +302,11 @@ struct PlaylistDetailView: View {
         .alert("Rename playlist", isPresented: $renaming) {
             TextField("Name", text: $newName)
             Button("Cancel", role: .cancel) {}
-            Button("Rename") { try? library.database.renamePlaylist(playlistId, name: newName.trimmed) }
+            Button("Rename") {
+                let trimmed = newName.trimmed
+                guard !trimmed.isEmpty else { return }
+                try? library.database.renamePlaylist(playlistId, name: trimmed)
+            }
         }
         .confirmationDialog("Delete this playlist?", isPresented: $confirmingDelete, titleVisibility: .visible) {
             Button("Delete", role: .destructive) {
@@ -314,6 +321,7 @@ struct PlaylistDetailView: View {
             Text("The songs stay in your library.")
         }
         .task(id: library.playlists) { entries = (try? library.database.playlistEntries(playlistId)) ?? [] }
+        .task(id: library.songs) { entries = (try? library.database.playlistEntries(playlistId)) ?? [] }
     }
 
     private func playlistSongActions() -> SongActions {

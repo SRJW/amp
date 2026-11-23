@@ -102,6 +102,8 @@ struct ListeningProfile: Sendable {
     let now: Int64
     /// Songs hidden from Smart Playlists: never offered, though their plays still shape the taste.
     var hidden: Set<Int64> = []
+    /// All credited songs per artist (including featured/collaborative credits from song_artist_cross_ref).
+    var artistSongIds: [Int64: Set<Int64>] = [:]
 
     /// Enough history for mixes that claim to know the listener.
     var isPersonal: Bool {
@@ -242,7 +244,8 @@ enum Moods {
     /// Mostly instrumental, calm genres: never anything tagged with an energetic genre.
     static func isFocus(_ track: TrackFacts) -> Bool {
         let genres = genresOf(track)
-        return any(genres, focus) && !any(genres, energy)
+        return any(genres, focus)
+            && !genres.contains(where: { g in energy.contains { g.contains($0) } && !g.contains("post-rock") })
     }
 
     /// A real year tag (not 0 or the 1970 placeholder) at least [throwbackYears] before [currentYear].

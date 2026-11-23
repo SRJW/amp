@@ -88,6 +88,8 @@ struct SearchView: View {
     @Environment(\.dismiss) private var dismiss
     @FocusState private var focused: Bool
     @AppStorage("library.search.sort") private var sort = "relevance"
+    @State private var playlistMatchSongIDs: Set<Int64> = []
+    @State private var artistMatchSongIDs: Set<Int64> = []
 
     private var matchingSongs: [Song] {
         let tracks: [Song]
@@ -96,23 +98,33 @@ struct SearchView: View {
         case .albums:
             let ids = Set(search.albums.map(\.id)); tracks = library.songs.filter { ids.contains($0.albumId) }
         case .artists:
-            let ids = Set(search.artists.map(\.id)); tracks = library.songs.filter { ids.contains($0.artistId) }
+            let ids = Set(search.artists.map(\.id))
+            tracks = library.songs.filter { ids.contains($0.artistId) || artistMatchSongIDs.contains($0.id) }
         case .albumArtists:
             let ids = search.extras.albumArtists.reduce(into: Set<Int64>()) { $0.formUnion(library.albumArtistAlbums[$1.id] ?? []) }
             tracks = library.songs.filter { ids.contains($0.albumId) }
         case .folders:
             let paths = Set(search.extras.folders); tracks = library.songs.filter { paths.contains(($0.path as NSString).deletingLastPathComponent) }
         case .playlists:
-            let ids = Set(search.extras.playlists.flatMap { (try? library.database.playlistEntries($0.id))?.map(\.song.id) ?? [] })
-            tracks = library.songs.filter { ids.contains($0.id) }
+            tracks = library.songs.filter { playlistMatchSongIDs.contains($0.id) }
         }
         guard let order = LibrarySort(rawValue: sort) else { return tracks }
         return SongBrowseRequest(songs: tracks, facts: library.browseFacts, query: "", sort: order).results()
     }
 
+    private var hasEntityResults: Bool {
+        (includes(.artists) && !search.artists.isEmpty)
+            || (includes(.albums) && !search.albums.isEmpty)
+            || (includes(.albumArtists) && !search.extras.albumArtists.isEmpty)
+            || (includes(.playlists) && !search.extras.playlists.isEmpty)
+            || (includes(.folders) && !search.extras.folders.isEmpty)
+    }
+
     var body: some View {
         @Bindable var search = search
         let tracks = matchingSongs
+        let playlistIDs = search.extras.playlists.map(\.id)
+        let artistIDs = search.artists.map(\.id)
         ScrollView {
             LazyVStack(alignment: .leading, spacing: Spacing.md) {
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -149,7 +161,9 @@ struct SearchView: View {
                         SongList(songs: tracks, emptyMessage: L("No songs match this search."), emptyIcon: "magnifyingglass",
                                  selection: search.selecting ? $search.selected : nil, showsFileDetails: true,
                                  onPlay: rememberQuery, onPlaySong: { search.remember(.song($0)) })
-                    } else if tracks.isEmpty { EmptyState(message: L("No results for this filter."), systemImage: "magnifyingglass") }
+                    } else if tracks.isEmpty && !hasEntityResults {
+                        EmptyState(message: L("No results for this filter."), systemImage: "magnifyingglass")
+                    }
                 }
             }.padding(.vertical, Spacing.md)
         }
@@ -164,6 +178,26 @@ struct SearchView: View {
         .onChange(of: router.section) { _, section in focused = section == .search }
         .onChange(of: search.type) { _, _ in search.selected.removeAll() }
         .task(id: library.songs) { await search.run() }
+        .task(id: library.playlists) { await search.run() }
+        .task(id: playlistIDs) {
+            guard !playlistIDs.isEmpty else { playlistMatchSongIDs = []; return }
+            let database = library.database
+            let loaded = await Task.detached(priority: .userInitiated) {
+                Set(playlistIDs.flatMap { (try? database.playlistEntries($0))?.map(\.song.id) ?? [] })
+            }.value
+            guard !Task.isCancelled else { return }
+            playlistMatchSongIDs = loaded
+        }
+        .task(id: artistIDs) {
+            guard !artistIDs.isEmpty else { artistMatchSongIDs = []; return }
+            let database = library.database
+            let loaded = await Task.detached(priority: .userInitiated) {
+                let byArtist = (try? database.artistSongIDs()) ?? [:]
+                return artistIDs.reduce(into: Set<Int64>()) { $0.formUnion(byArtist[$1] ?? []) }
+            }.value
+            guard !Task.isCancelled else { return }
+            artistMatchSongIDs = loaded
+        }
         .modifier(ToolPageAppearance())
     }
 

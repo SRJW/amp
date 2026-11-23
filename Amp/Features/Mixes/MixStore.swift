@@ -17,8 +17,10 @@ final class MixStore {
         let database = database
         let hidden = Set<Int64>()
         let now = Self.now()
-        guard let profile = await Task.detached(priority: .userInitiated, operation: {
-            try? SmartMixEngine.profile(tracks: database.trackFacts(), plays: database.monthlyPlays(), now: now, hidden: hidden)
+        guard let profile = await Task.detached(priority: .userInitiated, operation: { () -> ListeningProfile? in
+            guard var built = try? SmartMixEngine.profile(tracks: database.trackFacts(), plays: database.monthlyPlays(), now: now, hidden: hidden) else { return nil }
+            built.artistSongIds = (try? database.artistSongIDs()) ?? [:]
+            return built
         }).value else { return nil }
         let anchors = RadioEngine.anchors(profile, seed)
         if anchors.isEmpty { return nil }

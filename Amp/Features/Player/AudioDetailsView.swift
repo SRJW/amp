@@ -148,7 +148,10 @@ struct AudioDetailsView: View {
             ChainStep(title: "Decoder", state: playing ? "Running" : "Idle", appControlled: true, detail: decoderName)
             ChainStep(title: "Transition", state: engine.isCrossfading ? "Fading" : "Unity", appControlled: true,
                       detail: "Changes levels only while a transition set up in the Transition Studio plays")
-            if engine.hasProcessing {
+            if !engine.isReady {
+                ChainStep(title: "Equalizer", state: "Not in use", appControlled: true,
+                          detail: "Audio engine starts when playback begins")
+            } else if engine.hasProcessing {
                 ChainStep(title: "Equalizer", state: eq.status.rawValue, appControlled: true,
                           detail: eq.reason + (eq.status == .active ? "; samples beyond full scale are clipped" : ""))
             } else {

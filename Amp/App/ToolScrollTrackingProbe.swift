@@ -81,9 +81,25 @@ struct ToolScrollTrackingProbe: UIViewRepresentable {
         }
         @objc private func panChanged() {
             guard let scroll else { return }
-            if scroll.panGestureRecognizer.state == .began { lastOffset = offset(scroll) }
+            let state = scroll.panGestureRecognizer.state
+            if state == .began {
+                lastOffset = offset(scroll)
+                displayLink?.invalidate(); displayLink = nil
+                return
+            }
+            guard state == .ended || state == .cancelled || state == .failed else { return }
+            guard active?() == true else {
+                displayLink?.invalidate(); displayLink = nil
+                return
+            }
+            if !scroll.isDragging && !scroll.isDecelerating {
+                displayLink?.invalidate(); displayLink = nil
+                settle?()
+                return
+            }
             if displayLink == nil {
                 let link = CADisplayLink(target: self, selector: #selector(tick))
+                link.preferredFrameRateRange = CAFrameRateRange(minimum: 10, maximum: 15, preferred: 15)
                 displayLink = link
                 link.add(to: .main, forMode: .common)
             }

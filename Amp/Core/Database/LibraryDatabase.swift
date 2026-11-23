@@ -300,6 +300,15 @@ extension LibraryDatabase {
         for (artist, album) in rows { result[artist, default: []].insert(album) }
         return result
     }
+
+    func artistSongIDs() throws -> [Int64: Set<Int64>] {
+        let rows = try db.query("SELECT DISTINCT artist_id, song_id FROM song_artist_cross_ref WHERE is_unresolved = 0", []) {
+            ($0.int64("artist_id"), $0.int64("song_id"))
+        }
+        var result: [Int64: Set<Int64>] = [:]
+        for (artist, song) in rows { result[artist, default: []].insert(song) }
+        return result
+    }
     func allAlbums() throws -> [Album] {
         try db.query("SELECT * FROM albums ORDER BY title COLLATE NOCASE ASC", [], Self.album)
     }

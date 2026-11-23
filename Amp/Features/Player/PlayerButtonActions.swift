@@ -35,35 +35,42 @@ struct PlayerShareButton: View {
     @State private var prepared: PreparedAudioShare?
     @State private var presenting = false
     @State private var preparing = false
+    @State private var fileAvailable = false
     @State private var preparation: Task<Void, Never>?
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { _ in
-            let available = PreparedAudioShare.available(song.url) && !preparing
-            Button { share() } label: {
-                Image(systemName: PlayerButtonConstants.shareSymbol)
-                    .resizable().scaledToFit()
-                    .frame(width: iconWidth, height: iconWidth * PlayerLayoutMetrics.shareHeightInWidth)
-                    .font(.system(size: iconWidth, weight: .bold))
-                    .foregroundStyle(playerInk)
-                    .frame(width: PlayerButtonConstants.touchSize, height: PlayerButtonConstants.touchSize)
-                    .contentShape(Rectangle())
-            }
-            .disabled(!available)
-            .opacity(available ? 1 : PlayerButtonConstants.disabledOpacity)
-            .accessibilityLabel(PlayerButtonConstants.shareLabel)
-            .accessibilityIdentifier("nowPlayingShare")
+        let available = fileAvailable && !preparing
+        Button { share() } label: {
+            Image(systemName: PlayerButtonConstants.shareSymbol)
+                .resizable().scaledToFit()
+                .frame(width: iconWidth, height: iconWidth * PlayerLayoutMetrics.shareHeightInWidth)
+                .font(.system(size: iconWidth, weight: .bold))
+                .foregroundStyle(playerInk)
+                .frame(width: PlayerButtonConstants.touchSize, height: PlayerButtonConstants.touchSize)
+                .contentShape(Rectangle())
+        }
+        .disabled(!available)
+        .opacity(available ? 1 : PlayerButtonConstants.disabledOpacity)
+        .accessibilityLabel(PlayerButtonConstants.shareLabel)
+        .accessibilityIdentifier("nowPlayingShare")
+        .task(id: song.url) {
+            fileAvailable = PreparedAudioShare.available(song.url)
         }
         .sheet(isPresented: $presenting, onDismiss: cleanup) {
             if let prepared {
                 AudioFileShareSheet(url: prepared.url) { presenting = false }
             }
         }
-        .onDisappear { preparation?.cancel() }
+        .onDisappear {
+            preparation?.cancel()
+            if !presenting { cleanup() }
+        }
     }
 
     private func share() {
-        guard !preparing, PreparedAudioShare.available(song.url) else { return }
+        let stillAvailable = PreparedAudioShare.available(song.url)
+        fileAvailable = stillAvailable
+        guard !preparing, stillAvailable else { return }
         preparing = true
         let source = song.url
         preparation = Task { @MainActor in
@@ -74,8 +81,11 @@ struct PlayerShareButton: View {
                 prepared = copy
                 presenting = true
             } catch {
-                if !Task.isCancelled, PreparedAudioShare.available(source) {
-                    actions.show(PlayerButtonConstants.shareFailed)
+                if !Task.isCancelled {
+                    fileAvailable = PreparedAudioShare.available(source)
+                    if fileAvailable {
+                        actions.show(PlayerButtonConstants.shareFailed)
+                    }
                 }
             }
         }
