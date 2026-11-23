@@ -79,5 +79,6 @@ final class ThemeImportTests: XCTestCase {
         XCTAssertThrowsError(try ThemeImporter.theme(from: Data("not json".utf8)))
         XCTAssertThrowsError(try ThemeImporter.theme(from: zip("readme.txt", Data("hi".utf8), deflate: false)))
         XCTAssertThrowsError(try ThemeImporter.theme(from: Data("{\"id\":\"\",\"name\":\"X\",\"colors\":{}}".utf8)))
+        XCTAssertThrowsError(try ZipReader.inflate(Data(), size: 16))
     }
 }

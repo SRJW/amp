@@ -72,6 +72,28 @@ final class DatabaseTests: XCTestCase {
         }
         XCTAssertEqual(try db.songsOfAlbum(1).map(\.id), [6, 3, 2, 4, 1, 5])
     }
+
+    func testEmptyBlobBindsAsNonNullAndRollbackLeavesTransactionsUsable() throws {
+        let sql = try SQLiteDatabase.inMemory()
+        try sql.execute("CREATE TABLE blobs (id INTEGER PRIMARY KEY, payload BLOB NOT NULL)")
+        try sql.execute("INSERT INTO blobs (id, payload) VALUES (1, ?)", [Data()])
+        let rows = try sql.query("SELECT payload FROM blobs WHERE id = 1") { ($0.isNull("payload"), $0.data("payload")) }
+        XCTAssertEqual(rows.count, 1)
+        XCTAssertFalse(rows[0].0)
+        XCTAssertEqual(rows[0].1, Data())
+
+        struct Boom: Error {}
+        XCTAssertThrowsError(try sql.transaction {
+            try sql.execute("INSERT INTO blobs (id, payload) VALUES (2, ?)", [Data([1, 2])])
+            throw Boom()
+        })
+        let afterRollback = try sql.query("SELECT id FROM blobs") { $0.int("id") }
+        XCTAssertEqual(afterRollback, [1])
+        try sql.transaction {
+            try sql.execute("INSERT INTO blobs (id, payload) VALUES (3, ?)", [Data([3])])
+        }
+        XCTAssertEqual(try sql.query("SELECT id FROM blobs ORDER BY id") { $0.int("id") }, [1, 3])
+    }
 }
 
 final class ScannerTests: XCTestCase {

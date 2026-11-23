@@ -35,6 +35,15 @@ final class LyricsParserTests: XCTestCase {
         XCTAssertEqual(["I ", "love ", "this"], line.words?.map(\.text))
     }
 
+    func testEnhancedLrcPreservesLeadingWordBeforeFirstInlineStamp() {
+        let lyrics = LyricsParser.parse("[00:10.00]Hello <00:10.50>world")!
+        XCTAssertTrue(lyrics.hasWordTiming)
+        guard case .synced(let lines) = lyrics, let line = lines.first else { return XCTFail("not synced") }
+        XCTAssertEqual("Hello world", line.text)
+        XCTAssertEqual([10_000, 10_500], line.words?.map(\.timeMs))
+        XCTAssertEqual(["Hello ", "world"], line.words?.map(\.text))
+    }
+
     func testActiveLineAndWordComeFromABinarySearch() {
         let lyrics = LyricsParser.parse("[00:01.00]A\n[00:05.00]<00:05.00>b <00:06.00>c\n[00:09.00]D")!
         XCTAssertEqual(-1, lyrics.lineAt(500))

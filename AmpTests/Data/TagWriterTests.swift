@@ -220,4 +220,19 @@ final class TagWriterTests: XCTestCase {
         request.genre = "Rock; ; Pop"
         XCTAssertEqual(request.genres, ["Rock", "Pop"])
     }
+
+    func testMP4ExtendedBoxBodyAndChunkOffsetThreshold() throws {
+        let payload = Data([1, 2, 3, 4])
+        let extendedBox = Data.be32(1) + Data("udta".utf8) + Data.be64(UInt64(16 + payload.count)) + payload
+        XCTAssertEqual(MP4Writer.body(extendedBox), payload)
+
+        // Two chunk offsets: one before moov (100), one after moov (1000).
+        let stcoBody = Data.be32(0) + Data.be32(2) + Data.be32(100) + Data.be32(1000)
+        let stbl = MP4Writer.box("stbl", MP4Writer.box("stco", stcoBody))
+        let moov = MP4Writer.box("trak", MP4Writer.box("mdia", MP4Writer.box("minf", stbl)))
+        let shifted = try MP4Writer.shiftChunkOffsets(moov, after: 500, by: 250)
+        let stco = try MP4Writer.children(MP4Writer.body(MP4Writer.children(MP4Writer.body(MP4Writer.children(MP4Writer.body(MP4Writer.children(shifted)[0].box))[0].box))[0].box))[0].box
+        XCTAssertEqual(stco.uint32BE(16), 100, "Chunks before moov must stay untouched")
+        XCTAssertEqual(stco.uint32BE(20), 1250, "Chunks after moov must shift by delta")
+    }
 }

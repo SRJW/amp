@@ -172,5 +172,7 @@ final class TagReaderTests: XCTestCase {
         XCTAssertEqual(["Rock"], ID3.genres(["17"]))
         XCTAssertEqual(["Rock", "Pop"], ID3.genres(["Rock", "Pop"]))
         XCTAssertEqual(["Remix"], ID3.genres(["(RX)"]))
+        XCTAssertEqual([], ID3.genres(["(-1)"]))
+        XCTAssertEqual(["-5"], ID3.genres(["-5"]))
     }
 }

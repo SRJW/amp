@@ -170,6 +170,30 @@ final class EqTests: XCTestCase {
         XCTAssertEqual(input, process(kernel, input, sampleRate: 48_000))
     }
 
+    func testShelfFiltersStayStableAtHighGainAndQ() {
+        for type in [BandFilterType.lowShelf, .highShelf] {
+            var settings = SoundSettings()
+            settings.bands[0] = BandConfig(frequencyHz: 120, gainDb: 12, q: 10, type: type)
+            let kernel = EqKernel()
+            kernel.apply(settings)
+            let impulse = [Float(1)] + [Float](repeating: 0, count: 4_799)
+            let out = process(kernel, impulse, sampleRate: 48_000)
+            XCTAssertTrue(out.allSatisfy(\.isFinite), "Shelf \(type) must stay finite at high Q and gain")
+            let tailPeak = out.suffix(512).map(abs).max() ?? 0
+            XCTAssertLessThan(tailPeak, 1.0, "Shelf \(type) impulse response must decay instead of oscillating")
+        }
+    }
+
+    func testInactiveBandsDoNotKeepEqActiveWhenVisibleBandsAreFlat() {
+        let kernel = EqKernel()
+        var settings = SoundSettings()
+        settings.activeBandCount = 5
+        settings.bands[7].gainDb = 9
+        kernel.apply(settings)
+        let input = (0..<1_024).map { Float(0.25 * sin(2 * Double.pi * 1_000 * Double($0) / 48_000)) }
+        XCTAssertEqual(input, process(kernel, input, sampleRate: 48_000))
+    }
+
     func testRepairedSettings() {
         var broken = SoundSettings()
         broken.bands = [BandConfig(frequencyHz: 60, gainDb: 3)]

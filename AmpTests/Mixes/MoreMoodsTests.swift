@@ -26,6 +26,8 @@ final class MoreMoodsTests: XCTestCase {
 
     func testConflictingGenresStayOut() {
         XCTAssertFalse(Moods.isFocus(track(1, genre: "Ambient; Techno")))
+        XCTAssertTrue(Moods.isFocus(track(4, genre: "Post-Rock")))
+        XCTAssertFalse(Moods.isFocus(track(5, genre: "Post-Rock; Metal")))
         XCTAssertFalse(Moods.isRomantic(track(2, genre: "R&B; Drill")))
         XCTAssertFalse(Moods.isFeelGood(track(3, genre: "Pop; Emo")))
     }
