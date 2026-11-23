@@ -366,6 +366,14 @@ extension LibraryDatabase {
                 """, [key])
         }
     }
+
+    /// Removes any stored artwork for an artist (custom or automatic) and clears artists.artwork_uri.
+    func deleteArtistArtwork(key: String) throws {
+        try db.transaction {
+            try db.execute("DELETE FROM artist_artwork WHERE artist_key = ?", [key])
+            try db.execute("UPDATE artists SET artwork_uri = NULL WHERE artist_key = ?", [key])
+        }
+    }
 }
 
 // MARK: - Playlists (PlaylistDao)

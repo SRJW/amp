@@ -74,6 +74,7 @@ final class SQLiteDatabase: @unchecked Sendable {
     private var handle: OpaquePointer?
     private let lock = NSRecursiveLock()
     private var transactionDepth = 0
+    private var pendingTransactionTables: Set<String> = []
     private var notifyScheduled = false
     private var changedTables: Set<String> = []
 
@@ -84,6 +85,7 @@ final class SQLiteDatabase: @unchecked Sendable {
         guard sqlite3_open_v2(path, &handle, flags, nil) == SQLITE_OK else {
             throw DatabaseError(message: "Could not open database at \(path)", sql: nil)
         }
+        sqlite3_busy_timeout(handle, 5000)
         try execute("PRAGMA journal_mode = WAL")
         try execute("PRAGMA synchronous = NORMAL")
     }
@@ -149,16 +151,24 @@ final class SQLiteDatabase: @unchecked Sendable {
             let outer = transactionDepth == 0
             if outer { try execute("BEGIN IMMEDIATE") }
             transactionDepth += 1
-            do {
-                let result = try body()
+            var succeeded = false
+            defer {
                 transactionDepth -= 1
-                if outer { try execute("COMMIT") }
-                return result
-            } catch {
-                transactionDepth -= 1
-                if outer { try? execute("ROLLBACK") }
-                throw error
+                if outer {
+                    if succeeded {
+                        let pending = pendingTransactionTables
+                        pendingTransactionTables.removeAll()
+                        for table in pending { markDirty(table: table) }
+                    } else {
+                        pendingTransactionTables.removeAll()
+                        try? execute("ROLLBACK")
+                    }
+                }
             }
+            let result = try body()
+            if outer { try execute("COMMIT") }
+            succeeded = true
+            return result
         }
     }
 
@@ -177,7 +187,14 @@ final class SQLiteDatabase: @unchecked Sendable {
             case .int(let v): sqlite3_bind_int64(statement, position, v)
             case .double(let v): sqlite3_bind_double(statement, position, v)
             case .text(let v): sqlite3_bind_text(statement, position, v, -1, Self.transient)
-            case .blob(let v): _ = v.withUnsafeBytes { sqlite3_bind_blob(statement, position, $0.baseAddress, Int32(v.count), Self.transient) }
+            case .blob(let v):
+                if v.isEmpty {
+                    withUnsafeBytes(of: UInt8(0)) {
+                        sqlite3_bind_blob(statement, position, $0.baseAddress, 0, Self.transient)
+                    }
+                } else {
+                    _ = v.withUnsafeBytes { sqlite3_bind_blob(statement, position, $0.baseAddress, Int32(v.count), Self.transient) }
+                }
             case .null: sqlite3_bind_null(statement, position)
             }
         }
@@ -208,6 +225,10 @@ final class SQLiteDatabase: @unchecked Sendable {
     }
 
     private func markDirty(table: String = "*") {
+        if transactionDepth > 0 {
+            pendingTransactionTables.insert(table)
+            return
+        }
         changedTables.insert(table)
         guard !notifyScheduled else { return }
         notifyScheduled = true

@@ -175,7 +175,7 @@ struct ArtistDetailView: View {
                     Button { artworkTarget = .artist(artist) } label: { Label("Find a photo", systemImage: "person.crop.square") }
                     if artist.artworkPath != nil {
                         Button(role: .destructive) { AppServices.shared.artwork.removePhoto(artist) } label: {
-                            Label("Remove chosen photo", systemImage: "trash")
+                            Label("Remove photo", systemImage: "trash")
                         }
                     }
                 }
@@ -303,7 +303,11 @@ struct PlaylistDetailView: View {
         }
         .confirmationDialog("Delete this playlist?", isPresented: $confirmingDelete, titleVisibility: .visible) {
             Button("Delete", role: .destructive) {
+                let oldCover = library.playlist(playlistId)?.artworkPath
                 try? library.database.deletePlaylist(playlistId)
+                if let old = oldCover, !old.hasPrefix("/") {
+                    try? FileManager.default.removeItem(atPath: LibraryPaths.resolveImage(old))
+                }
                 dismiss()
             }
         } message: {

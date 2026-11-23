@@ -23,7 +23,7 @@ enum ID3 {
             // Extended header: v2.3 size excludes itself, v2.4 is syncsafe and includes itself.
             position = major == 3 ? Int(body.uint32BE(0)) + 4 : syncsafe(body, 0)
         }
-        return parseFrames(body, from: position, major: major, wantArtwork: wantArtwork)
+        return parseFrames(body, from: position, major: major, tagUnsync: flags & 0x80 != 0, wantArtwork: wantArtwork)
     }
 
     /// The last 128 bytes "TAG…" of an MP3.
@@ -46,7 +46,7 @@ enum ID3 {
         return tags
     }
 
-    private static func parseFrames(_ body: Data, from start: Int, major: Int, wantArtwork: Bool) -> Result {
+    private static func parseFrames(_ body: Data, from start: Int, major: Int, tagUnsync: Bool, wantArtwork: Bool) -> Result {
         var result = Result()
         var position = start
         let idLength = major == 2 ? 3 : 4
@@ -66,13 +66,16 @@ enum ID3 {
             let dataStart = position + headerLength
             guard size > 0, dataStart + size <= body.count else { break }
             var data = body.slice(dataStart, size)
-            if major == 4 {
-                if frameFlags & 0x0001 != 0 { data = data.slice(4, data.count - 4) } // data length indicator
-                if frameFlags & 0x0002 != 0 { data = deunsynchronise(data) }
-            }
             // Compressed or encrypted frames are skipped.
             let unusable = major == 3 ? frameFlags & 0x00C0 != 0 : major == 4 ? frameFlags & 0x000C != 0 : false
             if !unusable {
+                if major == 3 {
+                    if frameFlags & 0x0020 != 0, data.count >= 1 { data = data.slice(1, data.count - 1) } // grouping id
+                } else if major == 4 {
+                    if frameFlags & 0x0002 != 0 || tagUnsync { data = deunsynchronise(data) }
+                    if frameFlags & 0x0040 != 0, data.count >= 1 { data = data.slice(1, data.count - 1) } // grouping id
+                    if frameFlags & 0x0001 != 0, data.count >= 4 { data = data.slice(4, data.count - 4) } // data length indicator
+                }
                 let key = major == 2 ? v22ToV23[id] ?? id : id
                 switch key {
                 case "TIT2": result.tags.title = text(data)
@@ -195,7 +198,7 @@ enum ID3 {
             while rest.hasPrefix("(") {
                 guard let close = rest.firstIndex(of: ")") else { break }
                 let inner = rest[rest.index(after: rest.startIndex)..<close]
-                if let number = Int(inner), number < genreNames.count {
+                if let number = Int(inner), number >= 0, number < genreNames.count {
                     out.append(genreNames[number])
                 } else if inner == "RX" {
                     out.append("Remix")
@@ -206,7 +209,7 @@ enum ID3 {
             }
             let remainder = String(rest).trimmed
             if !remainder.isEmpty {
-                if let number = Int(remainder), number < genreNames.count {
+                if let number = Int(remainder), number >= 0, number < genreNames.count {
                     out.append(genreNames[number])
                 } else {
                     out.append(remainder)

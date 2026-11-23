@@ -82,10 +82,10 @@ enum TagWriter {
     /// Embedded artwork is scaled to fit this many pixels and saved as JPEG (as on Android).
     static let maxArtworkPixels = 1440
 
-    static func write(_ request: TagWriteRequest, to url: URL, requiringComplete fields: Set<MetadataField> = []) throws {
+    static func write(_ request: TagWriteRequest, to url: URL, requiringComplete fields: Set<MetadataField> = [], artworkPrepared: Bool = false) throws {
         guard request.hasChanges else { throw TagWriteError.nothingToWrite }
         var request = request
-        if let artwork = request.artwork { request.artwork = ArtworkEncoder.prepare(artwork) }
+        if !artworkPrepared, let artwork = request.artwork { request.artwork = ArtworkEncoder.prepare(artwork) }
         let temp = url.deletingLastPathComponent().appendingPathComponent(".\(UUID().uuidString).\(url.pathExtension)")
         defer { try? FileManager.default.removeItem(at: temp) }
         guard let input = try? FileHandle(forReadingFrom: url) else { throw TagWriteError.unreadable("can't open") }
@@ -298,12 +298,12 @@ enum ID3Writer {
             var data = body.slice(start, frameSize)
             if major == 3 {
                 if frameFlags & 0x00C0 != 0 { continue } // compressed or encrypted: can't be carried over
-                if frameFlags & 0x0020 != 0 { data = data.slice(1, data.count - 1) } // grouping id
+                if frameFlags & 0x0020 != 0, data.count >= 1 { data = data.slice(1, data.count - 1) } // grouping id
             } else {
                 if frameFlags & 0x000C != 0 { continue }
-                if frameFlags & 0x0040 != 0 { data = data.slice(1, data.count - 1) }
-                if frameFlags & 0x0001 != 0 { data = data.slice(4, data.count - 4) }
-                if frameFlags & 0x0002 != 0 { data = ID3.deunsynchronise(data) }
+                if frameFlags & 0x0002 != 0 || flags & 0x80 != 0 { data = ID3.deunsynchronise(data) }
+                if frameFlags & 0x0040 != 0, data.count >= 1 { data = data.slice(1, data.count - 1) }
+                if frameFlags & 0x0001 != 0, data.count >= 4 { data = data.slice(4, data.count - 4) }
             }
             switch id {
             // ID3v2.3 date frames become one v2.4 TDRC.
@@ -453,7 +453,7 @@ enum MP4Writer {
         var newBody = try rebuildMoov(oldBody, request)
         let mediaAfter = boxes.contains { $0.type == "mdat" && $0.offset > moov.offset }
         let delta = Int64(newBody.count + 8) - Int64(moov.size)
-        if mediaAfter && delta != 0 { newBody = try shiftChunkOffsets(newBody, by: delta) }
+        if mediaAfter && delta != 0 { newBody = try shiftChunkOffsets(newBody, after: moov.end, by: delta) }
         try TagWriter.copyRest(source, from: 0, to: moov.offset, into: output)
         try output.write(contentsOf: Data.be32(newBody.count + 8) + Data("moov".utf8) + newBody)
         try TagWriter.copyRest(source, from: moov.end, into: output)
@@ -475,8 +475,11 @@ enum MP4Writer {
 
     static func box(_ type: String, _ body: Data) -> Data { Data.be32(body.count + 8) + Data(type.utf8) + body }
 
-    /// The body of a plain 32-bit box (its bytes after the 8-byte header).
-    static func body(_ box: Data) -> Data { box.slice(8, box.count - 8) }
+    /// The body of an MP4 box (after its 8-byte header, or 16-byte extended-size header).
+    static func body(_ box: Data) -> Data {
+        let header = box.count >= 16 && box.uint32BE(0) == 1 ? 16 : 8
+        return box.slice(header, max(0, box.count - header))
+    }
 
     static func rebuildMoov(_ moov: Data, _ request: TagWriteRequest) throws -> Data {
         var items = try children(moov)
@@ -572,8 +575,8 @@ enum MP4Writer {
         return items.map(\.box).reduce(Data(), +)
     }
 
-    /// Adds [delta] to every stco / co64 entry under moov › trak › mdia › minf › stbl.
-    static func shiftChunkOffsets(_ moov: Data, by delta: Int64) throws -> Data {
+    /// Adds [delta] to stco / co64 entries at or after [threshold] under moov › trak › mdia › minf › stbl.
+    static func shiftChunkOffsets(_ moov: Data, after threshold: UInt64 = 0, by delta: Int64) throws -> Data {
         try transform(moov, path: ["trak", "mdia", "minf", "stbl"]) { type, box in
             switch type {
             case "stco":
@@ -582,7 +585,9 @@ enum MP4Writer {
                 guard 16 + count * 4 <= box.count else { throw TagWriteError.unreadable("a broken stco box") }
                 for i in 0..<count {
                     let at = 16 + i * 4
-                    let moved = Int64(box.uint32BE(at)) + delta
+                    let original = UInt64(box.uint32BE(at))
+                    guard original >= threshold else { continue }
+                    let moved = Int64(original) + delta
                     guard moved >= 0, moved <= Int64(UInt32.max) else { throw TagWriteError.unsupportedFormat("chunk offsets past 4 GB") }
                     out.replaceSubrange(at..<(at + 4), with: Data.be32(Int(moved)))
                 }
@@ -593,7 +598,12 @@ enum MP4Writer {
                 guard 16 + count * 8 <= box.count else { throw TagWriteError.unreadable("a broken co64 box") }
                 for i in 0..<count {
                     let at = 16 + i * 8
-                    out.replaceSubrange(at..<(at + 8), with: Data.be64(UInt64(Int64(box.uint64BE(at)) + delta)))
+                    let original = box.uint64BE(at)
+                    guard original >= threshold else { continue }
+                    guard original <= UInt64(Int64.max) else { throw TagWriteError.unsupportedFormat("chunk offset overflow") }
+                    let moved = Int64(original) + delta
+                    guard moved >= 0 else { throw TagWriteError.unreadable("negative chunk offset") }
+                    out.replaceSubrange(at..<(at + 8), with: Data.be64(UInt64(moved)))
                 }
                 return out
             default:

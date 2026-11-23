@@ -122,7 +122,7 @@ final class ArtworkUpgradeStore {
                     let candidates: [ArtworkCandidate]
                     switch target {
                     case .album(let album): candidates = await search.albumCovers(album: album.title, artist: album.artist, year: album.year)
-                    case .artist(let artist): candidates = await search.artistPhotos(artist.name)
+                    case .artist(let artist): candidates = await search.validatedArtistPhotos(artist.name)
                     }
                     for candidate in candidates.sorted(by: { ($0.image?.width ?? 0) > ($1.image?.width ?? 0) }).prefix(12) {
                         guard !Task.isCancelled else { return }

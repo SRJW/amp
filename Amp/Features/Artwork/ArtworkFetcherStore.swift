@@ -251,14 +251,14 @@ final class ArtworkFetcherStore {
     private func embed(_ image: Data, in album: Album) async throws {
         let songs = try library.database.songsOfAlbum(album.id)
         guard !songs.isEmpty else { throw ProviderError(status: .failed, message: "The album has no songs") }
-        let prepared = ArtworkEncoder.prepare(image)
+        let prepared = await Task.detached(priority: .utility) { ArtworkEncoder.prepare(image) }.value
         var failures: [String] = []
         for song in songs {
             var request = TagWriteRequest()
             request.artwork = prepared
             let url = song.url
             do {
-                try await Task.detached(priority: .utility) { try TagWriter.write(request, to: url) }.value
+                try await Task.detached(priority: .utility) { try TagWriter.write(request, to: url, artworkPrepared: true) }.value
             } catch {
                 failures.append("\(song.title): \(error.localizedDescription)")
             }
@@ -305,7 +305,16 @@ final class ArtworkFetcherStore {
     }
 
     func removePhoto(_ artist: Artist) {
-        try? library.database.deleteCustomArtistArtwork(key: artist.artistKey)
+        let oldPath = (try? library.database.artistArtworkRow(key: artist.artistKey)?.path) ?? artist.artworkPath
+        try? library.database.deleteArtistArtwork(key: artist.artistKey)
+        if let old = oldPath, !old.hasPrefix("/") {
+            try? FileManager.default.removeItem(atPath: LibraryPaths.resolveImage(old))
+        }
+        attemptedArtists.insert(artist.artistKey)
+        artistStatus[artist.id] = .missing
+        if let index = artists.firstIndex(where: { $0.id == artist.id }), let updated = try? library.database.artist(id: artist.id) {
+            artists[index] = updated
+        }
     }
 
     /// Gives each listed artist the photo of its Deezer profile when one is safely that artist;

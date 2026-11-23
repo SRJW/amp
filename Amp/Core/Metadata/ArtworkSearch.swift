@@ -196,7 +196,8 @@ struct ArtworkSearch: Sendable {
         }
         guard let url = URL(string: release.url), let response = try? await fetchJSON(Response.self, url, client: client) else { return [] }
         return response.images.filter { $0.front && $0.approved == true }.map { item in
-            ArtworkCandidate(url: item.thumbnails?["1200"] ?? item.thumbnails?["large"] ?? item.image, source: release.source, match: release.match)
+            let chosen = Self.normalizeImageUrl(item.thumbnails?["1200"] ?? item.thumbnails?["large"] ?? item.image)
+            return ArtworkCandidate(url: chosen, source: release.source, match: release.match)
         }
     }
 
@@ -215,6 +216,21 @@ struct ArtworkSearch: Sendable {
         return all.filter { seen.insert($0.url).inserted }
     }
 
+    /// Artist photo candidates validated and cached with real image dimensions (used by Artwork Upgrade).
+    func validatedArtistPhotos(_ name: String) async -> [ArtworkCandidate] {
+        let raw = await artistPhotos(name)
+        var valid: [ArtworkCandidate] = []
+        var digests = Set<String>()
+        for candidate in raw.prefix(12) {
+            guard !Task.isCancelled else { return [] }
+            guard let checked = await cache.validate(candidate, client: client),
+                  let facts = checked.image,
+                  digests.insert(facts.digest).inserted else { continue }
+            valid.append(checked)
+        }
+        return valid
+    }
+
     func deezerArtists(_ name: String) async throws -> [DeezerArtist] {
         struct Response: Decodable {
             var data: [DeezerArtist]?
@@ -231,7 +247,9 @@ struct ArtworkSearch: Sendable {
         guard let artists = try? await deezerArtists(name) else { return [] }
         let key = Self.normalizeArtistName(name)
         let exact = artists.filter { Self.normalizeArtistName($0.name) == key }.sorted { $0.nbFan > $1.nbFan }
-        return (exact.isEmpty ? artists : exact).compactMap(Self.realPicture).map { ArtworkCandidate(url: $0, source: "Deezer") }
+        return (exact.isEmpty ? artists : exact).compactMap(Self.realPicture).map {
+            ArtworkCandidate(url: Self.normalizeImageUrl($0), source: "Deezer")
+        }
     }
 
     struct ArtistLinks: Sendable {
@@ -331,7 +349,7 @@ struct ArtworkSearch: Sendable {
 
     /// Deezer returns ".../images/artist//..." (no image hash) for a profile without a photo.
     static func realPicture(_ artist: DeezerArtist) -> String? {
-        guard let url = [artist.pictureBig, artist.pictureXl, artist.pictureMedium].compactMap({ $0 }).first(where: { !$0.isBlank }),
+        guard let url = [artist.pictureXl, artist.pictureBig, artist.pictureMedium].compactMap({ $0 }).first(where: { !$0.isBlank }),
               !url.contains("/artist//") else { return nil }
         return url
     }

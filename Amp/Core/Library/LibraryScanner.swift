@@ -126,7 +126,7 @@ final class LibraryScanner: @unchecked Sendable {
         )
         let raw = RawTrack(
             songId: id, title: song.title, rawArtist: rawArtist, rawAlbumArtist: tags.albumArtist?.nonBlank,
-            album: rawAlbum, trackNumber: song.trackNumber, discNumber: tags.discNumber ?? 0, folder: folder,
+            album: rawAlbum, trackNumber: song.trackNumber, discNumber: song.discNumber, folder: folder,
             isCompilation: tags.isCompilation
         )
         return ScannedSong(song: song, raw: raw, lyrics: tags.lyrics?.nonBlank)
@@ -152,17 +152,21 @@ final class LibraryScanner: @unchecked Sendable {
         let db = database.db
         let scannedIds = Set(scanned.map(\.song.id))
         let removed = Array(previousIds.subtracting(scannedIds))
-        let artwork = try database.artistArtworkByKey()
         let songById = Dictionary(scanned.map { ($0.song.id, $0) }, uniquingKeysWith: { first, _ in first })
         try db.transaction {
+            // Re-read mutable user state inside the write lock so favorites or artist photos changed while scanning are never overwritten.
+            let liveFavorites = Set(try db.query("SELECT id FROM songs WHERE is_favorite != 0") { $0.int64("id") })
+            let artwork = try database.artistArtworkByKey()
             for chunk in removed.chunked(into: 500) {
                 try db.execute("DELETE FROM library_imports WHERE song_id IN (\(placeholders(chunk.count)))", chunk)
                 try db.execute("DELETE FROM songs WHERE id IN (\(placeholders(chunk.count)))", chunk)
             }
             let importedAt = LibraryDatabase.now()
             for item in scanned {
-                try db.execute("INSERT OR IGNORE INTO library_imports (song_id, added_at) VALUES (?, ?)", [item.song.id, importedAt])
-                try insert(item, assignment: model.songs[item.song.id], into: db)
+                var current = item
+                current.song.isFavorite = liveFavorites.contains(item.song.id)
+                try db.execute("INSERT OR IGNORE INTO library_imports (song_id, added_at) VALUES (?, ?)", [current.song.id, importedAt])
+                try insert(current, assignment: model.songs[current.song.id], into: db)
             }
             for table in ["song_artist_cross_ref", "albums", "artists", "album_artist_cross_ref", "unverified_credit_segment"] {
                 try db.execute("DELETE FROM \(table)")
