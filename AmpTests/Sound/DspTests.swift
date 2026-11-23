@@ -171,9 +171,9 @@ final class EqTests: XCTestCase {
     }
 
     func testShelfFiltersStayStableAtHighGainAndQ() {
-        for type in [BandFilterType.lowShelf, .highShelf] {
+        for type in [FilterType.lowShelf, .highShelf] {
             var settings = SoundSettings()
-            settings.bands[0] = BandConfig(frequencyHz: 120, gainDb: 12, q: 10, type: type)
+            settings.bands[0] = BandConfig(frequencyHz: 120, gainDb: 12, q: 10, filterType: type)
             let kernel = EqKernel()
             kernel.apply(settings)
             let impulse = [Float(1)] + [Float](repeating: 0, count: 4_799)
