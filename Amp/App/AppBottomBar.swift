@@ -132,11 +132,11 @@ struct AppNavigationButtons: View {
     private func playerTint(selected: Bool) -> Color {
         if usesArtworkControlPalette {
             return settings.playerBackground.navBarCapsule
-                ? controlColors.navIcon
+                ? controlColors.navIcon.opacity(selected ? 1 : 0.72)
                 : controlColors.accentInk.opacity(selected ? 1 : 0.68)
         }
         return settings.playerBackground.navBarCapsule
-            ? playerInk.opacity(0.88)
+            ? playerInk.opacity(selected ? 1 : 0.72)
             : playerInk.opacity(selected ? 1 : 0.6)
     }
 
@@ -147,6 +147,7 @@ struct AppNavigationButtons: View {
     var body: some View {
         let artworkURL = player.state.currentSong?.url
         let resolvedProgress = playerProgress ?? (inPlayer ? 1 : 0)
+        let interactiveBarEnabled = settings.playerBackground.navBarCapsule || resolvedProgress < 0.5
         let activeSectionIndex: Int = switch router.section {
         case .library: 0
         case .equalizer: 1
@@ -184,7 +185,7 @@ struct AppNavigationButtons: View {
             artworkDominant = sampled.artworkDominant
         }
         .background {
-            NavigationGlassTouchObserver(enabled: resolvedProgress < 0.5, changed: { sample in
+            NavigationGlassTouchObserver(enabled: interactiveBarEnabled, changed: { sample in
                 guard abs(sample.width - width) < 0.5 else { return }
                 let height = AppNavigationMetrics.buttonsHeight
                 guard sample.point.y >= -height / 2, sample.point.y <= height * 1.5 else {
@@ -207,7 +208,7 @@ struct AppNavigationButtons: View {
             })
             .accessibilityHidden(true)
         }
-        .onChange(of: resolvedProgress >= 0.5) { _, presented in if presented { contact = nil } }
+        .onChange(of: interactiveBarEnabled) { _, enabled in if !enabled { contact = nil } }
         .onChange(of: width) { _, _ in contact = nil }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in contact = nil }
 
@@ -242,28 +243,23 @@ private struct AppNavigationBarContent: View, Animatable {
 
     var body: some View {
         let blend = PlayerCoverGeometry.chromeOpacity(playerProgress)
+        let barOpacity = showsPlayerCapsule ? 1.0 : (1 - blend)
         let lensX = contact?.lensX ?? width * PlayerLayoutMetrics.navigationCentresW[selectedIndex]
         let liftAnimation: Animation? = environment.accessibilityReduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.82)
 
         ZStack {
-            // Layer 1 (Back): Outer Liquid Glass bar, Now Playing tinted glass capsule, and resting pill.
+            // Layer 1 (Back): One unified 60 pt Liquid Glass bar and resting pill shared identically
+            // between Library and Now Playing (no secondary 54 pt capsule or double-rim swap).
             ZStack {
                 Color.clear
                     .frame(width: width, height: AppNavigationMetrics.buttonsHeight)
                     .modifier(FloatingControlGlass(enabled: glassEnabled,
                                                    verticalOutset: (AppNavigationMetrics.capsuleHeight - AppNavigationMetrics.buttonsHeight) / 2,
-                                                   surfaceOpacity: 1 - blend))
-                if showsPlayerCapsule && blend > 0.001 {
-                    Group {
-                        if #available(iOS 26.0, *), glassEnabled, !environment.accessibilityReduceTransparency {
-                            Color.clear
-                                .glassEffect(.regular.tint(playerCapsuleFill.opacity(0.76)), in: .capsule)
-                        } else {
-                            Capsule().fill(playerCapsuleFill)
-                        }
-                    }
-                    .frame(width: width, height: 54)
-                    .opacity(blend)
+                                                   surfaceOpacity: barOpacity))
+                if showsPlayerCapsule && !glassEnabled && blend > 0.001 {
+                    Capsule().fill(playerCapsuleFill)
+                        .frame(width: width, height: AppNavigationMetrics.capsuleHeight)
+                        .opacity(blend)
                 }
                 Capsule().fill(selectionFallbackFill)
                     .overlay {
@@ -280,7 +276,7 @@ private struct AppNavigationBarContent: View, Animatable {
                     }
                     .frame(width: lensWidth, height: lensHeight)
                     .position(x: lensX, y: 24)
-                    .opacity((1 - blend) * (contact == nil || !usesFloatingLens ? 1 : 0))
+                    .opacity(barOpacity * (contact == nil || !usesFloatingLens ? 1 : 0))
                     .animation(liftAnimation, value: contact != nil)
             }
             .allowsHitTesting(false)
@@ -292,7 +288,7 @@ private struct AppNavigationBarContent: View, Animatable {
                 .frame(width: lensWidth * lensScaleX, height: lensHeight * lensScaleY)
                 .animation(environment.accessibilityReduceMotion ? nil : .interactiveSpring(response: 0.16, dampingFraction: 0.86), value: contact?.speed)
                 .position(x: lensX, y: 24)
-                .opacity((1 - blend) * (contact == nil ? 0 : 1))
+                .opacity(barOpacity * (contact == nil ? 0 : 1))
                 .animation(liftAnimation, value: contact != nil)
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
@@ -315,7 +311,7 @@ private struct AppNavigationBarContent: View, Animatable {
                     navigationLabel(L("Menu")) { PlayerQueueGlyph().scaleEffect(PlayerLayoutMetrics.navigationIconScale) }
                         .foregroundStyle(blendedColor(
                             from: libraryColor(at: 3),
-                            to: playerIdleColor,
+                            to: playerColor(at: 3),
                             amount: blend
                         ))
                 }
@@ -326,7 +322,7 @@ private struct AppNavigationBarContent: View, Animatable {
                 .position(x: width * PlayerLayoutMetrics.navigationCentresW[3], y: 24)
             }
             .font(.system(size: 28 * PlayerLayoutMetrics.navigationIconScale, weight: .heavy))
-            .buttonStyle(FloatingControlPressStyle(enabled: playerProgress < 0.5))
+            .buttonStyle(FloatingControlPressStyle(enabled: showsPlayerCapsule || playerProgress < 0.5))
         }
         .frame(width: width, height: AppNavigationMetrics.buttonsHeight)
     }
@@ -344,6 +340,10 @@ private struct AppNavigationBarContent: View, Animatable {
     private func libraryColor(at index: Int) -> Color {
         let focus = contact?.focus(at: index) ?? (selectedIndex == index ? 1 : 0)
         return blendedColor(from: libraryIdleColor, to: librarySelectedColor, amount: focus)
+    }
+    private func playerColor(at index: Int) -> Color {
+        let focus = contact?.focus(at: index) ?? (!hasPresentedTool && activeSectionIndex == index ? 1 : 0)
+        return blendedColor(from: playerIdleColor, to: playerSelectedColor, amount: focus)
     }
     private var usesFloatingLens: Bool {
         if #available(iOS 26.0, *) { return glassEnabled && !environment.accessibilityReduceTransparency }
@@ -371,7 +371,7 @@ private struct AppNavigationBarContent: View, Animatable {
         return Button { onSelectSection(section) } label: { navigationLabel(title, icon: icon) }
             .foregroundStyle(blendedColor(
                 from: libraryColor(at: index),
-                to: isPlayerSelected ? playerSelectedColor : playerIdleColor,
+                to: playerColor(at: index),
                 amount: blend
             ))
             .accessibilityLabel(title)
