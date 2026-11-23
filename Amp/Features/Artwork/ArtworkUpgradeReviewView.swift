@@ -44,7 +44,9 @@ struct ArtworkUpgradeReviewView: View {
                         .accessibilityIdentifier("artwork-upgrade-keep-current")
                 }
                 .controlSize(.large).disabled(saving)
-                .padding(Spacing.lg).background(.regularMaterial)
+                .padding(Spacing.lg)
+                .background(palette.surface)
+                .overlay(alignment: .top) { Rectangle().fill(palette.outline.opacity(0.24)).frame(height: 0.5) }
             }
             .navigationTitle("Review artwork upgrade")
             .navigationBarTitleDisplayMode(.inline)

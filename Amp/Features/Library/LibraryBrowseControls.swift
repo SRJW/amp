@@ -83,6 +83,8 @@ private struct LibraryBrowseHeader<Controls: View>: View {
     let close: () -> Void
     let reveal: () -> Void
     let controls: Controls
+    @Environment(AppSettings.self) private var settings
+    @Environment(\.palette) private var palette
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -107,8 +109,13 @@ private struct LibraryBrowseHeader<Controls: View>: View {
                     BrowseControlFlow { controls }
                     Button(action: reveal) {
                         Image(systemName: "magnifyingglass")
-                            .frame(width: 44, height: 44).contentShape(Rectangle())
+                            .font(.headline.weight(.semibold))
+                            .foregroundStyle(palette.onSurface)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Circle())
+                            .glassCircle(enabled: settings.glassEnabled, interactive: true)
                     }
+                    .buttonStyle(FloatingControlPressStyle())
                     .accessibilityLabel("Search \(title.lowercased())")
                     .accessibilityIdentifier("sectionSearchButton")
                     .opacity(drawer.collapsed ? 1 : 0)

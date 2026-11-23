@@ -12,6 +12,7 @@ struct CollectionHeroHeader<Cover: View>: View {
     let onShuffle: () -> Void
     @ViewBuilder let cover: () -> Cover
     @Environment(\.palette) private var palette
+    @Environment(AppSettings.self) private var settings
 
     var body: some View {
         VStack(spacing: 0) {
@@ -27,22 +28,30 @@ struct CollectionHeroHeader<Cover: View>: View {
                 metadata
             }
             .clipped()
-            HStack(spacing: Spacing.md) {
-                Button(action: onPlay) {
-                    Label("Play", systemImage: "play.fill")
-                        .frame(maxWidth: .infinity).foregroundStyle(palette.onFilledButton)
+            GlassGroup(spacing: Spacing.md, enabled: settings.glassEnabled) {
+                HStack(spacing: Spacing.md) {
+                    Button(action: onPlay) {
+                        Label("Play", systemImage: "play.fill")
+                            .font(.headline)
+                            .foregroundStyle(palette.onFilledButton)
+                            .frame(maxWidth: .infinity, minHeight: 50)
+                            .background(Capsule().fill(palette.filledButton))
+                            .contentShape(Capsule())
+                    }
+                    .buttonStyle(FloatingControlPressStyle())
+                    Button(action: onShuffle) {
+                        Label("Shuffle", systemImage: "shuffle")
+                            .font(.headline)
+                            .foregroundStyle(palette.onSurface)
+                            .frame(maxWidth: .infinity, minHeight: 50)
+                            .glassCapsule(enabled: settings.glassEnabled, interactive: true)
+                            .contentShape(Capsule())
+                    }
+                    .buttonStyle(FloatingControlPressStyle())
                 }
-                .modifier(PaletteFilledButton())
-                .tint(palette.filledButton)
-                Button(action: onShuffle) {
-                    Label("Shuffle", systemImage: "shuffle").frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
             }
-            .font(.headline)
-            .controlSize(.large)
-            .buttonBorderShape(.capsule)
             .disabled(!canPlay)
+            .opacity(canPlay ? 1 : 0.4)
             .padding(.horizontal, Spacing.heroGutter)
             .padding(.top, Spacing.sm)
             .padding(.bottom, Spacing.xl)

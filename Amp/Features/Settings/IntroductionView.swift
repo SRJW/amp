@@ -55,8 +55,8 @@ struct IntroductionView: View {
                         VStack(alignment: .leading, spacing: 20) {
                             IntroductionIllustration(page: page.id)
                                 .frame(height: IntroductionMetrics.heroHeight)
-                                .background(palette.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: IntroductionMetrics.cornerRadius))
-                                .glassSurface(cornerRadius: IntroductionMetrics.cornerRadius, enabled: settings.glassEnabled)
+                                .glassSurface(cornerRadius: IntroductionMetrics.cornerRadius, enabled: settings.glassEnabled,
+                                              tint: palette.primary.opacity(0.14))
                                 .accessibilityHidden(true)
                             Text(page.eyebrow).font(.system(size: 11, weight: .bold)).tracking(1.5).foregroundStyle(palette.primary)
                             Text(page.title).accessibilityIdentifier("introductionTitle").font(.system(size: IntroductionMetrics.titleSize, weight: .bold))

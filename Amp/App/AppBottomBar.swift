@@ -162,7 +162,7 @@ struct AppNavigationButtons: View {
             glassEnabled: settings.glassEnabled,
             contact: contact,
             playerCapsuleFill: playerCapsuleFill,
-            selectionFallbackFill: Color.black.opacity(colorScheme == .dark ? 0.24 : 0.07),
+            selectionFallbackFill: colorScheme == .dark ? Color.white.opacity(0.14) : Color.black.opacity(0.08),
             librarySelectedColor: libraryTint(selected: true),
             libraryIdleColor: libraryTint(selected: false),
             playerSelectedColor: playerTint(selected: true),
@@ -244,6 +244,18 @@ private struct AppNavigationBarContent: View, Animatable {
         let blend = PlayerCoverGeometry.chromeOpacity(playerProgress)
         ZStack {
             Capsule().fill(selectionFallbackFill)
+                .overlay {
+                    if glassEnabled && !environment.accessibilityReduceTransparency {
+                        Capsule().strokeBorder(
+                            LinearGradient(
+                                colors: [Color.white.opacity(environment.colorScheme == .dark ? 0.16 : 0.42), .clear],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            ),
+                            lineWidth: 0.6
+                        )
+                    }
+                }
                 .frame(width: lensWidth, height: lensHeight)
                 .position(x: contact?.lensX ?? width * PlayerLayoutMetrics.navigationCentresW[selectedIndex], y: 24)
                 .opacity((1 - blend) * (contact == nil || !usesFloatingLens ? 1 : 0))
@@ -282,12 +294,18 @@ private struct AppNavigationBarContent: View, Animatable {
                                        verticalOutset: (AppNavigationMetrics.capsuleHeight - AppNavigationMetrics.buttonsHeight) / 2,
                                        surfaceOpacity: 1 - blend))
         .background {
-            if showsPlayerCapsule {
-                Capsule()
-                    .fill(playerCapsuleFill)
-                    .frame(width: width, height: 54)
-                    .opacity(blend)
-                    .allowsHitTesting(false)
+            if showsPlayerCapsule && blend > 0.001 {
+                Group {
+                    if #available(iOS 26.0, *), glassEnabled, !environment.accessibilityReduceTransparency {
+                        Color.clear
+                            .glassEffect(.regular.tint(playerCapsuleFill.opacity(0.76)), in: .capsule)
+                    } else {
+                        Capsule().fill(playerCapsuleFill)
+                    }
+                }
+                .frame(width: width, height: 54)
+                .opacity(blend)
+                .allowsHitTesting(false)
             }
         }
         .overlay {

@@ -124,45 +124,53 @@ struct TransitionEditorView: View {
                 Text(targetLabel(current.target)).font(.caption).foregroundStyle(palette.onSurfaceVariant).lineLimit(1)
             }
             .padding(.horizontal, 112)
-            HStack(spacing: Spacing.sm) {
-            Button { draft = nil } label: {
-                Image(systemName: "xmark").frame(width: 44, height: 44)
-                    .glassSurface(cornerRadius: 22, enabled: settings.glassEnabled)
-                    .contentShape(Circle())
-            }
-                .accessibilityLabel("Cancel and discard changes")
-            Spacer()
-            Menu {
-                Button { draft?.undoLast() } label: { Label("Undo", systemImage: "arrow.uturn.backward") }
-                    .disabled(current.undo.isEmpty)
-                if case .pair = current.target {
-                    Button { draft?.edit { spec in
-                        var reset = spec
-                        reset.outgoingCutMs = 0
-                        reset.incomingStartMs = 0
-                        return reset
-                    } } label: { Label("Reset cue points", systemImage: "arrow.left.and.right") }
+            GlassGroup(spacing: Spacing.sm, enabled: settings.glassEnabled) {
+                HStack(spacing: Spacing.sm) {
+                    Button { draft = nil } label: {
+                        Image(systemName: "xmark").frame(width: 44, height: 44)
+                            .contentShape(Circle())
+                            .glassCircle(enabled: settings.glassEnabled, interactive: true)
+                    }
+                    .accessibilityLabel("Cancel and discard changes")
+                    Spacer()
+                    Menu {
+                        Button { draft?.undoLast() } label: { Label("Undo", systemImage: "arrow.uturn.backward") }
+                            .disabled(current.undo.isEmpty)
+                        if case .pair = current.target {
+                            Button { draft?.edit { spec in
+                                var reset = spec
+                                reset.outgoingCutMs = 0
+                                reset.incomingStartMs = 0
+                                return reset
+                            } } label: { Label("Reset cue points", systemImage: "arrow.left.and.right") }
+                        }
+                        Button { draft?.resetToPreset() } label: { Label("Reset to preset", systemImage: "arrow.counterclockwise") }
+                            .disabled(current.mode != .custom)
+                    } label: {
+                        Image(systemName: "ellipsis").frame(width: 44, height: 44)
+                            .contentShape(Circle())
+                            .glassCircle(enabled: settings.glassEnabled, interactive: true)
+                    }
+                    .menuStyle(.button)
+                    .buttonStyle(FloatingControlPressStyle())
+                    .accessibilityLabel("More options")
+                    Button {
+                        transitions.save(current)
+                        draft = nil
+                    } label: {
+                        Text("Save").font(.subheadline.weight(.semibold))
+                            .foregroundStyle(current.isDirty ? palette.primary : palette.onSurface)
+                            .padding(.horizontal, Spacing.md)
+                            .frame(height: 44)
+                            .contentShape(Capsule())
+                            .glassCapsule(enabled: settings.glassEnabled, interactive: true,
+                                          tint: current.isDirty ? palette.primary.opacity(0.28) : nil)
+                    }
+                    .disabled(!current.isDirty)
                 }
-                Button { draft?.resetToPreset() } label: { Label("Reset to preset", systemImage: "arrow.counterclockwise") }
-                    .disabled(current.mode != .custom)
-            } label: { Image(systemName: "ellipsis").frame(width: 44, height: 44) }
-            .menuStyle(.button)
-            .buttonStyle(.plain)
-            .accessibilityLabel("More options")
-            Button {
-                transitions.save(current)
-                draft = nil
-            } label: {
-                Text("Save").font(.subheadline.weight(.semibold))
-                    .padding(.horizontal, Spacing.md)
-                    .frame(height: 44)
-                    .glassSurface(cornerRadius: 22, enabled: settings.glassEnabled)
-                    .contentShape(Capsule())
-            }
-            .disabled(!current.isDirty)
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(FloatingControlPressStyle())
         .foregroundStyle(palette.onSurface)
         .padding(.horizontal, Spacing.lg)
         .frame(minHeight: 68)

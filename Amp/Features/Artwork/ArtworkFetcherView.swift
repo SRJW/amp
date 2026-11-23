@@ -141,6 +141,7 @@ enum ArtworkTarget: Identifiable, Codable, Sendable {
 struct ArtworkPickerSheet: View {
     let target: ArtworkTarget
     @Environment(ArtworkFetcherStore.self) private var store
+    @Environment(AppSettings.self) private var settings
     @Environment(\.dismiss) private var dismiss
     @State private var candidates: [ArtworkCandidate] = []
     @State private var loading = true
@@ -174,7 +175,13 @@ struct ArtworkPickerSheet: View {
                 .padding(Spacing.lg)
             }
             .disabled(saving || preparingPreview)
-            .overlay { if saving || preparingPreview { ProgressView(saving ? "Saving…" : "Loading preview…").padding().background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12)) } }
+            .overlay {
+                if saving || preparingPreview {
+                    ProgressView(saving ? "Saving…" : "Loading preview…")
+                        .padding(.horizontal, Spacing.lg).padding(.vertical, Spacing.md)
+                        .glassSurface(cornerRadius: 18, enabled: settings.glassEnabled)
+                }
+            }
             .alert("Couldn’t save artwork", isPresented: Binding(get: { saveError != nil }, set: { if !$0 { saveError = nil } })) {
                 Button("OK") { saveError = nil }
             } message: { Text(saveError ?? "") }

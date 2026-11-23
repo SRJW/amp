@@ -12,8 +12,7 @@ struct ToolPageAppearance: ViewModifier {
             .tint(palette.primary)
             .background(palette.background.ignoresSafeArea())
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(palette.background, for: .navigationBar)
-            .toolbarBackground(.visible, for: .navigationBar)
+            .modifier(AdaptiveNavigationBarGlass(forceVisibleFallback: true))
     }
 }
 

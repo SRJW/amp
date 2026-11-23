@@ -34,12 +34,8 @@ struct FloatingControlGlass: ViewModifier {
             // Restore the earlier mini-player silhouette, keeping native contact
             // response on the live control rather than a detached background.
             control.glassSurface(cornerRadius: cornerRadius, enabled: enabled, interactive: interactive)
-        } else if !enabled {
-            control.background(.background.secondary, in: Capsule())
-        } else if #available(iOS 26.0, *) {
-            control.glassEffect(interactive ? .regular.interactive() : .regular, in: .capsule)
         } else {
-            control.background(.ultraThinMaterial, in: Capsule())
+            control.glassCapsule(enabled: enabled, interactive: interactive)
         }
     }
 }

@@ -123,7 +123,7 @@ struct RootView: View {
             sectionRoot(section)
                 .foregroundStyle(palette.onSurface)
                 .background(palette.background.ignoresSafeArea())
-                .toolbarBackground(palette.background, for: .navigationBar)
+                .modifier(AdaptiveNavigationBarGlass())
                 .navigationTitle(section.label)
                 .navigationDestination(for: Route.self) { route in destination(route) }
                 .safeAreaInset(edge: .bottom) { Color.clear.frame(height: chromeHeight) }
@@ -165,7 +165,7 @@ struct RootView: View {
         }
         .foregroundStyle(palette.onSurface)
         .background(palette.background.ignoresSafeArea())
-        .toolbarBackground(palette.background, for: .navigationBar)
+        .modifier(AdaptiveNavigationBarGlass())
         .toolbar(.visible, for: .navigationBar)
         .safeAreaInset(edge: .bottom) { Color.clear.frame(height: router.presentedTool == nil ? chromeHeight : 0) }
     }

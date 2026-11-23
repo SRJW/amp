@@ -120,9 +120,6 @@ final class LibraryActions {
     func toggleFavorite(_ song: Song) {
         do {
             try database.toggleFavorite(songId: song.id)
-            // Read the database result rather than trusting a potentially older row snapshot.
-            guard let updated = try database.song(id: song.id) else { return }
-            show(updated.isFavorite ? MessageText.liked : MessageText.unliked, kind: updated.isFavorite ? .liked : .unliked)
         } catch { show("Couldn't change the favourite: \(error.localizedDescription)") }
     }
 

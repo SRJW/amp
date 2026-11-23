@@ -14,6 +14,7 @@ struct PairTransitionWorkspace: View {
     let edit: ((TransitionSpec) -> TransitionSpec) -> Void
     @Environment(PlayerController.self) private var player
     @Environment(SoundStore.self) private var sound
+    @Environment(AppSettings.self) private var settings
     @Environment(\.palette) private var palette
     @Environment(\.scenePhase) private var scenePhase
     @State private var outgoing: TransitionAudioSlice?
@@ -400,12 +401,14 @@ struct PairTransitionWorkspace: View {
                 Spacer(minLength: 0)
                 if preview.isPlaying { TransitionPreviewReadout(preview: preview, durationMs: timing.plan.durationMs) }
             }
-            .padding(.horizontal, 14)
-            .frame(maxWidth: .infinity, minHeight: 44)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14))
-            .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(.white.opacity(0.16)))
+            .padding(.horizontal, 16)
+            .frame(maxWidth: .infinity, minHeight: 46)
+            .foregroundStyle(preview.isPlaying ? palette.primary : palette.onSurface)
+            .contentShape(Capsule())
+            .glassCapsule(enabled: settings.glassEnabled, interactive: true,
+                          tint: preview.isPlaying ? palette.primary.opacity(0.28) : nil)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(FloatingControlPressStyle())
         .disabled(loading || outgoing == nil || incoming == nil || cueSession != nil || curveSession != nil || effectSession != nil)
         .accessibilityLabel(preview.isPreparing || preview.isPlaying ? "Stop transition preview" : "Audition this transition")
     }

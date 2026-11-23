@@ -4,6 +4,7 @@ struct ArtworkUpgradeView: View {
     let kind: ArtworkUpgradeKind
     @Environment(LibraryStore.self) private var library
     @Environment(ArtworkFetcherStore.self) private var fetcher
+    @Environment(AppSettings.self) private var settings
     @State private var store = ArtworkUpgradeStore()
     @State private var review: ArtworkUpgradeReview?
     @State private var loading = false
@@ -85,7 +86,13 @@ struct ArtworkUpgradeView: View {
         .modifier(ToolPageAppearance())
         .navigationTitle(kind == .albums ? "Upgrade album covers" : "Upgrade artist photos")
         .navigationBarTitleDisplayMode(.inline)
-        .overlay { if loading { ProgressView("Loading full image…").padding().background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12)) } }
+        .overlay {
+            if loading {
+                ProgressView("Loading full image…")
+                    .padding(.horizontal, Spacing.lg).padding(.vertical, Spacing.md)
+                    .glassSurface(cornerRadius: 18, enabled: settings.glassEnabled)
+            }
+        }
         .onDisappear { store.cancel() }
         .task { store.restore(kind, library: library) }
         .confirmationDialog("Apply all upgrades?", isPresented: $confirmingApplyAll, titleVisibility: .visible) {

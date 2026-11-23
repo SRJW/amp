@@ -374,21 +374,24 @@ struct LibraryActionToast: View {
     let text: String
     let id: UUID
     @Environment(LibraryActions.self) private var actions
+    @Environment(AppSettings.self) private var settings
+    @Environment(\.palette) private var palette
 
     var body: some View {
         HStack(spacing: LibraryToastMetrics.spacing) {
             if actions.messageKind != .info {
                 Image(systemName: actions.messageKind == .liked ? "checkmark.circle.fill" : "heart")
                     .font(.system(size: LibraryToastMetrics.iconSize, weight: .semibold))
-                    .foregroundStyle(actions.messageKind == .liked ? Color.green : Color.white.opacity(0.85))
+                    .foregroundStyle(actions.messageKind == .liked ? Color.green : palette.onSurfaceVariant)
             }
             Text(text).font(.system(size: LibraryToastMetrics.fontSize, weight: .semibold))
-                .foregroundStyle(.white).multilineTextAlignment(.center)
+                .foregroundStyle(settings.glassEnabled ? Color.primary : palette.onSurface)
+                .multilineTextAlignment(.center)
         }
         .fixedSize(horizontal: false, vertical: true)
         .padding(.horizontal, LibraryToastMetrics.horizontalPadding)
         .padding(.vertical, LibraryToastMetrics.verticalPadding)
-        .background(.black.opacity(LibraryToastMetrics.backgroundOpacity), in: Capsule())
+        .glassCapsule(enabled: settings.glassEnabled)
         .padding(.horizontal, Spacing.lg)
         .transition(.opacity)
         .allowsHitTesting(false)

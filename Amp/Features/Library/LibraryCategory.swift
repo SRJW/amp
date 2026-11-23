@@ -80,6 +80,8 @@ struct CategoryHeader<Options: View>: View {
     let select: () -> Void
     @ViewBuilder let options: () -> Options
     var showsTitle = true
+    @Environment(AppSettings.self) private var settings
+    @Environment(\.palette) private var palette
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
@@ -88,23 +90,36 @@ struct CategoryHeader<Options: View>: View {
                     .accessibilityAddTraits(.isHeader).accessibilityIdentifier("sectionBrowseTitle")
                 Text(countLabel(count, "song")).font(.subheadline).foregroundStyle(.secondary)
             }
-            HStack(spacing: Spacing.xs) {
-                action(L("Shuffle"), icon: "shuffle", id: "songsShuffle", action: shuffle).disabled(count == 0 || selecting)
-                action(L("Play"), icon: "play.fill", id: "songsPlayAll", action: play).disabled(count == 0 || selecting)
-                action(L("Search"), icon: "magnifyingglass", id: "sectionSearchButton", action: search)
-                action(selecting ? L("Done") : L("Select"), icon: "checklist", id: "songsSelect", action: select)
-                Menu(content: options) {
-                    Image(systemName: "ellipsis").rotationEffect(.degrees(90))
-                        .frame(width: 44, height: 44).contentShape(Rectangle())
-                }.accessibilityLabel(L("More options"))
-            }.buttonStyle(.plain)
+            GlassGroup(spacing: Spacing.xs, enabled: settings.glassEnabled) {
+                HStack(spacing: Spacing.xs) {
+                    action(L("Shuffle"), icon: "shuffle", id: "songsShuffle", action: shuffle).disabled(count == 0 || selecting)
+                    action(L("Play"), icon: "play.fill", id: "songsPlayAll", action: play).disabled(count == 0 || selecting)
+                    action(L("Search"), icon: "magnifyingglass", id: "sectionSearchButton", action: search)
+                    action(selecting ? L("Done") : L("Select"), icon: "checklist", id: "songsSelect", action: select)
+                    Menu(content: options) {
+                        Image(systemName: "ellipsis").rotationEffect(.degrees(90))
+                            .font(.headline.weight(.bold))
+                            .foregroundStyle(palette.onSurface)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Circle())
+                            .glassCircle(enabled: settings.glassEnabled, interactive: true)
+                    }
+                    .menuStyle(.button)
+                    .accessibilityLabel(L("More options"))
+                }
+            }
+            .buttonStyle(FloatingControlPressStyle())
         }.padding(.horizontal, Spacing.gutter)
     }
     private func action(_ title: String, icon: String, id: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
+        let active = selecting && id == "songsSelect"
+        return Button(action: action) {
             Image(systemName: icon).font(.headline.weight(.bold))
-                .frame(maxWidth: .infinity, minHeight: 44).contentShape(Rectangle())
-                .background(.primary.opacity(selecting && id == "songsSelect" ? 0.15 : 0.04), in: Capsule())
+                .foregroundStyle(active ? palette.primary : palette.onSurface)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .contentShape(Capsule())
+                .glassCapsule(enabled: settings.glassEnabled, interactive: true,
+                              tint: active ? palette.primary.opacity(0.30) : nil)
         }.accessibilityLabel(title).accessibilityIdentifier(id)
     }
 }

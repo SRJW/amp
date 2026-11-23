@@ -158,20 +158,126 @@ extension View {
         modifier(CollectionArtworkTheme(source: source, alwaysFollowArtwork: alwaysFollowArtwork))
     }
 
-    /// A floating glass surface: Liquid Glass on iOS 26, a material elsewhere.
-    @ViewBuilder
-    func glassSurface(cornerRadius: CGFloat, enabled: Bool = true, interactive: Bool = false) -> some View {
-        if !enabled {
-            self.background(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous).fill(.background.secondary))
-        } else if #available(iOS 26.0, *) {
-            self.glassEffect(interactive ? .regular.interactive() : .regular, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-        } else {
-            self.background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-        }
+    /// A floating Liquid Glass surface with continuous rounded corners on iOS 26+,
+    /// specular material on older iOS, and a cohesive palette surface when glass is off.
+    func glassSurface(cornerRadius: CGFloat, enabled: Bool = true, interactive: Bool = false, tint: Color? = nil) -> some View {
+        modifier(LiquidGlassSurface(shape: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous),
+                                    enabled: enabled, interactive: interactive, tint: tint))
+    }
+
+    /// A native capsule-shaped Liquid Glass control surface.
+    func glassCapsule(enabled: Bool = true, interactive: Bool = false, tint: Color? = nil) -> some View {
+        modifier(LiquidGlassSurface(shape: Capsule(), enabled: enabled, interactive: interactive, tint: tint))
+    }
+
+    /// A native circular Liquid Glass control surface.
+    func glassCircle(enabled: Bool = true, interactive: Bool = false, tint: Color? = nil) -> some View {
+        modifier(LiquidGlassSurface(shape: Circle(), enabled: enabled, interactive: interactive, tint: tint))
     }
 
     /// A small press-down scale, like the Android cards' pressScale.
     func pressable() -> some View { buttonStyle(PressScaleStyle()) }
+}
+
+/// Groups adjacent floating Liquid Glass controls in one native optical pass on iOS 26+.
+struct GlassGroup<Content: View>: View {
+    var spacing: CGFloat = Spacing.sm
+    var enabled = true
+    @ViewBuilder let content: () -> Content
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    var body: some View {
+        if #available(iOS 26.0, *), enabled, !reduceTransparency {
+            GlassEffectContainer(spacing: spacing) { content() }
+        } else {
+            content()
+        }
+    }
+}
+
+private struct LiquidGlassSurface<S: InsettableShape>: ViewModifier {
+    let shape: S
+    let enabled: Bool
+    let interactive: Bool
+    let tint: Color?
+    @Environment(\.palette) private var palette
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    @ViewBuilder func body(content: Content) -> some View {
+        if !enabled || reduceTransparency {
+            content
+                .background {
+                    shape.fill(palette.surface)
+                        .overlay {
+                            if let tint {
+                                shape.fill(tint.opacity(colorScheme == .dark ? 0.24 : 0.16))
+                            }
+                        }
+                        .allowsHitTesting(false)
+                }
+                .overlay {
+                    shape.strokeBorder(palette.outline.opacity(colorScheme == .dark ? 0.34 : 0.24), lineWidth: 0.75)
+                        .allowsHitTesting(false)
+                }
+        } else if #available(iOS 26.0, *) {
+            content.glassEffect(resolvedGlass, in: shape)
+        } else {
+            content
+                .background(.ultraThinMaterial, in: shape)
+                .background {
+                    if let tint {
+                        shape.fill(tint.opacity(0.18)).allowsHitTesting(false)
+                    }
+                }
+                .overlay {
+                    shape.strokeBorder(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(colorScheme == .dark ? 0.26 : 0.56),
+                                Color.white.opacity(colorScheme == .dark ? 0.06 : 0.14),
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 0.65
+                    )
+                    .allowsHitTesting(false)
+                }
+        }
+    }
+
+    @available(iOS 26.0, *)
+    private var resolvedGlass: Glass {
+        var glass: Glass = .regular
+        if let tint { glass = glass.tint(tint) }
+        if interactive { glass = glass.interactive() }
+        return glass
+    }
+}
+
+/// Uses native iOS 26+ floating Liquid Glass navigation bars with soft scroll-under refraction
+/// when glass is enabled, falling back to the themed solid bar on older iOS or when glass is off.
+struct AdaptiveNavigationBarGlass: ViewModifier {
+    var forceVisibleFallback = false
+    @Environment(\.palette) private var palette
+    @Environment(AppSettings.self) private var settings
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    @ViewBuilder func body(content: Content) -> some View {
+        if #available(iOS 26.0, *), settings.glassEnabled, !reduceTransparency {
+            content
+                .toolbarBackground(.automatic, for: .navigationBar)
+                .scrollEdgeEffectStyle(.soft, for: .top)
+        } else if forceVisibleFallback {
+            content
+                .toolbarBackground(palette.background, for: .navigationBar)
+                .toolbarBackground(.visible, for: .navigationBar)
+        } else {
+            content
+                .toolbarBackground(palette.background, for: .navigationBar)
+        }
+    }
 }
 
 struct PressScaleStyle: ButtonStyle {

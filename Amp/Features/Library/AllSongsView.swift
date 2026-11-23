@@ -7,6 +7,7 @@ struct AllSongsView: View {
     @Environment(LibraryStore.self) private var library
     @Environment(LibraryActions.self) private var actions
     @Environment(AppRouter.self) private var router
+    @Environment(AppSettings.self) private var settings
     @AppStorage private var sort: String
     @State private var selecting = false
     @State private var selected = Set<Int64>()
@@ -167,32 +168,34 @@ struct AllSongsView: View {
     private var filters: some View {
         let columns = [GridItem(.flexible(), spacing: Spacing.sm), GridItem(.flexible(), spacing: Spacing.sm)]
         return VStack(alignment: .leading, spacing: Spacing.sm) {
-            LazyVGrid(columns: columns, spacing: Spacing.sm) {
-                Menu {
-                    Picker(L("Date added"), selection: $added) {
-                        ForEach(SongAddedPeriod.allCases) { Text($0.description).tag($0) }
-                    }
-                } label: { SongsFilterLabel(title: added.label, symbol: "calendar.badge.clock") }
-                Menu {
-                    Picker(L("Format"), selection: $format) {
-                        Text(L("All formats")).tag("")
-                        Text(L("Lossless")).tag(LibraryBrowse.losslessFormat)
-                        ForEach(formats, id: \.self) { Text($0).tag($0) }
-                    }
-                } label: { SongsFilterLabel(title: formatTitle, symbol: "waveform") }
-                .accessibilityIdentifier("songsFormatFilter")
-                Menu {
-                    Picker(L("Genre"), selection: $genre) {
-                        Text(L("All genres")).tag("")
-                        Text(L("Untagged")).tag(LibraryBrowse.untaggedGenre)
-                        ForEach(genres, id: \.self) { Text($0).tag(SectionSearch.key($0)) }
-                    }
-                } label: { SongsFilterLabel(title: genreTitle, symbol: "guitars") }
-                Menu {
-                    Picker(L("Mood"), selection: $mood) {
-                        ForEach(LibraryMood.allCases, id: \.rawValue) { Text($0 == .all ? L("All moods") : $0.label).tag($0) }
-                    }
-                } label: { SongsFilterLabel(title: mood == .all ? L("Mood") : mood.label, symbol: "sparkles") }
+            GlassGroup(spacing: Spacing.sm, enabled: settings.glassEnabled) {
+                LazyVGrid(columns: columns, spacing: Spacing.sm) {
+                    Menu {
+                        Picker(L("Date added"), selection: $added) {
+                            ForEach(SongAddedPeriod.allCases) { Text($0.description).tag($0) }
+                        }
+                    } label: { SongsFilterLabel(title: added.label, symbol: "calendar.badge.clock", active: added != .any) }
+                    Menu {
+                        Picker(L("Format"), selection: $format) {
+                            Text(L("All formats")).tag("")
+                            Text(L("Lossless")).tag(LibraryBrowse.losslessFormat)
+                            ForEach(formats, id: \.self) { Text($0).tag($0) }
+                        }
+                    } label: { SongsFilterLabel(title: formatTitle, symbol: "waveform", active: !format.isEmpty) }
+                    .accessibilityIdentifier("songsFormatFilter")
+                    Menu {
+                        Picker(L("Genre"), selection: $genre) {
+                            Text(L("All genres")).tag("")
+                            Text(L("Untagged")).tag(LibraryBrowse.untaggedGenre)
+                            ForEach(genres, id: \.self) { Text($0).tag(SectionSearch.key($0)) }
+                        }
+                    } label: { SongsFilterLabel(title: genreTitle, symbol: "guitars", active: !genre.isEmpty) }
+                    Menu {
+                        Picker(L("Mood"), selection: $mood) {
+                            ForEach(LibraryMood.allCases, id: \.rawValue) { Text($0 == .all ? L("All moods") : $0.label).tag($0) }
+                        }
+                    } label: { SongsFilterLabel(title: mood == .all ? L("Mood") : mood.label, symbol: "sparkles", active: mood != .all) }
+                }
             }
             if hasFilters {
                 Button(L("Clear filters")) { added = .any; genre = ""; mood = .all; format = "" }
