@@ -88,24 +88,38 @@ struct TrackRow: View {
     @State private var swipe: CGFloat = 0
 
     var body: some View {
-        HStack(spacing: Spacing.sm) {
+        HStack(spacing: 4) {
             // One native recognizer pair owns playback taps and row swipes. The tap waits
             // for the horizontal pan to fail, so releasing a swipe cannot play this song.
             HStack(spacing: Spacing.md) {
                 leading
                 VStack(alignment: .leading, spacing: 2) {
                     Text(song.title)
-                        .font(.body.weight(.semibold))
+                        .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(isCurrent ? palette.primary : palette.onSurface)
                         .lineLimit(1)
-                    Text(subtitle ?? [song.artist, song.album].filter { !$0.isBlank }.joined(separator: " · "))
-                        .font(.subheadline)
+                    Text(subtitle ?? [song.artist, song.album].filter { !$0.isBlank }.joined(separator: " - "))
+                        .font(.system(size: 12.5, weight: .regular))
                         .foregroundStyle(palette.onSurfaceVariant)
                         .lineLimit(1)
                     if showsFileDetails {
-                        Label(SongRowText.fileDetails(song), systemImage: "music.note")
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(palette.primary.opacity(0.8)).lineLimit(1)
+                        HStack(spacing: 4) {
+                            Image(systemName: "music.note")
+                                .font(.system(size: 9, weight: .semibold))
+                            Text(SongRowText.fileDetails(song))
+                                .font(.system(size: 11, weight: .medium))
+                                .lineLimit(1)
+                            if song.isFavorite {
+                                Image(systemName: "heart.fill")
+                                    .font(.system(size: 9, weight: .semibold))
+                                    .foregroundStyle(palette.primary)
+                            }
+                        }
+                        .foregroundStyle(palette.primary.opacity(0.78))
+                    } else if song.isFavorite {
+                        Image(systemName: "heart.fill")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(palette.primary)
                     }
                 }
                 Spacer(minLength: 0)
@@ -134,30 +148,24 @@ struct TrackRow: View {
             .accessibilityAddTraits(.isButton)
             .accessibilityAction { onTap() }
             if showsActions {
-                HStack(spacing: 0) {
-                    Button { actions.toggleFavorite(song) } label: {
-                        Image(systemName: song.isFavorite ? "heart.fill" : "heart")
-                            .foregroundStyle(song.isFavorite ? palette.primary : palette.onSurfaceVariant)
-                            .frame(width: 34, height: 44)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(song.isFavorite ? L("Remove from favorites") : L("Add to favorites"))
-                    Menu {
-                        SongActionItems(song: song, actions: actions)
-                    } label: {
-                        Image(systemName: "ellipsis").foregroundStyle(palette.onSurfaceVariant)
-                            .frame(width: 34, height: 44).contentShape(Rectangle())
-                    }
-                    .menuStyle(.button)
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(L("More options"))
+                Menu {
+                    SongActionItems(song: song, actions: actions)
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 13, weight: .semibold))
+                        .rotationEffect(.degrees(90))
+                        .foregroundStyle(palette.onSurfaceVariant.opacity(0.75))
+                        .frame(width: 26, height: 44)
+                        .contentShape(Rectangle())
                 }
+                .menuStyle(.button)
+                .buttonStyle(.plain)
+                .accessibilityLabel(L("More options"))
             }
         }
-        .padding(.leading, Spacing.gutter)
-        .padding(.trailing, showsActions ? Spacing.sm : Spacing.gutter)
-        .padding(.vertical, Spacing.xs)
+        .padding(.leading, Spacing.md)
+        .padding(.trailing, showsActions ? 4 : Spacing.md)
+        .padding(.vertical, 6)
         .offset(x: swipe)
         .background(alignment: swipe >= 0 ? .leading : .trailing) {
             if swipe != 0 {
@@ -188,11 +196,11 @@ struct TrackRow: View {
             Text("\(displayTrackNumber ?? song.trackNumber)")
                 .font(.body.weight(.semibold).monospacedDigit())
                 .foregroundStyle(isCurrent ? palette.primary : palette.onSurfaceVariant)
-                .frame(width: ArtworkSize.list, height: ArtworkSize.list)
+                .frame(width: 52, height: 52)
         } else {
             SongArtworkView(song: song, maxPixels: 144)
-                .frame(width: ArtworkSize.list, height: ArtworkSize.list)
-                .clipShape(RoundedRectangle(cornerRadius: Radius.small, style: .continuous))
+                .frame(width: 52, height: 52)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
     }
 }

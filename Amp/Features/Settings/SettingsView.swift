@@ -63,6 +63,7 @@ private struct SettingsPage<Content: View>: View {
         ScrollView {
             VStack(spacing: 26) { content }
                 .padding(Spacing.lg)
+                .padding(.bottom, AppNavigationMetrics.reservedHeight + Spacing.lg)
         }
         .modifier(ToolPageAppearance())
         .navigationBarTitleDisplayMode(.inline)
@@ -621,6 +622,7 @@ private struct PlayerBackgroundSettingsView: View {
                     }
                 }
                 .padding(Spacing.lg)
+                .padding(.bottom, AppNavigationMetrics.reservedHeight + Spacing.lg)
             }
         }
         .modifier(ToolPageAppearance())

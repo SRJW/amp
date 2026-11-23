@@ -18,6 +18,9 @@ struct ImageCreditsView: View {
                     if let url = credit.licenseURL { Link("Licence", destination: url) }
                 }
             }
-        }.navigationTitle("Image credits").modifier(ToolPageAppearance())
+        }
+        .contentMargins(.bottom, AppNavigationMetrics.reservedHeight + Spacing.lg, for: .scrollContent)
+        .navigationTitle("Image credits")
+        .modifier(ToolPageAppearance())
     }
 }

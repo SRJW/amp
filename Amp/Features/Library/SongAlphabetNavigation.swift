@@ -24,13 +24,13 @@ enum SongAlphabet {
 }
 
 enum SongAlphabetMetrics {
-    static let width: CGFloat = 44
-    static let rowHeight: CGFloat = 14
-    static let maximumHeight: CGFloat = 360
-    static let letterSize: CGFloat = 10
-    static let bubbleSize: CGFloat = 64
-    static let bubbleTextSize: CGFloat = 38
-    static let bubbleGap: CGFloat = 4
+    static let width: CGFloat = 24
+    static let rowHeight: CGFloat = 20
+    static let maximumHeight: CGFloat = 620
+    static let letterSize: CGFloat = 10.5
+    static let bubbleSize: CGFloat = 68
+    static let bubbleTextSize: CGFloat = 42
+    static let bubbleGap: CGFloat = 18
     static let scrollDuration = 0.16
     static let bubbleDuration = 0.12
     static let accessibilityLabel = "Song alphabet index"
@@ -51,6 +51,7 @@ struct SongAlphabetIndex: View {
     @State private var scrubbing = false
     @State private var touchY: CGFloat = 0
     @Environment(\.palette) private var palette
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -59,19 +60,20 @@ struct SongAlphabetIndex: View {
         Group {
             if available.count > 1 {
                 index(anchors: anchors)
-                .frame(width: SongAlphabetMetrics.width,
-                       height: min(CGFloat(SongAlphabet.letters.count) * SongAlphabetMetrics.rowHeight, SongAlphabetMetrics.maximumHeight))
-                .animation(reduceMotion ? nil : .easeOut(duration: SongAlphabetMetrics.bubbleDuration), value: scrubbing)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(SongAlphabetMetrics.accessibilityLabel)
-                .accessibilityIdentifier("songAlphabetIndex")
-                .accessibilityValue(active ?? available.first ?? "")
-                .accessibilityAdjustableAction { direction in
-                    let current = available.firstIndex(of: active ?? "") ?? 0
-                    let index = min(max(current + (direction == .increment ? 1 : -1), 0), available.count - 1)
-                    active = available[index]
-                    if let id = anchors[available[index]] { scrollTo(id) }
-                }
+                    .frame(width: SongAlphabetMetrics.width)
+                    .frame(maxHeight: min(CGFloat(SongAlphabet.letters.count) * SongAlphabetMetrics.rowHeight, SongAlphabetMetrics.maximumHeight))
+                    .animation(reduceMotion ? nil : .easeOut(duration: SongAlphabetMetrics.bubbleDuration), value: scrubbing)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(SongAlphabetMetrics.accessibilityLabel)
+                    .accessibilityIdentifier("songAlphabetIndex")
+                    .accessibilityValue(active ?? available.first ?? "")
+                    .accessibilityAdjustableAction { direction in
+                        let current = available.firstIndex(of: active ?? "") ?? 0
+                        let index = min(max(current + (direction == .increment ? 1 : -1), 0), available.count - 1)
+                        active = available[index]
+                        if let id = anchors[available[index]] { scrollTo(id) }
+                    }
+                    .padding(.vertical, Spacing.sm)
             }
         }
         .sensoryFeedback(.selection, trigger: active, condition: shouldPlaySelection)
@@ -82,17 +84,23 @@ struct SongAlphabetIndex: View {
             let rowHeight = geometry.size.height / CGFloat(SongAlphabet.letters.count)
             VStack(spacing: 0) {
                 ForEach(SongAlphabet.letters, id: \.self) { letter in
-                    Text(letter).font(.system(size: SongAlphabetMetrics.letterSize, weight: .bold))
-                        .opacity(anchors[letter] == nil ? 0.25 : 1)
+                    let isActive = scrubbing && active == letter
+                    let hasTarget = anchors[letter] != nil
+                    Text(letter)
+                        .font(.system(size: isActive ? SongAlphabetMetrics.letterSize + 1.5 : SongAlphabetMetrics.letterSize,
+                                      weight: isActive ? .heavy : .semibold))
+                        .foregroundStyle(isActive
+                            ? (colorScheme == .dark ? Color.white : palette.onSurface)
+                            : palette.primary.opacity(hasTarget ? 0.90 : 0.28))
                         .frame(width: SongAlphabetMetrics.width, height: rowHeight)
                         .background {
-                            if scrubbing && active == letter {
-                                Capsule().fill(palette.primary.opacity(0.16))
+                            if isActive {
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .fill(palette.primary.opacity(0.22))
                             }
                         }
                 }
             }
-            .foregroundStyle(palette.primary)
             .contentShape(Rectangle())
             .highPriorityGesture(DragGesture(minimumDistance: 0)
                 .onChanged { value in move(to: value.location.y, height: geometry.size.height, anchors: anchors) }
@@ -107,10 +115,18 @@ struct SongAlphabetIndex: View {
     }
 
     private func bubble(_ letter: String) -> some View {
-        Text(letter).font(.system(size: SongAlphabetMetrics.bubbleTextSize, weight: .bold))
-            .foregroundStyle(palette.onSurface)
+        let fill = colorScheme == .dark ? Color(white: 0.24).opacity(0.94) : palette.surface.opacity(0.96)
+        let stroke = colorScheme == .dark ? Color.white.opacity(0.12) : palette.outline.opacity(0.30)
+        return Text(letter)
+            .font(.system(size: SongAlphabetMetrics.bubbleTextSize, weight: .bold))
+            .foregroundStyle(colorScheme == .dark ? Color.white : palette.onSurface)
             .frame(width: SongAlphabetMetrics.bubbleSize, height: SongAlphabetMetrics.bubbleSize)
-            .background(palette.surface, in: RoundedRectangle(cornerRadius: Radius.medium))
+            .background(fill, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(stroke, lineWidth: 0.75)
+            }
+            .shadow(color: Color.black.opacity(0.28), radius: 10, y: 4)
             .position(x: -SongAlphabetMetrics.bubbleSize / 2 - SongAlphabetMetrics.bubbleGap, y: touchY)
             .transition(.opacity)
             .allowsHitTesting(false)
