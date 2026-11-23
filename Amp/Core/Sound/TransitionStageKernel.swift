@@ -12,6 +12,7 @@ import os
 final class TransitionStageKernel: RenderKernel, @unchecked Sendable {
     private enum Command {
         case arm(TransitionAutomation, startHostTime: UInt64)
+        case shiftHostTime(UInt64)
         case cancel
     }
 
@@ -28,6 +29,7 @@ final class TransitionStageKernel: RenderKernel, @unchecked Sendable {
     private var automation: TransitionAutomation?
     private var startHostTime: UInt64 = 0
     private var startSampleTime: Double?
+    private var pendingCompletionClear = false
     private var sampleRate = 44_100
     private var shelves: [BiquadFilter] = []
     private var shelfDb = Float.nan
@@ -62,6 +64,23 @@ final class TransitionStageKernel: RenderKernel, @unchecked Sendable {
         status.withLock { $0 = Status(engaged: true, started: false, silent: false) }
     }
 
+    /// Shifts a pending armed host start time forward after pausing during lead-in.
+    func shiftStartHostTime(by deltaTicks: UInt64) {
+        guard deltaTicks > 0 else { return }
+        commands.withLock { current in
+            switch current {
+            case .arm(let auto, let host):
+                current = .arm(auto, startHostTime: host &+ deltaTicks)
+            case .shiftHostTime(let existing):
+                current = .shiftHostTime(existing &+ deltaTicks)
+            case .cancel:
+                break
+            case nil:
+                current = .shiftHostTime(deltaTicks)
+            }
+        }
+    }
+
     /// Back to unity gain at once.
     func cancel() {
         commands.withLock { $0 = .cancel }
@@ -70,8 +89,9 @@ final class TransitionStageKernel: RenderKernel, @unchecked Sendable {
 
     func prepare(sampleRate: Double, channels: Int) {
         self.sampleRate = Int(sampleRate)
-        shelves = Array(repeating: BiquadFilter(), count: channels)
-        sweeps = Array(repeating: PassFilter(), count: channels)
+        let count = max(channels, 2)
+        shelves = Array(repeating: BiquadFilter(), count: count)
+        sweeps = Array(repeating: PassFilter(), count: count)
         shelfDb = .nan
         sweepSetting = nil
     }
@@ -86,9 +106,20 @@ final class TransitionStageKernel: RenderKernel, @unchecked Sendable {
                 automation = next
                 startHostTime = host
                 startSampleTime = nil
+                pendingCompletionClear = false
                 resetFilters()
+            case .shiftHostTime(let delta):
+                if startSampleTime == nil {
+                    startHostTime = startHostTime &+ delta
+                }
             case .cancel:
                 automation = nil
+                pendingCompletionClear = false
+            }
+        }
+        if pendingCompletionClear {
+            if status.withLockIfAvailable({ $0 = Status() }) != nil {
+                pendingCompletionClear = false
             }
         }
         guard let automation else { return }
@@ -106,7 +137,7 @@ final class TransitionStageKernel: RenderKernel, @unchecked Sendable {
         let msPerFrame = 1000.0 / Double(sampleRate)
         let bass = automation.spec.bassSwap
         let sweep = automation.spec.filter.affects(automation.role)
-        if shelves.count != buffers.count { prepare(sampleRate: Double(sampleRate), channels: buffers.count) }
+        let channelCount = min(buffers.count, min(shelves.count, sweeps.count))
 
         for i in 0..<frames {
             let frame = ts.mSampleTime + Double(i) - start
@@ -119,8 +150,10 @@ final class TransitionStageKernel: RenderKernel, @unchecked Sendable {
             for channel in 0..<buffers.count {
                 guard let data = buffers[channel].mData?.assumingMemoryBound(to: Float.self) else { continue }
                 var x = data[i]
-                if sweep { x = sweeps[channel].process(x) }
-                if bass { x = shelves[channel].process(x) }
+                if channel < channelCount {
+                    if sweep { x = sweeps[channel].process(x) }
+                    if bass { x = shelves[channel].process(x) }
+                }
                 data[i] = x * gain
             }
         }
@@ -129,7 +162,9 @@ final class TransitionStageKernel: RenderKernel, @unchecked Sendable {
         let begun = endMs > 0
         if automation.isFinished(endMs) {
             self.automation = nil
-            _ = status.withLockIfAvailable { $0 = Status() }
+            if status.withLockIfAvailable({ $0 = Status() }) == nil {
+                pendingCompletionClear = true
+            }
         } else {
             let silent = automation.isSilentForGood(endMs)
             _ = status.withLockIfAvailable { $0 = Status(engaged: true, started: begun, silent: silent) }

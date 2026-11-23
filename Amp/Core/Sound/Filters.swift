@@ -46,8 +46,7 @@ struct BiquadFilter {
             rawA1 = -2 * cosW0
             rawA2 = 1 - alpha / a
         case .lowShelf, .highShelf:
-            let inside = max((a + 1 / a) * (1 / Double(max(q, 0.1)) - 1) + 2, 0)
-            let alpha = sin(w0) / 2 * sqrt(inside)
+            let alpha = sin(w0) / (2.0 * Double(max(q, 0.1)))
             let beta = 2 * sqrt(max(a, 0.0001)) * alpha
             if type == .lowShelf {
                 rawB0 = a * ((a + 1) - (a - 1) * cosW0 + beta)

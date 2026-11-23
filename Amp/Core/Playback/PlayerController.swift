@@ -53,6 +53,8 @@ final class PlayerController {
     private(set) var restoreFinished = false
     @ObservationIgnored private var consecutiveErrors = 0
     @ObservationIgnored private var plannedTransition: (entryId: UUID, nextEntryId: UUID, plan: Planned)?
+    @ObservationIgnored private var pendingTransitionCommit: Task<Void, Never>?
+    @ObservationIgnored private var wasPlayingBeforeInterruption = false
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
     @ObservationIgnored private var artwork: MPMediaItemArtwork?
     @ObservationIgnored private var artworkSongId: Int64?
@@ -86,6 +88,15 @@ final class PlayerController {
 
     // MARK: Transport
 
+    private var intendsToPlay: Bool {
+        state.isPlaying || (state.status == .buffering && preparingPlayIntent)
+    }
+
+    private func cancelPendingTransitionCommit() {
+        pendingTransitionCommit?.cancel()
+        pendingTransitionCommit = nil
+    }
+
     func play() {
         guard !state.queue.isEmpty else { return }
         if state.status == .idle || engine.currentPosition()?.entryId != state.currentEntry?.id {
@@ -102,6 +113,7 @@ final class PlayerController {
     }
 
     func pause() {
+        cancelPendingTransitionCommit()
         audioPreparation?.cancel(); audioPreparation = nil; preparingPlayIntent = false
         refreshPosition()
         engine.pause()
@@ -109,7 +121,7 @@ final class PlayerController {
     }
 
     func togglePlayPause() {
-        if state.isPlaying || (state.status == .buffering && preparingPlayIntent) { pause() }
+        if intendsToPlay { pause() }
         else { play() }
     }
 
@@ -143,12 +155,17 @@ final class PlayerController {
 
     func seek(to positionMs: Int64) {
         guard let entry = state.currentEntry else { return }
+        cancelPendingTransitionCommit()
         let target = max(positionMs, 0)
         if state.status == .buffering { startCurrent(at: target, playing: preparingPlayIntent); return }
         if !engine.isReady {
             setPosition(target)
             updateNowPlaying()
             persistState()
+            return
+        }
+        if DecodedAudioSource.requiresDecoder(entry.song.url), !DecodedAudioSource.isPrepared(entry.song.url) {
+            startCurrent(at: target, playing: state.isPlaying)
             return
         }
         do {
@@ -165,7 +182,7 @@ final class PlayerController {
     func skipNext() {
         guard let next = PlayOrder.next(after: state.currentIndex, count: state.queue.count, repeatMode: state.repeatMode, userSkip: true)
         else { return }
-        moveTo(next, playing: state.isPlaying || state.status == .buffering, sameEntryRepeated: false)
+        moveTo(next, playing: intendsToPlay, sameEntryRepeated: false)
     }
 
     /// Restarts the current song past the first few seconds, otherwise moves to the previous one.
@@ -181,7 +198,7 @@ final class PlayerController {
     func skipToPreviousItem() {
         guard let previous = PlayOrder.previous(before: state.currentIndex, count: state.queue.count, repeatMode: state.repeatMode)
         else { return }
-        moveTo(previous, playing: state.isPlaying || state.status == .buffering, sameEntryRepeated: false, direction: -1)
+        moveTo(previous, playing: intendsToPlay, sameEntryRepeated: false, direction: -1)
     }
 
     func skipToQueueItem(_ index: Int) {
@@ -238,16 +255,18 @@ final class PlayerController {
     func removeFromQueue(_ index: Int) {
         guard state.queue.indices.contains(index) else { return }
         let removingCurrent = index == state.currentIndex
+        let shouldPlay = intendsToPlay
         let entry = state.queue.remove(at: index)
         removals.push(index: index, item: entry)
         if state.queue.isEmpty {
+            cancelPendingTransitionCommit()
             state.currentIndex = -1
             engine.stopAll()
             playingChanged(false)
             currentEntryChanged(sameEntryRepeated: false)
         } else if removingCurrent {
             state.currentIndex = min(index, state.queue.count - 1)
-            startCurrent(at: 0, playing: state.isPlaying)
+            startCurrent(at: 0, playing: shouldPlay)
         } else if index < state.currentIndex {
             state.currentIndex -= 1
         }
@@ -350,8 +369,14 @@ final class PlayerController {
 
     /// The engine's exact position right now, finer than [state]'s published one.
     func currentPositionMs() -> Int64 {
-        guard let position = engine.currentPosition(), position.entryId == state.currentEntry?.id else { return state.positionMs }
-        return position.positionMs
+        guard let entryId = state.currentEntry?.id else { return state.positionMs }
+        if let position = engine.currentPosition(), position.entryId == entryId {
+            return position.positionMs
+        }
+        if let crossfadePosition = engine.position(forEntry: entryId) {
+            return crossfadePosition
+        }
+        return state.positionMs
     }
 
     func displayPositionMs(smoothed: Bool = true) -> Int64 {
@@ -384,7 +409,8 @@ final class PlayerController {
     }
 
     /// Starts the current entry at [positionMs] from a fresh engine start.
-    private func startCurrent(at positionMs: Int64, playing: Bool) {
+    private func startCurrent(at positionMs: Int64, playing: Bool, sameEntryRepeated: Bool = false) {
+        cancelPendingTransitionCommit()
         audioPreparation?.cancel(); audioPreparation = nil
         playbackError = nil
         guard let entry = state.currentEntry else { return }
@@ -392,7 +418,7 @@ final class PlayerController {
         if !playing && !engine.isReady {
             setPosition(positionMs)
             state.durationMs = entry.song.durationMs
-            currentEntryChanged(sameEntryRepeated: false)
+            currentEntryChanged(sameEntryRepeated: sameEntryRepeated)
             playingChanged(false)
             return
         }
@@ -418,7 +444,7 @@ final class PlayerController {
                     playbackError = failure
                     state.status = .paused
                     updateNowPlaying()
-                } else { startCurrent(at: positionMs, playing: playing) }
+                } else { startCurrent(at: positionMs, playing: playing, sameEntryRepeated: sameEntryRepeated) }
             }
             return
         }
@@ -429,7 +455,7 @@ final class PlayerController {
             setPosition(positionMs)
             state.durationMs = entry.song.durationMs
             if playing { consecutiveErrors = 0 }
-            currentEntryChanged(sameEntryRepeated: false)
+            currentEntryChanged(sameEntryRepeated: sameEntryRepeated)
             playingChanged(playing)
         } catch AudioEngine.EngineError.notReady {
             // One shared setup survives a cancelled/changed play request; only the latest
@@ -447,7 +473,7 @@ final class PlayerController {
                 await setup?.value
                 guard !Task.isCancelled, state.currentEntry?.id == entry.id else { return }
                 audioPreparation = nil
-                startCurrent(at: positionMs, playing: playing)
+                startCurrent(at: positionMs, playing: playing, sameEntryRepeated: sameEntryRepeated)
             }
         } catch {
             handleError(entry)
@@ -455,11 +481,11 @@ final class PlayerController {
     }
 
     private func moveTo(_ index: Int, playing: Bool, sameEntryRepeated: Bool, direction: Int = 1) {
+        cancelPendingTransitionCommit()
         artworkDirection = direction
         engine.cancelCrossfade()
         state.currentIndex = index
-        startCurrent(at: 0, playing: playing)
-        if sameEntryRepeated { abLoop.onEntryChanged(sameEntryRepeated: true) }
+        startCurrent(at: 0, playing: playing, sameEntryRepeated: sameEntryRepeated)
     }
 
     /// An entry played to its end on the engine.
@@ -486,8 +512,7 @@ final class PlayerController {
             currentEntryChanged(sameEntryRepeated: false)
         } else {
             state.currentIndex = next
-            startCurrent(at: 0, playing: true)
-            if repeated { abLoop.onEntryChanged(sameEntryRepeated: true) }
+            startCurrent(at: 0, playing: true, sameEntryRepeated: repeated)
         }
     }
 
@@ -538,8 +563,16 @@ final class PlayerController {
     }
 
     private func queueChanged() {
+        cancelPendingTransitionCommit()
         warmAdjacentFiles()
         if state.currentEntry == nil { state.currentIndex = state.queue.isEmpty ? -1 : 0 }
+        if let current = state.currentEntry {
+            let nextIndex = PlayOrder.next(after: state.currentIndex, count: state.queue.count, repeatMode: state.repeatMode, userSkip: false)
+            let expectedNextId = nextIndex.flatMap { state.queue.indices.contains($0) && $0 != state.currentIndex ? state.queue[$0].id : nil }
+            if expectedNextId == nil || !engine.hasQueued(expectedNextId!) {
+                engine.dropQueuedAfterCurrent(currentEntry: current.id)
+            }
+        }
         reevaluateTransition()
         persistState()
     }
@@ -657,10 +690,14 @@ final class PlayerController {
         }
         // The queue moves on when the crossfade starts, as on Android.
         let delay = Double(untilStart) / 1000
-        Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .seconds(delay))
-            guard let self, self.state.queue.indices.contains(planned.plan.nextIndex),
+        cancelPendingTransitionCommit()
+        pendingTransitionCommit = Task { @MainActor [weak self] in
+            do { try await Task.sleep(for: .seconds(delay)) } catch { return }
+            guard let self, !Task.isCancelled,
+                  self.state.isPlaying,
+                  self.state.queue.indices.contains(planned.plan.nextIndex),
                   self.state.queue[planned.plan.nextIndex].id == next.id else { return }
+            self.pendingTransitionCommit = nil
             self.artworkDirection = 1
             self.state.currentIndex = planned.plan.nextIndex
             self.setPosition(planned.plan.incomingStartMs)
@@ -741,7 +778,10 @@ final class PlayerController {
     private func restartAfterConfigurationChange() {
         guard state.currentEntry != nil else { return }
         let wasPlaying = state.isPlaying
-        startCurrent(at: currentPositionMs(), playing: wasPlaying)
+        let engineMs = currentPositionMs()
+        let preservedMs = (engineMs == 0 && clock.positionMs > 0) ? clock.positionMs : max(engineMs, clock.positionMs)
+        let clampedMs = state.durationMs > 0 ? min(preservedMs, state.durationMs) : preservedMs
+        startCurrent(at: clampedMs, playing: wasPlaying, sameEntryRepeated: true)
     }
 
     // MARK: Audio session, remote commands, Now Playing
@@ -780,7 +820,15 @@ final class PlayerController {
         observers.append(center.addObserver(forName: AVAudioSession.routeChangeNotification, object: session, queue: .main) { [weak self] note in
             let reason = note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt
             MainActor.assumeIsolated {
-                if reason == AVAudioSession.RouteChangeReason.oldDeviceUnavailable.rawValue, self?.state.isPlaying == true { self?.pause() }
+                if reason == AVAudioSession.RouteChangeReason.oldDeviceUnavailable.rawValue, self?.intendsToPlay == true { self?.pause() }
+            }
+        })
+        observers.append(center.addObserver(forName: AVAudioSession.mediaServicesWereResetNotification, object: session, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.configureAudioSession()
+                self.engine.rebuildAfterMediaServicesReset()
+                self.restartAfterConfigurationChange()
             }
         })
         observers.append(center.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
@@ -813,11 +861,15 @@ final class PlayerController {
         guard let type, let interruption = AVAudioSession.InterruptionType(rawValue: type) else { return }
         switch interruption {
         case .began:
-            if state.isPlaying {
+            wasPlayingBeforeInterruption = intendsToPlay
+            if wasPlayingBeforeInterruption {
                 pause()
             }
         case .ended:
-            if AVAudioSession.InterruptionOptions(rawValue: options ?? 0).contains(.shouldResume) { play() }
+            let shouldResume = wasPlayingBeforeInterruption
+                && AVAudioSession.InterruptionOptions(rawValue: options ?? 0).contains(.shouldResume)
+            wasPlayingBeforeInterruption = false
+            if shouldResume { play() }
         @unknown default:
             break
         }

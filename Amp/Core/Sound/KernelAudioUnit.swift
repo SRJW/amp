@@ -15,6 +15,7 @@ final class KernelAudioUnit: AUAudioUnit {
     final class Holder: @unchecked Sendable {
         var kernel: RenderKernel?
         var buffer: AVAudioPCMBuffer?
+        var channelPointers: [UnsafeMutableRawPointer?] = []
     }
 
     static let componentDescription = AudioComponentDescription(
@@ -62,12 +63,20 @@ final class KernelAudioUnit: AUAudioUnit {
     override func allocateRenderResources() throws {
         try super.allocateRenderResources()
         let format = inputBus.format
-        holder.buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: maximumFramesToRender)
+        let pcm = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: maximumFramesToRender)
+        holder.buffer = pcm
+        if let pcm {
+            let list = UnsafeMutableAudioBufferListPointer(pcm.mutableAudioBufferList)
+            holder.channelPointers = (0..<list.count).map { list[$0].mData }
+        } else {
+            holder.channelPointers = []
+        }
         holder.kernel?.prepare(sampleRate: format.sampleRate, channels: Int(format.channelCount))
     }
 
     override func deallocateRenderResources() {
         holder.buffer = nil
+        holder.channelPointers = []
         super.deallocateRenderResources()
     }
 
@@ -79,7 +88,9 @@ final class KernelAudioUnit: AUAudioUnit {
             let inputList = buffer.mutableAudioBufferList
             let input = UnsafeMutableAudioBufferListPointer(inputList)
             let byteSize = frameCount * UInt32(MemoryLayout<Float>.size)
+            let backing = holder.channelPointers
             for i in 0..<input.count {
+                if i < backing.count { input[i].mData = backing[i] }
                 input[i].mDataByteSize = byteSize
             }
             var pullFlags = AudioUnitRenderActionFlags()

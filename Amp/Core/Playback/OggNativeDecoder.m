@@ -61,11 +61,16 @@ static NSDictionary *Comments(char **comments, int *lengths, int count) {
         if (!input) return Failed(error,@"Could not open the Opus recording.");
         float *interleaved=calloc(4096*channels,sizeof(float));
         if (!interleaved) { op_free(input); return Failed(error,@"Could not allocate the Opus buffer."); }
-        BOOL ok=YES; int link=0;
+        BOOL ok=YES; int link=0; int consecutiveHoles=0;
         while (YES) {
             if (isCancelled()) { ok=Failed(error,@"Audio preparation cancelled."); break; }
             int frames=op_read_float(input,interleaved,4096*channels,&link);
             if (frames==0) break;
+            if (frames==OP_HOLE) {
+                if (++consecutiveHoles > 16) { ok=Failed(error,@"The Opus stream has too many unreadable gaps."); break; }
+                continue;
+            }
+            consecutiveHoles=0;
             if (frames<0 || op_channel_count(input,link)!=channels) { ok=Failed(error,@"The Opus stream is damaged or changes its channel layout."); break; }
             buffer.frameLength=frames;
             for (int c=0;c<channels;c++) for (int f=0;f<frames;f++) buffer.floatChannelData[c][f]=interleaved[f*channels+c];
@@ -76,11 +81,16 @@ static NSDictionary *Comments(char **comments, int *lengths, int count) {
     } else {
         OggVorbis_File input;
         if (ov_fopen(url.fileSystemRepresentation,&input)!=0) return Failed(error,@"Could not open the Vorbis recording.");
-        BOOL ok=YES; int link=0;
+        BOOL ok=YES; int link=0; int consecutiveHoles=0;
         while (YES) {
             if (isCancelled()) { ok=Failed(error,@"Audio preparation cancelled."); break; }
             float **pcm=NULL; long frames=ov_read_float(&input,&pcm,4096,&link);
             if (frames==0) break;
+            if (frames==OV_HOLE) {
+                if (++consecutiveHoles > 16) { ok=Failed(error,@"The Vorbis stream has too many unreadable gaps."); break; }
+                continue;
+            }
+            consecutiveHoles=0;
             vorbis_info *current=ov_info(&input,link);
             if (frames<0 || !current || current->channels!=channels || current->rate!=(long)rate) { ok=Failed(error,@"The Vorbis stream is damaged or changes its audio format."); break; }
             buffer.frameLength=(AVAudioFrameCount)frames;

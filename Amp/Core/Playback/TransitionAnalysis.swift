@@ -153,12 +153,19 @@ actor TransitionAnalysisStore {
         while read < frames {
             if Task.isCancelled { return nil }
             do { try file.read(into: buffer, frameCount: AVAudioFrameCount(min(8192, frames - read))) }
-            catch { return nil }
-            guard buffer.frameLength > 0, let data = buffer.floatChannelData else { return nil }
+            catch {
+                if read > 0 { break }
+                return nil
+            }
+            guard buffer.frameLength > 0, let data = buffer.floatChannelData else {
+                if read > 0 { break }
+                return nil
+            }
             let channels = (0..<Int(format.channelCount)).map { UnsafePointer(data[$0]) }
             accumulator.add(channels, count: Int(buffer.frameLength), offset: read)
             read += Int64(buffer.frameLength)
         }
+        guard read > 0 else { return nil }
         return accumulator.result(startMs: Double(start) * 1000 / rate, durationMs: Double(frames) * 1000 / rate,
                                   sampleRate: rate, channels: Int(format.channelCount))
     }

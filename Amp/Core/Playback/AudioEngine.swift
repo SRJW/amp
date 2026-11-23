@@ -68,6 +68,13 @@ final class AudioEngine {
     private var previewSchedule: PreviewSchedule?
     private(set) var isReady = false
     private var configurationObserver: NSObjectProtocol?
+    private var pausedAtHostTime: UInt64?
+
+    deinit {
+        if let configurationObserver {
+            NotificationCenter.default.removeObserver(configurationObserver)
+        }
+    }
 
     var active: Deck { decks[activeIndex] }
 
@@ -109,6 +116,17 @@ final class AudioEngine {
             MainActor.assumeIsolated { self?.handleConfigurationChange() }
         }
         isReady = true
+    }
+
+    func rebuildAfterMediaServicesReset() {
+        guard isReady else { return }
+        stopAll()
+        connectOutput()
+        for (index, deck) in decks.enumerated() {
+            let format = deck.format ?? AVAudioFormat(standardFormatWithSampleRate: 44_100, channels: 2)!
+            connect(deck, bus: index, format: format)
+        }
+        engine.prepare()
     }
 
     private func connectOutput() {
@@ -221,6 +239,7 @@ final class AudioEngine {
 
     func pause() {
         guard isReady else { return }
+        pausedAtHostTime = mach_absolute_time()
         for deck in decks where deck.player.isPlaying {
             deck.pausedFrame = playedFrames(deck)
             deck.player.pause()
@@ -232,6 +251,16 @@ final class AudioEngine {
     /// Resumes the active deck (and an outgoing crossfade deck that is still sounding).
     func resume() throws {
         guard isReady else { throw EngineError.notReady }
+        if let pausedAt = pausedAtHostTime {
+            pausedAtHostTime = nil
+            let now = mach_absolute_time()
+            if now > pausedAt {
+                let delta = now - pausedAt
+                for deck in decks where deck.stage.isEngaged && !deck.stage.hasStarted {
+                    deck.stage.shiftStartHostTime(by: delta)
+                }
+            }
+        }
         try startEngineIfNeeded()
         if active.segments.isEmpty == false { active.player.play() }
         if other.stage.isEngaged, !other.stage.isSilent, !other.segments.isEmpty { other.player.play() }
@@ -239,6 +268,7 @@ final class AudioEngine {
 
     func stopAll() {
         guard isReady else { return }
+        pausedAtHostTime = nil
         previewSchedule = nil
         stop(other)
         stop(active)
@@ -374,6 +404,16 @@ final class AudioEngine {
         return (segment.entryId, position(of: active, in: segment))
     }
 
+    /// Exact position of a specific entry across active or outgoing decks (avoids 0:00 snaps during crossfade lead-in).
+    func position(forEntry entryId: UUID) -> Int64? {
+        for deck in [active, other] {
+            if let segment = deck.segments.last(where: { $0.entryId == entryId }) {
+                return position(of: deck, in: segment)
+            }
+        }
+        return nil
+    }
+
     /// Rendering advances by audio buffers. Only the display interpolates between them;
     /// scheduling, seeking, loops and Now Playing continue to use the real render position.
     func displayPosition() -> (entryId: UUID, positionMs: Int64)? {
@@ -455,6 +495,9 @@ final class AudioEngine {
             return
         }
         onEntryFinished?(entryId)
+        if deck.segments.count > 1, deck.segments.first?.entryId == entryId {
+            deck.segments.removeFirst()
+        }
     }
 
     private func stop(_ deck: Deck) {

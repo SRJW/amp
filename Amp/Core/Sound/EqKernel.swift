@@ -8,24 +8,58 @@ import os
 /// only ever *tries*; if it is busy, the previous coefficients play one more buffer.
 final class EqKernel: RenderKernel, @unchecked Sendable {
     struct Parameters: Equatable {
+        struct Band: Equatable {
+            var gain: Float = 0
+            var frequency: Float = 1_000
+            var q: Float = Equalizer.defaultQ
+            var type: FilterType = .peaking
+        }
+
         var enabled = true
-        var gains: [Float] = Array(repeating: 0, count: Equalizer.bandCount)
-        var frequencies: [Float] = Equalizer.bandFrequencies
-        var qs: [Float] = Array(repeating: Equalizer.defaultQ, count: Equalizer.bandCount)
-        var types: [FilterType] = Array(repeating: .peaking, count: Equalizer.bandCount)
+        var b0 = Band(frequency: Equalizer.bandFrequencies[0])
+        var b1 = Band(frequency: Equalizer.bandFrequencies[1])
+        var b2 = Band(frequency: Equalizer.bandFrequencies[2])
+        var b3 = Band(frequency: Equalizer.bandFrequencies[3])
+        var b4 = Band(frequency: Equalizer.bandFrequencies[4])
+        var b5 = Band(frequency: Equalizer.bandFrequencies[5])
+        var b6 = Band(frequency: Equalizer.bandFrequencies[6])
+        var b7 = Band(frequency: Equalizer.bandFrequencies[7])
         var activeCount = Equalizer.bandCount
 
-        var isFlat: Bool { gains.allSatisfy { $0 == 0 } }
+        subscript(_ index: Int) -> Band {
+            get {
+                switch index {
+                case 0: b0; case 1: b1; case 2: b2; case 3: b3
+                case 4: b4; case 5: b5; case 6: b6; default: b7
+                }
+            }
+            set {
+                switch index {
+                case 0: b0 = newValue; case 1: b1 = newValue; case 2: b2 = newValue; case 3: b3 = newValue
+                case 4: b4 = newValue; case 5: b5 = newValue; case 6: b6 = newValue; default: b7 = newValue
+                }
+            }
+        }
+
+        var isFlat: Bool {
+            for i in 0..<min(activeCount, Equalizer.bandCount) where self[i].gain != 0 { return false }
+            return true
+        }
 
         init() {}
 
         init(_ settings: SoundSettings) {
             enabled = settings.isEqEnabled
-            gains = settings.bands.map { $0.gainDb.clamped(Equalizer.minGainDb, Equalizer.maxGainDb) }
-            frequencies = settings.bands.map { $0.frequencyHz.clamped(Equalizer.minFreqHz, Equalizer.maxFreqHz) }
-            qs = settings.bands.map { $0.q.clamped(Equalizer.minQ, Equalizer.maxQ) }
-            types = settings.bands.map(\.filterType)
             activeCount = settings.activeBandCount.clamped(Equalizer.minBandCount, Equalizer.bandCount)
+            for i in 0..<min(settings.bands.count, Equalizer.bandCount) {
+                let band = settings.bands[i]
+                self[i] = Band(
+                    gain: band.gainDb.clamped(Equalizer.minGainDb, Equalizer.maxGainDb),
+                    frequency: band.frequencyHz.clamped(Equalizer.minFreqHz, Equalizer.maxFreqHz),
+                    q: band.q.clamped(Equalizer.minQ, Equalizer.maxQ),
+                    type: band.filterType
+                )
+            }
         }
     }
 
@@ -52,12 +86,13 @@ final class EqKernel: RenderKernel, @unchecked Sendable {
     /// What the stage is doing now, for the audio inspector.
     func runtimeState(settings: SoundSettings) -> EqRuntimeState {
         let state = published.withLock { $0 }
+        let activeCount = settings.activeBandCount.clamped(Equalizer.minBandCount, Equalizer.bandCount)
         return EqRuntimeState(
             enabled: settings.isEqEnabled,
             configured: state.configured,
             sampleRateHz: state.sampleRateHz,
             channelCount: state.channelCount,
-            allGainsZero: settings.bands.allSatisfy { $0.gainDb == 0 }
+            allGainsZero: settings.bands.prefix(activeCount).allSatisfy { $0.gainDb == 0 }
         )
     }
 
@@ -74,7 +109,7 @@ final class EqKernel: RenderKernel, @unchecked Sendable {
             defer { value = nil }
             return value
         }) ?? nil {
-            if next.enabled != parameters.enabled { resetFilters() }
+            if next.enabled != parameters.enabled || next.isFlat != parameters.isFlat { resetFilters() }
             parameters = next
             needsConfigure = true
         }
@@ -98,11 +133,12 @@ final class EqKernel: RenderKernel, @unchecked Sendable {
         needsConfigure = false
         for channel in filters.indices {
             for b in 0..<Equalizer.bandCount {
+                let band = parameters[b]
                 let usable = b < parameters.activeCount
-                    && parameters.frequencies[b] < Float(sampleRate) * Equalizer.maxBandToSampleRateRatio
+                    && band.frequency < Float(sampleRate) * Equalizer.maxBandToSampleRateRatio
                 filters[channel][b].configure(
-                    centerFrequency: parameters.frequencies[b], sampleRate: sampleRate,
-                    gainInDb: usable ? parameters.gains[b] : 0, q: parameters.qs[b], type: parameters.types[b]
+                    centerFrequency: band.frequency, sampleRate: sampleRate,
+                    gainInDb: usable ? band.gain : 0, q: band.q, type: band.type
                 )
             }
         }

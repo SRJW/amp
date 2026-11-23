@@ -22,7 +22,10 @@ final class SoundStore {
 
     func setBandGain(_ index: Int, _ gainDb: Float) {
         guard settings.bands.indices.contains(index) else { return }
-        change { $0.bands[index].gainDb = gainDb.clamped(Equalizer.minGainDb, Equalizer.maxGainDb) }
+        change {
+            $0.bands[index].gainDb = gainDb.clamped(Equalizer.minGainDb, Equalizer.maxGainDb)
+            $0.activePresetId = ""
+        }
     }
 
     func setBandFrequency(_ index: Int, _ hz: Float) {
@@ -32,12 +35,18 @@ final class SoundStore {
 
     func setBandQ(_ index: Int, _ q: Float) {
         guard settings.bands.indices.contains(index) else { return }
-        change { $0.bands[index].q = q.clamped(Equalizer.minQ, Equalizer.maxQ) }
+        change {
+            $0.bands[index].q = q.clamped(Equalizer.minQ, Equalizer.maxQ)
+            $0.activePresetId = ""
+        }
     }
 
     func setFilterType(_ index: Int, _ type: FilterType) {
         guard settings.bands.indices.contains(index) else { return }
-        change { $0.bands[index].filterType = type }
+        change {
+            $0.bands[index].filterType = type
+            $0.activePresetId = ""
+        }
     }
 
     func setActiveBandCount(_ count: Int) {
@@ -45,6 +54,9 @@ final class SoundStore {
         change {
             $0.activeBandCount = safe
             $0.selectedBandIndex = $0.selectedBandIndex.clamped(0, safe - 1)
+            for i in 1..<(safe - 1) where $0.bands.indices.contains(i) && $0.bands[i].filterType != .peaking {
+                $0.bands[i].filterType = .peaking
+            }
         }
     }
 
@@ -74,6 +86,7 @@ final class SoundStore {
                 i -= 1
             }
             settings.bands = bands
+            settings.activePresetId = ""
         }
     }
 
@@ -110,11 +123,12 @@ final class SoundStore {
 
     func deleteCustomPreset(_ id: String) {
         guard settings.customPresets.contains(where: { $0.id == id }) else { return }
+        let wasActive = settings.activePresetId == id
         change {
             $0.customPresets.removeAll { $0.id == id }
-            if $0.activePresetId == id { $0.activePresetId = EqPreset.flat.id }
+            if wasActive { $0.activePresetId = EqPreset.flat.id }
         }
-        if settings.activePresetId == EqPreset.flat.id { applyPreset(EqPreset.flat.id) }
+        if wasActive { applyPreset(EqPreset.flat.id) }
     }
 
     /// Saves at once (the app is going to the background).

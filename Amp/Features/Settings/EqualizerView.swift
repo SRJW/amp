@@ -35,7 +35,7 @@ struct EqualizerView: View {
                         HStack {
                             Text(L("Preset"))
                             Spacer()
-                            Text(L(settings.allPresets.first { $0.id == settings.activePresetId }?.name ?? "Flat")).foregroundStyle(.secondary)
+                            Text(L(settings.allPresets.first { $0.id == settings.activePresetId }?.name ?? "Custom")).foregroundStyle(.secondary)
                             Image(systemName: "chevron.up.chevron.down").font(.caption).foregroundStyle(.secondary)
                         }
                     }
@@ -64,8 +64,8 @@ struct EqualizerView: View {
             Section(L("Band %d", selected + 1)) {
                 let isFirst = selected == 0
                 let isLast = selected == settings.activeBandCount - 1
-                if isFirst || isLast {
-                    let shelf: FilterType = isFirst ? .lowShelf : .highShelf
+                if isFirst || isLast || band.filterType != .peaking {
+                    let shelf: FilterType = band.filterType != .peaking ? band.filterType : (isFirst ? .lowShelf : .highShelf)
                     Picker(L("Filter type"), selection: Binding(get: { band.filterType == shelf ? 1 : 0 },
                                                              set: { sound.setFilterType(selected, $0 == 1 ? shelf : .peaking) })) {
                         Text(L("Bell")).tag(0)
@@ -122,7 +122,13 @@ struct EqualizerView: View {
         return pow(10, low + norm.clamped(0, 1) * (high - low)).clamped(Equalizer.minFreqHz, Equalizer.maxFreqHz)
     }
 
-    private func formatFrequency(_ hz: Float) -> String { hz >= 1000 ? "\(Int((hz / 1000).rounded())) kHz" : "\(Int(hz.rounded())) Hz" }
+    private func formatFrequency(_ hz: Float) -> String {
+        if hz >= 1000 {
+            let khz = (hz / 1000 * 10).rounded() / 10
+            return khz.truncatingRemainder(dividingBy: 1) == 0 ? "\(Int(khz)) kHz" : String(format: "%.1f kHz", khz)
+        }
+        return "\(Int(hz.rounded())) Hz"
+    }
 
     private func formatGain(_ db: Float) -> String { (db > 0 ? "+" : "") + String(format: "%.1f dB", db) }
 }

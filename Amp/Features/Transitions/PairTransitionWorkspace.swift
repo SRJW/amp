@@ -323,21 +323,26 @@ struct PairTransitionWorkspace: View {
                 if result != spec { edit { _ in result } }
             } else { finishCueDrag(gesture) }
         }, cancel: cancelCueDrag, tap: { location in
-            let entering = !customMode || !editingVolume
-            activateCustom()
             let layout = curveLayout(timing, size)
-            if !transitionEnabled {
+            guard transitionEnabled else {
                 selectedLine = .volume(layout.role(at: location))
                 selectedHandle = nil
                 return
             }
             if let line = layout.nearestLine(location, spec: spec, showsEQ: showsEQ, showsFilter: showsFilter, selected: selectedLine) {
-                selectLine(line, at: location, timing: timing, size: size)
-            } else if entering {
-                selectedLine = .volume(layout.role(at: location))
-                selectedHandle = nil
-            } else if editingVolume && isEditingGain { selectOrAddPoint(location, size: size, timing: timing) }
-            else { inspectedMs = viewport(timing).time(at: Double(location.x / max(size.width, 1))) }
+                if case .volume = line {
+                    let entering = !customMode || !editingVolume
+                    activateCustom()
+                    selectLine(line, at: location, timing: timing, size: size)
+                    if entering { selectedHandle = nil }
+                } else {
+                    selectLine(line, at: location, timing: timing, size: size)
+                }
+            } else if customMode && editingVolume && isEditingGain {
+                selectOrAddPoint(location, size: size, timing: timing)
+            } else {
+                inspectedMs = viewport(timing).time(at: Double(location.x / max(size.width, 1)))
+            }
         }, touchDown: { location in
             guard transitionEnabled, !pinching else { return }
             if let line = curveLayout(timing, size).nearestLine(location, spec: spec, showsEQ: showsEQ, showsFilter: showsFilter,
