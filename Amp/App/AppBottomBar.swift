@@ -141,7 +141,7 @@ struct AppNavigationButtons: View {
     }
 
     private func libraryTint(selected: Bool) -> Color {
-        selected ? palette.primary : palette.onSurfaceVariant
+        selected ? palette.primary : palette.onSurfaceVariant.opacity(0.76)
     }
 
     var body: some View {
@@ -242,93 +242,104 @@ private struct AppNavigationBarContent: View, Animatable {
 
     var body: some View {
         let blend = PlayerCoverGeometry.chromeOpacity(playerProgress)
+        let lensX = contact?.lensX ?? width * PlayerLayoutMetrics.navigationCentresW[selectedIndex]
+        let liftAnimation: Animation? = environment.accessibilityReduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.82)
+
         ZStack {
-            Capsule().fill(selectionFallbackFill)
-                .overlay {
-                    if glassEnabled && !environment.accessibilityReduceTransparency {
-                        Capsule().strokeBorder(
-                            LinearGradient(
-                                colors: [Color.white.opacity(environment.colorScheme == .dark ? 0.16 : 0.42), .clear],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            ),
-                            lineWidth: 0.6
-                        )
-                    }
-                }
-                .frame(width: lensWidth, height: lensHeight)
-                .position(x: contact?.lensX ?? width * PlayerLayoutMetrics.navigationCentresW[selectedIndex], y: 24)
-                .opacity((1 - blend) * (contact == nil || !usesFloatingLens ? 1 : 0))
-                .animation(environment.accessibilityReduceMotion ? nil : .easeOut(duration: 0.16), value: contact != nil)
-                .allowsHitTesting(false)
-            button(L("Library"), section: .library, index: 0, blend: blend) { PlayerLibraryGlyph().scaleEffect(PlayerLayoutMetrics.navigationIconScale) }
-            button(L("Equalizer"), section: .equalizer, index: 1, blend: blend) { PlayerEqualizerGlyph().scaleEffect(PlayerLayoutMetrics.navigationIconScale) }
-            button(L("Search"), section: .search, index: 2, blend: blend) { PlayerSearchGlyph().scaleEffect(PlayerLayoutMetrics.navigationIconScale) }
-            Menu {
-                Section(L(AppNavigationMetrics.menuLabel)) {
-                    ForEach(Tool.available) { tool in
-                        Button { onOpenTool(tool) } label: {
-                            Label(L(tool.label), systemImage: tool.icon)
+            // Layer 1 (Back): Outer Liquid Glass bar, Now Playing tinted glass capsule, and resting pill.
+            ZStack {
+                Color.clear
+                    .frame(width: width, height: AppNavigationMetrics.buttonsHeight)
+                    .modifier(FloatingControlGlass(enabled: glassEnabled,
+                                                   verticalOutset: (AppNavigationMetrics.capsuleHeight - AppNavigationMetrics.buttonsHeight) / 2,
+                                                   surfaceOpacity: 1 - blend))
+                if showsPlayerCapsule && blend > 0.001 {
+                    Group {
+                        if #available(iOS 26.0, *), glassEnabled, !environment.accessibilityReduceTransparency {
+                            Color.clear
+                                .glassEffect(.regular.tint(playerCapsuleFill.opacity(0.76)), in: .capsule)
+                        } else {
+                            Capsule().fill(playerCapsuleFill)
                         }
-                        .accessibilityIdentifier("appMenu.\(tool.rawValue)")
                     }
+                    .frame(width: width, height: 54)
+                    .opacity(blend)
                 }
-            } label: {
-                navigationLabel(L("Menu")) { PlayerQueueGlyph().scaleEffect(PlayerLayoutMetrics.navigationIconScale) }
-                    .foregroundStyle(blendedColor(
-                        from: libraryColor(at: 3),
-                        to: playerIdleColor,
-                        amount: blend
-                    ))
-            }
-            .menuStyle(.button)
-            .menuOrder(.fixed)
-            .accessibilityLabel(L(AppNavigationMetrics.menuLabel))
-            .accessibilityIdentifier("appMenu")
-            .position(x: width * PlayerLayoutMetrics.navigationCentresW[3], y: 24)
-        }
-        .font(.system(size: 28 * PlayerLayoutMetrics.navigationIconScale, weight: .heavy))
-        .buttonStyle(FloatingControlPressStyle(enabled: playerProgress < 0.5))
-        .frame(width: width, height: AppNavigationMetrics.buttonsHeight)
-        .modifier(FloatingControlGlass(enabled: glassEnabled,
-                                       verticalOutset: (AppNavigationMetrics.capsuleHeight - AppNavigationMetrics.buttonsHeight) / 2,
-                                       surfaceOpacity: 1 - blend))
-        .background {
-            if showsPlayerCapsule && blend > 0.001 {
-                Group {
-                    if #available(iOS 26.0, *), glassEnabled, !environment.accessibilityReduceTransparency {
-                        Color.clear
-                            .glassEffect(.regular.tint(playerCapsuleFill.opacity(0.76)), in: .capsule)
-                    } else {
-                        Capsule().fill(playerCapsuleFill)
+                Capsule().fill(selectionFallbackFill)
+                    .overlay {
+                        if glassEnabled && !environment.accessibilityReduceTransparency {
+                            Capsule().strokeBorder(
+                                LinearGradient(
+                                    colors: [Color.white.opacity(environment.colorScheme == .dark ? 0.16 : 0.42), .clear],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                ),
+                                lineWidth: 0.6
+                            )
+                        }
                     }
-                }
-                .frame(width: width, height: 54)
-                .opacity(blend)
-                .allowsHitTesting(false)
+                    .frame(width: lensWidth, height: lensHeight)
+                    .position(x: lensX, y: 24)
+                    .opacity((1 - blend) * (contact == nil || !usesFloatingLens ? 1 : 0))
+                    .animation(liftAnimation, value: contact != nil)
             }
-        }
-        .overlay {
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+
+            // Layer 2 (Middle): Gliding Liquid Glass lens sits above the outer bar and below the icons,
+            // refracting the bar and scrolling artwork cleanly without blurring or distorting the glyphs.
             raisedLens
                 .frame(width: lensWidth * lensScaleX, height: lensHeight * lensScaleY)
                 .animation(environment.accessibilityReduceMotion ? nil : .interactiveSpring(response: 0.16, dampingFraction: 0.86), value: contact?.speed)
-                .position(x: contact?.lensX ?? width * PlayerLayoutMetrics.navigationCentresW[selectedIndex], y: 24)
+                .position(x: lensX, y: 24)
                 .opacity((1 - blend) * (contact == nil ? 0 : 1))
-                .animation(environment.accessibilityReduceMotion ? nil : .spring(response: 0.26, dampingFraction: 0.82), value: contact != nil)
+                .animation(liftAnimation, value: contact != nil)
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
+
+            // Layer 3 (Front): Interactive buttons and glyphs stay 100% crisp above the lens.
+            ZStack {
+                button(L("Library"), section: .library, index: 0, blend: blend) { PlayerLibraryGlyph().scaleEffect(PlayerLayoutMetrics.navigationIconScale) }
+                button(L("Equalizer"), section: .equalizer, index: 1, blend: blend) { PlayerEqualizerGlyph().scaleEffect(PlayerLayoutMetrics.navigationIconScale) }
+                button(L("Search"), section: .search, index: 2, blend: blend) { PlayerSearchGlyph().scaleEffect(PlayerLayoutMetrics.navigationIconScale) }
+                Menu {
+                    Section(L(AppNavigationMetrics.menuLabel)) {
+                        ForEach(Tool.available) { tool in
+                            Button { onOpenTool(tool) } label: {
+                                Label(L(tool.label), systemImage: tool.icon)
+                            }
+                            .accessibilityIdentifier("appMenu.\(tool.rawValue)")
+                        }
+                    }
+                } label: {
+                    navigationLabel(L("Menu")) { PlayerQueueGlyph().scaleEffect(PlayerLayoutMetrics.navigationIconScale) }
+                        .foregroundStyle(blendedColor(
+                            from: libraryColor(at: 3),
+                            to: playerIdleColor,
+                            amount: blend
+                        ))
+                }
+                .menuStyle(.button)
+                .menuOrder(.fixed)
+                .accessibilityLabel(L(AppNavigationMetrics.menuLabel))
+                .accessibilityIdentifier("appMenu")
+                .position(x: width * PlayerLayoutMetrics.navigationCentresW[3], y: 24)
+            }
+            .font(.system(size: 28 * PlayerLayoutMetrics.navigationIconScale, weight: .heavy))
+            .buttonStyle(FloatingControlPressStyle(enabled: playerProgress < 0.5))
         }
+        .frame(width: width, height: AppNavigationMetrics.buttonsHeight)
     }
 
     private var lensWidth: CGFloat { width * AppNavigationMetrics.selectionWidthFraction - AppNavigationMetrics.selectionInset * 2 }
     private var lensHeight: CGFloat { AppNavigationMetrics.capsuleHeight - AppNavigationMetrics.selectionInset * 2 }
     private var lensScaleX: CGFloat {
         guard let contact, !environment.accessibilityReduceMotion else { return 1 }
-        return 1.14 + contact.speed * 0.10
+        return 1.28 + contact.speed * 0.09
     }
     private var lensScaleY: CGFloat {
         guard let contact, !environment.accessibilityReduceMotion else { return 1 }
-        return 1.22 - contact.speed * 0.06
+        return 1.19 - contact.speed * 0.05
     }
     private func libraryColor(at index: Int) -> Color {
         let focus = contact?.focus(at: index) ?? (selectedIndex == index ? 1 : 0)
@@ -340,7 +351,10 @@ private struct AppNavigationBarContent: View, Animatable {
     }
     @ViewBuilder private var raisedLens: some View {
         if #available(iOS 26.0, *), usesFloatingLens {
-            Capsule().fill(.clear).glassEffect(.clear.interactive(), in: .capsule)
+            Capsule()
+                .fill(Color.white.opacity(environment.colorScheme == .dark ? 0.04 : 0.10))
+                .glassEffect(.clear, in: .capsule)
+                .shadow(color: Color.black.opacity(environment.colorScheme == .dark ? 0.28 : 0.10), radius: 10, y: 2)
         } else { Color.clear }
     }
 
