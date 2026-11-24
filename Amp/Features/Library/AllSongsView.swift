@@ -111,14 +111,24 @@ struct AllSongsView: View {
         )
     }
 
+    private var precomputedMatch: LibraryStore.CachedAllSongs? {
+        guard folderPath == nil, category == .songs, !hasFilters, query.trimmed.isEmpty else { return nil }
+        let sortMode = LibrarySort(rawValue: sort) ?? .title
+        return library.cachedAllSongs(for: sortMode)
+    }
+
     var body: some View {
-        let showsAlphabet = rows.count >= 8 && indexAnchors.count > 1
+        let precomputed = precomputedMatch
+        let effectiveSongs = results ?? precomputed?.songs
+        let effectiveRows = !rows.isEmpty ? rows : (precomputed?.rows ?? [])
+        let effectiveAnchors = !indexAnchors.isEmpty ? indexAnchors : (precomputed?.anchors ?? [:])
+        let showsAlphabet = effectiveRows.count >= 8 && effectiveAnchors.count > 1
         let songActions = router.songActions(actions, source: playbackSource)
         let artworkVersion = ArtworkChangeBroker.shared.version
 
         ZStack(alignment: .bottomTrailing) {
             NativeSongTableView(
-                rows: rows,
+                rows: effectiveRows,
                 currentSongID: player.currentSongID,
                 highlightedSongID: router.highlightedSongID,
                 selecting: selecting,
@@ -127,7 +137,7 @@ struct AllSongsView: View {
                 showsAlphabetPadding: showsAlphabet,
                 emptyMessage: scopedSongs.isEmpty ? L("No songs found.") : L("No songs match these filters."),
                 emptyIcon: "music.note",
-                isLoading: results == nil,
+                isLoading: effectiveSongs == nil,
                 palette: palette,
                 colorScheme: colorScheme,
                 artworkChangeVersion: artworkVersion,
@@ -141,7 +151,7 @@ struct AllSongsView: View {
                         if !query.trimmed.isEmpty && settings.continuousPlayback {
                             let resolved = ContinuousPlayback.queue(startingAt: song, allSongs: library.songs, facts: library.browseFacts)
                             actions.play(resolved.songs, startIndex: resolved.startIndex, origin: nil, source: .library)
-                        } else if let list = results {
+                        } else if let list = effectiveSongs {
                             actions.play(list, startIndex: index, origin: nil, source: playbackSource)
                         }
                     } else if !player.state.isPlaying {
@@ -171,8 +181,8 @@ struct AllSongsView: View {
                     }
                     if selecting { selectionActions }
                     if category == .recentlyPlayed { recentCollections }
-                    if let results, (hasFilters || !query.trimmed.isEmpty) {
-                        Text(results.count == 1 ? L("1 match") : L("%d matches", results.count))
+                    if let effectiveSongs, (hasFilters || !query.trimmed.isEmpty) {
+                        Text(effectiveSongs.count == 1 ? L("1 match") : L("%d matches", effectiveSongs.count))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .padding(.horizontal, Spacing.gutter)
@@ -184,7 +194,7 @@ struct AllSongsView: View {
             .ignoresSafeArea()
 
             if showsAlphabet {
-                AlphabetIndexView(anchors: indexAnchors) { rowIndex in
+                AlphabetIndexView(anchors: effectiveAnchors) { rowIndex in
                     scrollHandle.scrollToRow?(rowIndex, .top, false)
                 }
                 .padding(.bottom, SongAlphabetMetrics.bottomPadding)
@@ -194,17 +204,26 @@ struct AllSongsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .onChange(of: router.showsNowPlaying) { _, shown in if shown { dismissSearchKeyboard() } }
         .task(id: browseTaskKey) {
-            let snapshot = request
             let sortMode = LibrarySort(rawValue: sort) ?? .title
+            if let cached = precomputedMatch {
+                results = cached.songs
+                rows = cached.rows
+                indexAnchors = cached.anchors
+                let initialURLs = cached.rows.prefix(20).map(\.thumbnailURL)
+                ArtworkLoader.shared.prefetch(urls: initialURLs, maxPixels: 144)
+                return
+            }
+            let snapshot = request
             let albumCovers = library.albumCoverSong
             let albumsMap = Dictionary(library.albums.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+            let canCacheAllSongs = folderPath == nil && category == .songs && !hasFilters && snapshot.query.trimmed.isEmpty
             if !snapshot.query.isEmpty { try? await Task.sleep(for: .milliseconds(120)) }
             guard !Task.isCancelled else { return }
-            let updated = await Task.detached(priority: .userInitiated) { () -> ([Song], [NativeSongRow], [String: Int], [String], [String]) in
+            let updated = await Task.detached(priority: .userInitiated) { () -> ([Song], [NativeSongRow], [String: Int]) in
                 let sorted = snapshot.results()
                 let builtRows = sorted.map { song in
                     let thumb = LibraryStore.thumbnailURL(for: song, albumsById: albumsMap, albumCoverSong: albumCovers)
-                    return NativeSongRow.build(song: song, thumbnailURL: thumb, showsFileDetails: true)
+                    return NativeSongRow.build(song: song, thumbnailURL: thumb)
                 }
                 let anchors: [String: Int]
                 switch sortMode {
@@ -212,16 +231,27 @@ struct AllSongsView: View {
                 case .album: anchors = SongAlphabet.indexAnchors(sorted, title: \.album)
                 default: anchors = SongAlphabet.indexAnchors(sorted, title: \.title)
                 }
-                return (sorted, builtRows, anchors, LibraryBrowse.genres(in: snapshot.songs), LibraryBrowse.formats(in: snapshot.songs))
+                return (sorted, builtRows, anchors)
             }.value
             guard !Task.isCancelled else { return }
             results = updated.0
             rows = updated.1
             indexAnchors = updated.2
-            genres = updated.3
-            formats = updated.4
+            if canCacheAllSongs {
+                library.storeCachedAllSongs(.init(sortRaw: sortMode.rawValue, songs: updated.0, rows: updated.1, anchors: updated.2))
+            }
             let initialURLs = updated.1.prefix(20).map(\.thumbnailURL)
             ArtworkLoader.shared.prefetch(urls: initialURLs, maxPixels: 144)
+        }
+        .task(id: showsFilters) {
+            guard showsFilters else { return }
+            let songs = scopedSongs
+            let computed = await Task.detached(priority: .utility) {
+                (LibraryBrowse.genres(in: songs), LibraryBrowse.formats(in: songs))
+            }.value
+            guard !Task.isCancelled else { return }
+            genres = computed.0
+            formats = computed.1
         }
         .task(id: readyRevealRequest) {
             guard let reveal = readyRevealRequest else { return }
@@ -233,7 +263,8 @@ struct AllSongsView: View {
             }
             do {
                 try await Task.sleep(for: .milliseconds(60))
-                if let idx = rows.firstIndex(where: { $0.song.id == reveal.songID }) {
+                let activeRows = !rows.isEmpty ? rows : (precomputedMatch?.rows ?? [])
+                if let idx = activeRows.firstIndex(where: { $0.song.id == reveal.songID }) {
                     scrollHandle.scrollToRow?(idx, .middle, false)
                 }
                 router.completeSongReveal(reveal)

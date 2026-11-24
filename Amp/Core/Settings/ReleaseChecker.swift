@@ -62,9 +62,16 @@ struct AppRelease: Codable, Equatable, Sendable, Identifiable {
 
     func download(animated: Bool) -> URL? {
         assets.first {
-            ($0.name.lowercased().hasSuffix(animated ? "-animated.ipa" : "-static.ipa")
-                || (!animated && $0.name.lowercased() == "amp.ipa"))
-                && Self.official($0.browser_download_url)
+            let lower = $0.name.lowercased()
+            let matchesVariant: Bool
+            if animated {
+                matchesVariant = lower.hasSuffix("-animated.ipa")
+            } else {
+                matchesVariant = lower.hasSuffix("-static.ipa")
+                    || lower == "amp.ipa"
+                    || (lower.hasPrefix("amp-") && lower.hasSuffix(".ipa") && !lower.hasSuffix("-animated.ipa"))
+            }
+            return matchesVariant && Self.official($0.browser_download_url)
         }?.browser_download_url
     }
     static func official(_ url: URL) -> Bool {

@@ -50,18 +50,26 @@ struct EntityCategoryView: View {
         )
     }
 
+    private var cachedGrid: LibraryStore.CachedEntityGrid? {
+        guard usesNativeGrid, query.trimmed.isEmpty else { return nil }
+        return library.cachedEntityGrid(category: category, sortRaw: sort)
+    }
+
     var body: some View {
-        let tracks = resolvedSongs
+        let precomputed = cachedGrid
+        let tracks = !resolvedSongs.isEmpty ? resolvedSongs : (precomputed?.songs ?? [])
         Group {
             if usesNativeGrid {
-                let showsAlphabet = resolvedGridAnchors.count > 1
+                let effectiveItems = !resolvedGridItems.isEmpty ? resolvedGridItems : (precomputed?.items ?? [])
+                let effectiveAnchors = !resolvedGridAnchors.isEmpty ? resolvedGridAnchors : (precomputed?.anchors ?? [:])
+                let showsAlphabet = effectiveAnchors.count > 1
                 ZStack(alignment: .bottomTrailing) {
                     NativeEntityGridView(
-                        items: resolvedGridItems,
+                        items: effectiveItems,
                         showsAlphabetPadding: showsAlphabet,
                         emptyMessage: "No \(category.title.lowercased()) found.",
                         emptyIcon: category.icon,
-                        isLoading: !loaded,
+                        isLoading: !loaded && precomputed == nil,
                         palette: palette,
                         artworkChangeVersion: ArtworkChangeBroker.shared.version,
                         scrollHandle: scrollHandle,
@@ -91,7 +99,7 @@ struct EntityCategoryView: View {
                     .ignoresSafeArea()
 
                     if showsAlphabet {
-                        AlphabetIndexView(anchors: resolvedGridAnchors) { idx in
+                        AlphabetIndexView(anchors: effectiveAnchors) { idx in
                             scrollHandle.scrollToGridItem?(idx, false)
                         }
                         .padding(.bottom, SongAlphabetMetrics.bottomPadding)
@@ -294,6 +302,14 @@ struct EntityCategoryView: View {
         resolvedSongs = computed.3
         resolvedAnchors = computed.4
         loaded = true
+
+        if usesNativeGrid && query.trimmed.isEmpty {
+            library.storeCachedEntityGrid(
+                .init(items: computed.0, anchors: computed.1, songs: computed.3),
+                category: category,
+                sortRaw: sortRaw
+            )
+        }
 
         // Warm the initial viewport's artwork at low priority.
         let initialURLs = computed.0.prefix(16).compactMap(\.audioArtworkURL)

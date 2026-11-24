@@ -28,6 +28,22 @@ final class LibraryStore {
     var isShowingError = false
 
     let database: LibraryDatabase
+    struct CachedAllSongs: Sendable {
+        let sortRaw: String
+        let songs: [Song]
+        let rows: [NativeSongRow]
+        let anchors: [String: Int]
+    }
+
+    struct CachedEntityGrid: Sendable {
+        let items: [NativeEntityItem]
+        let anchors: [String: Int]
+        let songs: [Song]
+    }
+
+    private(set) var precomputedAllSongs: CachedAllSongs?
+    @ObservationIgnored private var allSongsCache: [String: CachedAllSongs] = [:]
+    @ObservationIgnored private var entityGridCache: [String: CachedEntityGrid] = [:]
     @ObservationIgnored private var albumsById: [Int64: Album] = [:]
     @ObservationIgnored private var artistsById: [Int64: Artist] = [:]
     @ObservationIgnored private var playlistsById: [Int64: Playlist] = [:]
@@ -48,6 +64,23 @@ final class LibraryStore {
     func album(_ id: Int64) -> Album? { albumsById[id] }
     func artist(_ id: Int64) -> Artist? { artistsById[id] }
     func playlist(_ id: Int64) -> Playlist? { playlistsById[id] }
+
+    func cachedAllSongs(for sort: LibrarySort) -> CachedAllSongs? {
+        if let pre = precomputedAllSongs, pre.sortRaw == sort.rawValue { return pre }
+        return allSongsCache[sort.rawValue]
+    }
+
+    func storeCachedAllSongs(_ cached: CachedAllSongs) {
+        allSongsCache[cached.sortRaw] = cached
+    }
+
+    func cachedEntityGrid(category: LibraryCategory, sortRaw: String) -> CachedEntityGrid? {
+        entityGridCache["\(category.rawValue)|\(sortRaw)"]
+    }
+
+    func storeCachedEntityGrid(_ cached: CachedEntityGrid, category: LibraryCategory, sortRaw: String) {
+        entityGridCache["\(category.rawValue)|\(sortRaw)"] = cached
+    }
 
     /// Deduplicates list thumbnails by album cover when a track belongs to a non-compilation album,
     /// reducing RAM, disk reads, and JPEG decodes by ~10-15x during fast scrolling while keeping
@@ -99,6 +132,27 @@ final class LibraryStore {
         let featuredAlbums: [Album]
     }
 
+    nonisolated static func buildCachedAllSongs(
+        songs: [Song],
+        facts: [Int64: LibraryBrowseFact],
+        albumsById: [Int64: Album],
+        albumCoverSong: [Int64: Song],
+        sort: LibrarySort
+    ) -> CachedAllSongs {
+        let sorted = SongBrowseRequest(songs: songs, facts: facts, query: "", sort: sort).results()
+        let rows = sorted.map { song in
+            let thumb = thumbnailURL(for: song, albumsById: albumsById, albumCoverSong: albumCoverSong)
+            return NativeSongRow.build(song: song, thumbnailURL: thumb)
+        }
+        let anchors: [String: Int]
+        switch sort {
+        case .artist: anchors = SongAlphabet.indexAnchors(sorted, title: \.artist)
+        case .album: anchors = SongAlphabet.indexAnchors(sorted, title: \.album)
+        default: anchors = SongAlphabet.indexAnchors(sorted, title: \.title)
+        }
+        return CachedAllSongs(sortRaw: sort.rawValue, songs: sorted, rows: rows, anchors: anchors)
+    }
+
     private nonisolated static func readCatalog(from database: LibraryDatabase) throws -> CatalogSnapshot {
         let songs = try database.allSongs()
         let albums = try database.allAlbums()
@@ -138,7 +192,7 @@ final class LibraryStore {
         )
     }
 
-    private func apply(catalog: CatalogSnapshot?, stats: StatsSnapshot) {
+    private func apply(catalog: CatalogSnapshot?, stats: StatsSnapshot, precomputed: CachedAllSongs? = nil) {
         var catalogDidChange = false
         if let catalog {
             albumsById = catalog.albumsById
@@ -151,7 +205,11 @@ final class LibraryStore {
             if playlists != catalog.playlists { playlists = catalog.playlists; catalogDidChange = true }
             if favorites != catalog.favorites { favorites = catalog.favorites; catalogDidChange = true }
             if albumCoverSong != catalog.albumCoverSong { albumCoverSong = catalog.albumCoverSong; catalogDidChange = true }
-            if catalogDidChange { contentRevision &+= 1 }
+            if catalogDidChange {
+                allSongsCache.removeAll()
+                entityGridCache.removeAll()
+                contentRevision &+= 1
+            }
         }
         var statsDidChange = false
         if browseFacts != stats.browseFacts { browseFacts = stats.browseFacts; statsDidChange = true }
@@ -159,7 +217,20 @@ final class LibraryStore {
         if recentAlbums != stats.recentAlbums { recentAlbums = stats.recentAlbums; statsDidChange = true }
         if recentPlaylists != stats.recentPlaylists { recentPlaylists = stats.recentPlaylists; statsDidChange = true }
         if featuredAlbums != stats.featuredAlbums { featuredAlbums = stats.featuredAlbums; statsDidChange = true }
-        if statsDidChange { statsRevision &+= 1 }
+        if statsDidChange {
+            // Only clear stats-sensitive sorts when stats change.
+            allSongsCache.removeValue(forKey: LibrarySort.recentlyAdded.rawValue)
+            allSongsCache.removeValue(forKey: LibrarySort.recentlyPlayed.rawValue)
+            allSongsCache.removeValue(forKey: LibrarySort.mostPlayed.rawValue)
+            entityGridCache.removeAll()
+            statsRevision &+= 1
+        }
+        if let precomputed {
+            precomputedAllSongs = precomputed
+            allSongsCache[precomputed.sortRaw] = precomputed
+        } else if catalogDidChange {
+            precomputedAllSongs = nil
+        }
     }
 
     /// Synchronous reload (used at launch and by deterministic unit tests).
@@ -172,6 +243,22 @@ final class LibraryStore {
             let catalog = try Self.readCatalog(from: database)
             let stats = try Self.readStats(from: database, albums: catalog.albums)
             apply(catalog: catalog, stats: stats)
+            // Warm the active All Songs sort off the main thread immediately after launch so
+            // opening All Songs is 0 ms instant with zero spinner.
+            let activeSort = ContinuousPlayback.currentSort()
+            let songs = catalog.songs
+            let facts = stats.browseFacts
+            let albumsMap = catalog.albumsById
+            let covers = catalog.albumCoverSong
+            let expectedRev = contentRevision
+            Task.detached(priority: .userInitiated) { [weak self] in
+                let warmed = Self.buildCachedAllSongs(songs: songs, facts: facts, albumsById: albumsMap, albumCoverSong: covers, sort: activeSort)
+                await MainActor.run {
+                    guard let self, self.contentRevision == expectedRev else { return }
+                    self.precomputedAllSongs = warmed
+                    self.allSongsCache[warmed.sortRaw] = warmed
+                }
+            }
         } catch {
             report("Couldn't read the library: \(error)")
         }
@@ -191,19 +278,24 @@ final class LibraryStore {
             guard !Task.isCancelled, let self, self.reloadGeneration == generation else { return }
             let needsCatalog = self.pendingNeedsCatalog
             self.pendingNeedsCatalog = false
+            let activeSort = ContinuousPlayback.currentSort()
             do {
-                let result: (CatalogSnapshot?, StatsSnapshot) = try await Task.detached(priority: .userInitiated) {
+                let result: (CatalogSnapshot?, StatsSnapshot, CachedAllSongs?) = try await Task.detached(priority: .userInitiated) {
                     if needsCatalog {
                         let catalog = try Self.readCatalog(from: database)
                         let stats = try Self.readStats(from: database, albums: catalog.albums)
-                        return (catalog, stats)
+                        let warmed = Self.buildCachedAllSongs(
+                            songs: catalog.songs, facts: stats.browseFacts,
+                            albumsById: catalog.albumsById, albumCoverSong: catalog.albumCoverSong, sort: activeSort
+                        )
+                        return (catalog, stats, warmed)
                     } else {
                         let stats = try Self.readStats(from: database, albums: cachedAlbums)
-                        return (nil, stats)
+                        return (nil, stats, nil)
                     }
                 }.value
                 guard !Task.isCancelled, self.reloadGeneration == generation else { return }
-                self.apply(catalog: result.0, stats: result.1)
+                self.apply(catalog: result.0, stats: result.1, precomputed: result.2)
             } catch {
                 guard !Task.isCancelled, self.reloadGeneration == generation else { return }
                 self.report("Couldn't read the library: \(error)")

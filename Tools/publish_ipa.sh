@@ -9,7 +9,8 @@ ipa=${1:-dist/amp.ipa}
 [[ "$IPA_BUILD_NUMBER" =~ ^[0-9]+$ ]]
 [[ "$IPA_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
 test -s "$ipa"
-tag="v0.1.0-amp.${IPA_BUILD_NUMBER}"
+tag="v1.1.${IPA_BUILD_NUMBER}"
+asset_name="amp-${tag}.ipa"
 temporary=$(mktemp -d)
 trap 'rm -rf "$temporary"' EXIT
 
@@ -28,7 +29,7 @@ if [ -z "$release_id" ]; then
 import json, os, sys
 number = os.environ['IPA_BUILD_NUMBER']
 source = os.environ['IPA_SOURCE_SHA']
-body = ('Development IPA from successful iPhone build ' + number + '.\n\n'
+body = ('AMP v1.1.' + number + ' (iPhone build ' + number + ').\n\n'
         'Re-sign before installing, preserving the same authorized App Group for the app and widget. '
         'Signing requests do not grant provisioning permissions.\n\nSource: ' + source + '.')
 if os.environ.get('NATIVE_CHECKS_RESULT') == 'success':
@@ -36,8 +37,8 @@ if os.environ.get('NATIVE_CHECKS_RESULT') == 'success':
 else:
     body += '\nNative simulator validation is reported separately; this development IPA publication does not certify that those checks passed.'
 with open(sys.argv[1], 'w') as output:
-    json.dump(dict(tag_name='v0.1.0-amp.' + number, target_commitish=source,
-                   name='amp — static artwork build ' + number, body=body,
+    json.dump(dict(tag_name='v1.1.' + number, target_commitish=source,
+                   name='amp v1.1.' + number, body=body,
                    draft=True, prerelease=True), output)
 PY
   release_id=$(gh api --method POST "repos/$GH_REPO/releases" --input "$temporary/release.json" --jq '.id')
@@ -45,9 +46,10 @@ fi
 [[ "$release_id" =~ ^[0-9]+$ ]]
 
 gh api "repos/$GH_REPO/releases/$release_id/assets" > "$temporary/assets.json"
-asset_id=$(python3 - "$temporary/assets.json" <<'PY'
-import json, sys
-assets = [a for a in json.load(open(sys.argv[1])) if a['name'] == 'amp.ipa']
+asset_id=$(ASSET_NAME="$asset_name" python3 - "$temporary/assets.json" <<'PY'
+import json, os, sys
+target = os.environ['ASSET_NAME']
+assets = [a for a in json.load(open(sys.argv[1])) if a['name'] == target]
 assert len(assets) <= 1
 if assets:
     assert assets[0]['state'] == 'uploaded', 'Existing upload is incomplete; inspect it before replacing it'
@@ -59,7 +61,7 @@ if [ -z "$asset_id" ]; then
     --header "Authorization: Bearer $GH_TOKEN" \
     --header 'Content-Type: application/octet-stream' \
     --data-binary "@$ipa" \
-    "https://uploads.github.com/repos/$GH_REPO/releases/$release_id/assets?name=amp.ipa" > "$temporary/asset.json"
+    "https://uploads.github.com/repos/$GH_REPO/releases/$release_id/assets?name=${asset_name}" > "$temporary/asset.json"
 else
   gh api "repos/$GH_REPO/releases/assets/$asset_id" > "$temporary/asset.json"
 fi
@@ -74,5 +76,5 @@ PY
 if [ "$(gh api "repos/$GH_REPO/releases/$release_id" --jq '.draft')" = 'true' ]; then
   gh api --method PATCH "repos/$GH_REPO/releases/$release_id" -F draft=false >/dev/null
 fi
-printf '[Download amp.ipa directly](https://github.com/%s/releases/download/%s/amp.ipa)\n' \
-  "$GH_REPO" "$tag" >> "$GITHUB_STEP_SUMMARY"
+printf '[Download %s directly](https://github.com/%s/releases/download/%s/%s)\n' \
+  "$asset_name" "$GH_REPO" "$tag" "$asset_name" >> "$GITHUB_STEP_SUMMARY"

@@ -1,15 +1,13 @@
 import SwiftUI
 import UIKit
 
-/// Precomputed row snapshot built off the main thread so 60/120 Hz scrolling does zero string formatting.
+/// Lightweight row snapshot built off the main thread; file details are formatted lazily only for visible cells.
 struct NativeSongRow: Equatable, Sendable {
     let song: Song
     let thumbnailURL: URL
     let subtitle: String
-    let fileDetails: String
-    let accessibilityLabel: String
 
-    nonisolated static func build(song: Song, thumbnailURL: URL, showsFileDetails: Bool) -> NativeSongRow {
+    nonisolated static func build(song: Song, thumbnailURL: URL) -> NativeSongRow {
         let subtitle: String
         let artistBlank = song.artist.isBlank
         let albumBlank = song.album.isBlank
@@ -22,13 +20,7 @@ struct NativeSongRow: Equatable, Sendable {
         } else {
             subtitle = ""
         }
-        return NativeSongRow(
-            song: song,
-            thumbnailURL: thumbnailURL,
-            subtitle: subtitle,
-            fileDetails: showsFileDetails ? SongRowText.fileDetails(song) : "",
-            accessibilityLabel: SongRowText.accessibilityLabel(song, includingFileDetails: showsFileDetails)
-        )
+        return NativeSongRow(song: song, thumbnailURL: thumbnailURL, subtitle: subtitle)
     }
 }
 
@@ -126,7 +118,7 @@ final class NativeSongTableController<Header: View>: UITableViewController, UITa
         view.backgroundColor = .clear
         tableView.backgroundColor = .clear
         tableView.separatorStyle = .none
-        tableView.allowsSelection = false
+        tableView.allowsSelection = true
         tableView.showsVerticalScrollIndicator = false
         tableView.keyboardDismissMode = .interactive
         tableView.rowHeight = 70
@@ -323,19 +315,11 @@ final class NativeSongTableController<Header: View>: UITableViewController, UITa
             menuProvider: { [weak self] in
                 guard let actions = self?.actions ?? songActions else { return UIMenu(children: []) }
                 return makeAppleMusicSongMenu(song: row.song, actions: actions)
-            },
-            onTap: { [weak self] in
-                guard let self else { return }
-                if self.selecting {
-                    self.onToggleSelect?(row.song)
-                } else {
-                    self.onTapSong?(index, row.song)
-                }
             }
         )
     }
 
-    // MARK: - UITableViewDataSource
+    // MARK: - UITableViewDataSource & Delegate
 
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
         rows.count
@@ -347,6 +331,17 @@ final class NativeSongTableController<Header: View>: UITableViewController, UITa
         }
         configure(cell, at: indexPath.row)
         return cell
+    }
+
+    override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+        tableView.deselectRow(at: indexPath, animated: true)
+        guard indexPath.row < rows.count else { return }
+        let song = rows[indexPath.row].song
+        if selecting {
+            onToggleSelect?(song)
+        } else {
+            onTapSong?(indexPath.row, song)
+        }
     }
 
     // MARK: - UITableViewDataSourcePrefetching
@@ -407,7 +402,23 @@ final class NativeSongTableController<Header: View>: UITableViewController, UITa
 
 /// Recycled UIKit cell for song lists: zero SwiftUI view graph overhead, O(1) layout, synchronous cached artwork.
 private final class NativeSongCell: UITableViewCell {
-    private let rowTapTarget = UIControl()
+    /// Crisp vertical 3-dot icon drawn without imageView transform so iOS never stretches it into dashes.
+    private static let verticalEllipsisImage: UIImage = {
+        let size = CGSize(width: 16, height: 18)
+        let renderer = UIGraphicsImageRenderer(size: size)
+        let img = renderer.image { ctx in
+            UIColor.black.setFill()
+            let diameter: CGFloat = 2.8
+            let x = (size.width - diameter) / 2
+            for dy in [-4.8, 0.0, 4.8] as [CGFloat] {
+                let y = (size.height - diameter) / 2 + dy
+                ctx.cgContext.fillEllipse(in: CGRect(x: x, y: y, width: diameter, height: diameter))
+            }
+        }
+        return img.withRenderingMode(.alwaysTemplate)
+    }()
+
+    private let rowContentView = UIView()
     private let selectionImageView = UIImageView()
     private let artworkContainer = UIView()
     private let artworkImageView = UIImageView()
@@ -425,7 +436,10 @@ private final class NativeSongCell: UITableViewCell {
     private var moreWidthConstraint: NSLayoutConstraint!
     private var artworkTask: Task<Void, Never>?
     private var currentArtworkKey = ""
-    private var onTapHandler: (() -> Void)?
+    private var cachedDetailsSong: Song?
+    private var cachedShowsDetails = false
+    private var cachedFileDetails = ""
+    private var cachedAccessibilityLabel = ""
     private var menuProvider: (() -> UIMenu)?
 
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
@@ -442,23 +456,23 @@ private final class NativeSongCell: UITableViewCell {
         selectionStyle = .none
         isAccessibilityElement = false
 
-        rowTapTarget.translatesAutoresizingMaskIntoConstraints = false
-        rowTapTarget.addTarget(self, action: #selector(handleTap), for: .touchUpInside)
-        rowTapTarget.isAccessibilityElement = true
-        rowTapTarget.accessibilityTraits = .button
-        contentView.addSubview(rowTapTarget)
+        rowContentView.translatesAutoresizingMaskIntoConstraints = false
+        rowContentView.isUserInteractionEnabled = false
+        rowContentView.isAccessibilityElement = true
+        rowContentView.accessibilityTraits = .button
+        contentView.addSubview(rowContentView)
 
         selectionImageView.translatesAutoresizingMaskIntoConstraints = false
         selectionImageView.contentMode = .center
         selectionImageView.isUserInteractionEnabled = false
-        rowTapTarget.addSubview(selectionImageView)
+        rowContentView.addSubview(selectionImageView)
 
         artworkContainer.translatesAutoresizingMaskIntoConstraints = false
         artworkContainer.layer.cornerRadius = 10
         artworkContainer.layer.cornerCurve = .continuous
         artworkContainer.clipsToBounds = true
         artworkContainer.isUserInteractionEnabled = false
-        rowTapTarget.addSubview(artworkContainer)
+        rowContentView.addSubview(artworkContainer)
 
         placeholderImageView.translatesAutoresizingMaskIntoConstraints = false
         placeholderImageView.image = UIImage(systemName: "music.note")
@@ -509,12 +523,11 @@ private final class NativeSongCell: UITableViewCell {
         textStack.spacing = 2
         textStack.translatesAutoresizingMaskIntoConstraints = false
         textStack.isUserInteractionEnabled = false
-        rowTapTarget.addSubview(textStack)
+        rowContentView.addSubview(textStack)
 
         moreButton.translatesAutoresizingMaskIntoConstraints = false
-        let ellipsis = UIImage(systemName: "ellipsis", withConfiguration: UIImage.SymbolConfiguration(pointSize: 13, weight: .semibold))
-        moreButton.setImage(ellipsis, for: .normal)
-        moreButton.imageView?.transform = CGAffineTransform(rotationAngle: .pi / 2)
+        moreButton.setImage(Self.verticalEllipsisImage, for: .normal)
+        moreButton.imageView?.contentMode = .center
         moreButton.showsMenuAsPrimaryAction = true
         moreButton.accessibilityLabel = L("More options")
         moreButton.menu = UIMenu(children: [
@@ -530,18 +543,18 @@ private final class NativeSongCell: UITableViewCell {
         trailingConstraint = moreButton.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -4)
 
         NSLayoutConstraint.activate([
-            rowTapTarget.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: Spacing.md),
-            rowTapTarget.topAnchor.constraint(equalTo: contentView.topAnchor),
-            rowTapTarget.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
-            rowTapTarget.trailingAnchor.constraint(equalTo: moreButton.leadingAnchor, constant: -2),
+            rowContentView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: Spacing.md),
+            rowContentView.topAnchor.constraint(equalTo: contentView.topAnchor),
+            rowContentView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
+            rowContentView.trailingAnchor.constraint(equalTo: moreButton.leadingAnchor, constant: -2),
 
-            selectionImageView.leadingAnchor.constraint(equalTo: rowTapTarget.leadingAnchor),
-            selectionImageView.centerYAnchor.constraint(equalTo: rowTapTarget.centerYAnchor),
+            selectionImageView.leadingAnchor.constraint(equalTo: rowContentView.leadingAnchor),
+            selectionImageView.centerYAnchor.constraint(equalTo: rowContentView.centerYAnchor),
             selectionWidthConstraint,
             selectionImageView.heightAnchor.constraint(equalToConstant: 36),
 
             artworkContainer.leadingAnchor.constraint(equalTo: selectionImageView.trailingAnchor),
-            artworkContainer.centerYAnchor.constraint(equalTo: rowTapTarget.centerYAnchor),
+            artworkContainer.centerYAnchor.constraint(equalTo: rowContentView.centerYAnchor),
             artworkContainer.widthAnchor.constraint(equalToConstant: 52),
             artworkContainer.heightAnchor.constraint(equalToConstant: 52),
 
@@ -554,18 +567,14 @@ private final class NativeSongCell: UITableViewCell {
             artworkImageView.bottomAnchor.constraint(equalTo: artworkContainer.bottomAnchor),
 
             textStack.leadingAnchor.constraint(equalTo: artworkContainer.trailingAnchor, constant: Spacing.md),
-            textStack.trailingAnchor.constraint(equalTo: rowTapTarget.trailingAnchor),
-            textStack.centerYAnchor.constraint(equalTo: rowTapTarget.centerYAnchor),
+            textStack.trailingAnchor.constraint(equalTo: rowContentView.trailingAnchor),
+            textStack.centerYAnchor.constraint(equalTo: rowContentView.centerYAnchor),
 
             trailingConstraint,
             moreButton.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
             moreWidthConstraint,
             moreButton.heightAnchor.constraint(equalToConstant: 44),
         ])
-    }
-
-    @objc private func handleTap() {
-        onTapHandler?()
     }
 
     override func prepareForReuse() {
@@ -575,7 +584,6 @@ private final class NativeSongCell: UITableViewCell {
         currentArtworkKey = ""
         artworkImageView.image = nil
         placeholderImageView.isHidden = false
-        onTapHandler = nil
         menuProvider = nil
     }
 
@@ -589,10 +597,8 @@ private final class NativeSongCell: UITableViewCell {
         trailingInset: CGFloat,
         palette: AppPalette,
         artworkChangeVersion: Int,
-        menuProvider: @escaping () -> UIMenu,
-        onTap: @escaping () -> Void
+        menuProvider: @escaping () -> UIMenu
     ) {
-        self.onTapHandler = onTap
         self.menuProvider = menuProvider
 
         let primary = UIColor(palette.primary)
@@ -619,12 +625,19 @@ private final class NativeSongCell: UITableViewCell {
         subtitleLabel.text = row.subtitle
         subtitleLabel.textColor = onSurfaceVariant
 
+        if cachedDetailsSong != row.song || cachedShowsDetails != showsFileDetails {
+            cachedDetailsSong = row.song
+            cachedShowsDetails = showsFileDetails
+            cachedFileDetails = showsFileDetails ? SongRowText.fileDetails(row.song) : ""
+            cachedAccessibilityLabel = SongRowText.accessibilityLabel(row.song, includingFileDetails: showsFileDetails)
+        }
+
         if showsFileDetails {
             detailsRow.isHidden = false
             noteIconView.isHidden = false
             detailsLabel.isHidden = false
             noteIconView.tintColor = primary.withAlphaComponent(0.78)
-            detailsLabel.text = row.fileDetails
+            detailsLabel.text = cachedFileDetails
             detailsLabel.textColor = primary.withAlphaComponent(0.78)
             heartIconView.isHidden = !row.song.isFavorite
             heartIconView.tintColor = primary
@@ -638,9 +651,9 @@ private final class NativeSongCell: UITableViewCell {
             detailsRow.isHidden = true
         }
 
-        rowTapTarget.accessibilityLabel = row.accessibilityLabel
-        rowTapTarget.accessibilityValue = selecting ? (isSelected ? "Selected" : "Not selected") : nil
-        accessibilityElements = selecting ? [rowTapTarget] : [rowTapTarget, moreButton]
+        rowContentView.accessibilityLabel = cachedAccessibilityLabel
+        rowContentView.accessibilityValue = selecting ? (isSelected ? "Selected" : "Not selected") : nil
+        accessibilityElements = selecting ? [rowContentView] : [rowContentView, moreButton]
 
         artworkContainer.backgroundColor = surfaceVariant
         placeholderImageView.tintColor = onSurfaceVariant

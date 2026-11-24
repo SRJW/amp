@@ -40,6 +40,14 @@ private struct CIReleaseHTTP: HTTPClient {
                                 assets: [.init(name: "amp.ipa", browser_download_url: download)])
         precondition(update.download(animated: false) == download)
         precondition(update.download(animated: true) == nil)
+        let versionedDownload = URL(string: "https://github.com/SRJW/amp/releases/download/v1.1.210/amp-v1.1.210.ipa")!
+        let versionedUpdate = AppRelease(id: 210, tag_name: "v1.1.210", name: "amp v1.1.210", body: nil,
+                                         html_url: URL(string: "https://github.com/SRJW/amp/releases/tag/v1.1.210")!,
+                                         draft: false, prerelease: true,
+                                         assets: [.init(name: "amp-v1.1.210.ipa", browser_download_url: versionedDownload)])
+        precondition(versionedUpdate.download(animated: false) == versionedDownload)
+        precondition(versionedUpdate.download(animated: true) == nil)
+        precondition(ReleaseChecker.result([update, versionedUpdate], installed: "v0.1.0-amp.209", animated: false) == .available(versionedUpdate))
         precondition(ReleaseChecker.result([update], installed: "v0.1.0-amp.35", animated: false) == .available(update))
         precondition(ReleaseChecker.result([update], installed: update.tag_name, animated: false) == .current)
         precondition(!AppRelease.official(URL(string: "https://github.com/another/amp/releases/tag/v9")!))
