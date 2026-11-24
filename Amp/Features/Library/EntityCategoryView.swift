@@ -56,36 +56,87 @@ struct EntityCategoryView: View {
         }
     }
 
+    @State private var alphabetTarget: String?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var alphabetAnchors: [String: String] {
+        if selecting {
+            return SongAlphabet.anchors(songs, id: \.listScrollAnchor, title: \.title)
+        }
+        switch category {
+        case .albums:
+            return SongAlphabet.anchors(albums, id: { "amp-entity-album-\($0.id)" },
+                                        title: { sort == LibrarySort.artist.rawValue ? $0.artist : $0.title })
+        case .artists, .albumArtists:
+            return SongAlphabet.anchors(artists, id: { "amp-entity-artist-\($0.id)" }, title: \.name)
+        case .playlists:
+            return SongAlphabet.anchors(playlists, id: { "amp-entity-playlist-\($0.id)" }, title: \.name)
+        case .folders:
+            return SongAlphabet.anchors(folders, id: { "amp-entity-folder-\($0)" }) { folder in
+                let name = (folder as NSString).lastPathComponent
+                return name.isEmpty ? "Music folder" : name
+            }
+        default:
+            return [:]
+        }
+    }
+
     var body: some View {
         let tracks = songs
-        ScrollView {
-            VStack(alignment: .leading, spacing: Spacing.md) {
-                CategoryHeader(title: category.title, icon: category.icon, count: tracks.count, selecting: selecting,
-                               shuffle: { remember(); actions.playShuffled(tracks) }, play: { remember(); actions.playInOrder(tracks) },
-                               search: { showsSearch = true; focused = true },
-                               select: { selecting.toggle(); if !selecting { selected.removeAll() } }) {
-                    Picker("Sort by", selection: $sort) {
-                        ForEach(category == .albums ? LibrarySort.albums : [.title, .titleDescending], id: \.rawValue) { Text($0.label).tag($0.rawValue) }
+        let anchors = alphabetAnchors
+        let showsAlphabetIndex = category != .radio && anchors.count > 1
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: Spacing.md) {
+                    CategoryHeader(title: category.title, icon: category.icon, count: tracks.count, selecting: selecting,
+                                   shuffle: { remember(); actions.playShuffled(tracks) }, play: { remember(); actions.playInOrder(tracks) },
+                                   search: { showsSearch = true; focused = true },
+                                   select: { selecting.toggle(); if !selecting { selected.removeAll() } }) {
+                        Picker("Sort by", selection: $sort) {
+                            ForEach(category == .albums ? LibrarySort.albums : [.title, .titleDescending], id: \.rawValue) { Text($0.label).tag($0.rawValue) }
+                        }
+                        if category == .playlists { Button("New playlist", systemImage: "plus") { router.showsNewPlaylist = true } }
+                        Button("Import music", systemImage: "plus") { router.showsImporter = true }
                     }
-                    if category == .playlists { Button("New playlist", systemImage: "plus") { router.showsNewPlaylist = true } }
-                    Button("Import music", systemImage: "plus") { router.showsImporter = true }
-                }
-                if showsSearch {
-                    GlassSearchField(text: $query, prompt: "Search \(category.title.lowercased())", focused: $focused,
-                                     close: { focused = false; showsSearch = false; query = "" },
-                                     historyScope: "browse." + category.title.lowercased())
-                        .padding(.horizontal, Spacing.gutter)
-                    if query.trimmed.isEmpty {
-                        RecentSearchesView(scope: "browse." + category.title.lowercased()) { query = $0; focused = true }
+                    if showsSearch {
+                        GlassSearchField(text: $query, prompt: "Search \(category.title.lowercased())", focused: $focused,
+                                         close: { focused = false; showsSearch = false; query = "" },
+                                         historyScope: "browse." + category.title.lowercased())
                             .padding(.horizontal, Spacing.gutter)
+                        if query.trimmed.isEmpty {
+                            RecentSearchesView(scope: "browse." + category.title.lowercased()) { query = $0; focused = true }
+                                .padding(.horizontal, Spacing.gutter)
+                        }
+                    }
+                    if selecting {
+                        SongSelectionBar(songs: tracks, selected: $selected)
+                        SongList(songs: tracks, emptyMessage: "No songs in this category.", emptyIcon: category.icon,
+                                 selection: $selected, showsFileDetails: true)
+                    } else { entities }
+                }.padding(.vertical, Spacing.sm)
+            }
+            .scrollIndicators(showsAlphabetIndex ? .hidden : .automatic)
+            .padding(.trailing, showsAlphabetIndex ? SongAlphabetMetrics.width : 0)
+            .overlay(alignment: .trailing) {
+                if showsAlphabetIndex {
+                    AlphabetIndexView(anchors: anchors) { id in
+                        alphabetTarget = id
+                        withAnimation(reduceMotion ? nil : .easeOut(duration: SongAlphabetMetrics.scrollDuration)) {
+                            proxy.scrollTo(id, anchor: .top)
+                        }
                     }
                 }
-                if selecting {
-                    SongSelectionBar(songs: tracks, selected: $selected)
-                    SongList(songs: tracks, emptyMessage: "No songs in this category.", emptyIcon: category.icon,
-                             selection: $selected, showsFileDetails: true)
-                } else { entities }
-            }.padding(.vertical, Spacing.sm)
+            }
+            .task(id: alphabetTarget) {
+                guard let id = alphabetTarget else { return }
+                do {
+                    try await Task.sleep(for: .seconds(SongAlphabetMetrics.scrollDuration))
+                    try Task.checkCancellation()
+                    withAnimation(reduceMotion ? nil : .easeOut(duration: SongAlphabetMetrics.scrollDuration)) {
+                        proxy.scrollTo(id, anchor: .top)
+                    }
+                } catch {}
+            }
         }
         .scrollDismissesKeyboard(.interactively)
         .navigationTitle("").navigationBarTitleDisplayMode(.inline)
@@ -101,20 +152,37 @@ struct EntityCategoryView: View {
                 }
             }
             if albums.isEmpty { empty }
-            grid { ForEach(albums) { album in AlbumTile(album: album) { remember(); router.open(.album(album.id)) } } }
+            grid {
+                ForEach(albums) { album in
+                    AlbumTile(album: album) { remember(); router.open(.album(album.id)) }
+                        .id("amp-entity-album-\(album.id)")
+                }
+            }
         case .artists, .albumArtists:
             if artists.isEmpty { empty }
-            grid { ForEach(artists) { artist in ArtistTile(artist: artist) { remember(); router.open(.artist(artist.id)) } } }
+            grid {
+                ForEach(artists) { artist in
+                    ArtistTile(artist: artist) { remember(); router.open(.artist(artist.id)) }
+                        .id("amp-entity-artist-\(artist.id)")
+                }
+            }
         case .playlists:
             if playlists.isEmpty { empty }
-            grid { ForEach(playlists) { playlist in PlaylistTile(playlist: playlist) { remember(); router.open(.playlist(playlist.id)) } } }
+            grid {
+                ForEach(playlists) { playlist in
+                    PlaylistTile(playlist: playlist) { remember(); router.open(.playlist(playlist.id)) }
+                        .id("amp-entity-playlist-\(playlist.id)")
+                }
+            }
         case .folders:
             if folders.isEmpty { empty }
             ForEach(folders, id: \.self) { folder in
                 Button { remember(); router.open(.songFolder(folder)) } label: {
                     Label(folder.isEmpty ? "Music folder" : folder, systemImage: "folder")
                         .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading).padding(.horizontal, Spacing.gutter)
-                }.buttonStyle(.plain)
+                }
+                .buttonStyle(.plain)
+                .id("amp-entity-folder-\(folder)")
             }
         case .radio:
             if library.songs.isEmpty { empty } else { RadioStationShelf() }

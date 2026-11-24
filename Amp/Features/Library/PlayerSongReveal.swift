@@ -17,6 +17,7 @@ struct PlayerSongReveal<Content: View>: View {
     let destination: Route
     let songs: [Song]
     var alphabetEnabled = false
+    var alphabetKey: (Song) -> String = \.title
     @ViewBuilder let content: Content
     @Environment(AppRouter.self) private var router
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -28,7 +29,7 @@ struct PlayerSongReveal<Content: View>: View {
         return request
     }
 
-    private var showsAlphabetIndex: Bool { alphabetEnabled && songs.count >= 15 }
+    private var showsAlphabetIndex: Bool { alphabetEnabled && songs.count >= 8 }
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -36,7 +37,7 @@ struct PlayerSongReveal<Content: View>: View {
                 .padding(.trailing, showsAlphabetIndex ? SongAlphabetMetrics.width : 0)
                 .overlay(alignment: .trailing) {
                     if showsAlphabetIndex {
-                        SongAlphabetIndex(songs: songs) { id in
+                        SongAlphabetIndex(songs: songs, key: alphabetKey) { id in
                             alphabetTarget = id
                             withAnimation(reduceMotion ? nil : .easeOut(duration: SongAlphabetMetrics.scrollDuration)) {
                                 proxy.scrollTo(Self.anchor(id), anchor: .top)

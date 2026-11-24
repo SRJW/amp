@@ -423,7 +423,7 @@ struct PlaylistDetailView: View {
         let songs = entries.map(\.song)
         let slots = entries.map(\.position)
         let songActions = playlistSongActions()
-        PlayerSongReveal(destination: .playlist(playlistId), songs: songs) {
+        PlayerSongReveal(destination: .playlist(playlistId), songs: songs, alphabetEnabled: true) {
             ScrollView {
                 if let playlist = library.playlist(playlistId) {
                     LazyVStack(spacing: 0) {

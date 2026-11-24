@@ -8,14 +8,25 @@ enum SongAlphabet {
               ("A"..."Z").contains(String(first)) else { return "#" }
         return String(first)
     }
-    static func anchors(_ songs: [Song]) -> [String: Int64] {
-        var result: [String: Int64] = [:]
-        for song in songs where result[key(song.title)] == nil { result[key(song.title)] = song.id }
+    static func anchors(_ songs: [Song], key: (Song) -> String = \.title) -> [String: Int64] {
+        anchors(songs, id: \.id, title: key)
+    }
+
+    static func anchors<Item, ID: Hashable>(_ items: [Item], id: (Item) -> ID, title: (Item) -> String) -> [String: ID] {
+        var result: [String: ID] = [:]
+        for item in items {
+            let letter = key(title(item))
+            if result[letter] == nil { result[letter] = id(item) }
+        }
         return result
     }
 
     /// Empty letters still have a position in the index; seek to the next populated group.
     static func target(for letter: String, anchors: [String: Int64]) -> Int64? {
+        targetAnchor(for: letter, anchors: anchors)
+    }
+
+    static func targetAnchor<ID>(for letter: String, anchors: [String: ID]) -> ID? {
         guard let index = letters.firstIndex(of: letter) else { return nil }
         let resolved = letters[index...].first { anchors[$0] != nil }
             ?? letters[...index].last { anchors[$0] != nil }
@@ -45,7 +56,17 @@ enum SongAlphabetPreferences {
 
 struct SongAlphabetIndex: View {
     let songs: [Song]
+    var key: (Song) -> String = \.title
     let scrollTo: (Int64) -> Void
+
+    var body: some View {
+        AlphabetIndexView(anchors: SongAlphabet.anchors(songs, key: key), scrollTo: scrollTo)
+    }
+}
+
+struct AlphabetIndexView<ID: Hashable>: View {
+    let anchors: [String: ID]
+    let scrollTo: (ID) -> Void
     @AppStorage(SongAlphabetPreferences.hapticsKey) private var hapticsEnabled = SongAlphabetPreferences.defaultHaptics
     @State private var active: String?
     @State private var scrubbing = false
@@ -55,7 +76,6 @@ struct SongAlphabetIndex: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        let anchors = SongAlphabet.anchors(songs)
         let available = SongAlphabet.letters.filter { anchors[$0] != nil }
         Group {
             if available.count > 1 {
@@ -79,7 +99,7 @@ struct SongAlphabetIndex: View {
         .sensoryFeedback(.selection, trigger: active, condition: shouldPlaySelection)
     }
 
-    private func index(anchors: [String: Int64]) -> some View {
+    private func index(anchors: [String: ID]) -> some View {
         GeometryReader { geometry in
             let rowHeight = geometry.size.height / CGFloat(SongAlphabet.letters.count)
             VStack(spacing: 0) {
@@ -133,13 +153,13 @@ struct SongAlphabetIndex: View {
             .accessibilityHidden(true)
     }
 
-    private func move(to y: CGFloat, height: CGFloat, anchors: [String: Int64]) {
+    private func move(to y: CGFloat, height: CGFloat, anchors: [String: ID]) {
         let rowHeight = height / CGFloat(SongAlphabet.letters.count)
         let index = min(max(Int(y / max(rowHeight, 1)), 0), SongAlphabet.letters.count - 1)
         touchY = min(max(y, SongAlphabetMetrics.bubbleSize / 2), height - SongAlphabetMetrics.bubbleSize / 2)
         scrubbing = true
         let letter = SongAlphabet.letters[index]
-        if active != letter, let id = SongAlphabet.target(for: letter, anchors: anchors) {
+        if active != letter, let id = SongAlphabet.targetAnchor(for: letter, anchors: anchors) {
             active = letter
             scrollTo(id)
         }

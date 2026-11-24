@@ -62,9 +62,17 @@ struct AllSongsView: View {
                           query: "", sort: LibrarySort(rawValue: sort) ?? .title).results()
     }
 
+    private var alphabetKey: (Song) -> String {
+        switch LibrarySort(rawValue: sort) {
+        case .artist: \.artist
+        case .album: \.album
+        default: \.title
+        }
+    }
+
     var body: some View {
         PlayerSongReveal(destination: folderPath.map(Route.songFolder) ?? (category == .songs ? .allSongs : .category(category)),
-                         songs: results ?? [], alphabetEnabled: sort == LibrarySort.title.rawValue || sort == LibrarySort.titleDescending.rawValue) {
+                         songs: results ?? [], alphabetEnabled: true, alphabetKey: alphabetKey) {
             ScrollView {
                 VStack(alignment: .leading, spacing: Spacing.md) {
                     header
