@@ -7,6 +7,8 @@ struct SongActions {
     var addToQueue: (Song) -> Void
     var startRadio: (Song) -> Void
     var addToPlaylist: (Song) -> Void
+    var goToAlbum: ((Song) -> Void)? = nil
+    var goToArtist: ((Song) -> Void)? = nil
     var viewDetails: ((Song) -> Void)?
     var editTags: ((Song) -> Void)?
     var fixTags: ((Song) -> Void)?
@@ -17,34 +19,55 @@ struct SongActions {
 
 /// The song actions as menu items (a row's "…" button and its long-press menu).
 struct SongActionItems: View {
-    @Environment(\.radioAvailable) private var radioAvailable
     let song: Song
     let actions: SongActions
 
-    var body: some View {
-        Button { actions.playNext(song) } label: { Label(L("Play next"), systemImage: "text.line.first.and.arrowtriangle.forward") }
-        Button { actions.addToQueue(song) } label: { Label(L("Add to queue"), systemImage: "text.badge.plus") }
-        if radioAvailable { Button { actions.startRadio(song) } label: { Label(L("Browse radio"), systemImage: "dot.radiowaves.left.and.right") } }
-        Button { actions.addToPlaylist(song) } label: { Label(L("Add to playlist"), systemImage: "music.note.list") }
-        Button { actions.toggleFavorite(song) } label: {
-            Label(song.isFavorite ? L("Remove from favorites") : L("Add to favorites"), systemImage: song.isFavorite ? "heart.slash" : "heart")
-        }
-        if let view = actions.viewDetails {
-            Button { view(song) } label: { Label(L("View metadata"), systemImage: "info.circle") }
-        }
-        if let edit = actions.editTags {
-            Button { edit(song) } label: { Label(L("Edit tags"), systemImage: "pencil") }
-        }
-        if let fix = actions.fixTags {
-            Button { fix(song) } label: { Label(L("Fix tags online"), systemImage: "wand.and.stars") }
-        }
-        if let remove = actions.removeFromPlaylist {
-            Button(role: .destructive) { remove(song) } label: { Label(L("Remove from playlist"), systemImage: "minus.circle") }
-        }
-        if let delete = actions.deleteFromDevice {
-            Button(role: .destructive) { delete(song) } label: { Label(L("Delete from device"), systemImage: "trash") }
-        }
+    private var hasInfoMenu: Bool {
+        actions.viewDetails != nil || actions.editTags != nil || actions.fixTags != nil
+    }
 
+    var body: some View {
+        Section {
+            Button { actions.playNext(song) } label: { Label(L("Play next"), systemImage: "text.line.first.and.arrowtriangle.forward") }
+            Button { actions.addToQueue(song) } label: { Label(L("Add to queue"), systemImage: "text.badge.plus") }
+        }
+        Section {
+            Button { actions.addToPlaylist(song) } label: { Label(L("Add to playlist"), systemImage: "music.note.list") }
+            Button { actions.toggleFavorite(song) } label: {
+                Label(song.isFavorite ? L("Remove from favorites") : L("Add to favorites"), systemImage: song.isFavorite ? "heart.slash" : "heart")
+            }
+            if let goToAlbum = actions.goToAlbum, song.albumId > 0 {
+                Button { goToAlbum(song) } label: { Label(L("Go to album"), systemImage: "square.stack") }
+            }
+            if let goToArtist = actions.goToArtist, song.artistId > 0 {
+                Button { goToArtist(song) } label: { Label(L("Go to artist"), systemImage: "person") }
+            }
+        }
+        if hasInfoMenu {
+            Menu {
+                if let view = actions.viewDetails {
+                    Button { view(song) } label: { Label(L("View metadata"), systemImage: "info.circle") }
+                }
+                if let edit = actions.editTags {
+                    Button { edit(song) } label: { Label(L("Edit tags"), systemImage: "pencil") }
+                }
+                if let fix = actions.fixTags {
+                    Button { fix(song) } label: { Label(L("Fix tags online"), systemImage: "wand.and.stars") }
+                }
+            } label: {
+                Label(L("Info & tags"), systemImage: "info.circle")
+            }
+        }
+        if actions.removeFromPlaylist != nil || actions.deleteFromDevice != nil {
+            Section {
+                if let remove = actions.removeFromPlaylist {
+                    Button(role: .destructive) { remove(song) } label: { Label(L("Remove from playlist"), systemImage: "minus.circle") }
+                }
+                if let delete = actions.deleteFromDevice {
+                    Button(role: .destructive) { delete(song) } label: { Label(L("Delete from device"), systemImage: "trash") }
+                }
+            }
+        }
     }
 }
 
@@ -184,7 +207,28 @@ struct TrackRow: View {
         .onDisappear { swipe = 0 }
         .accessibilityAction(named: "Add to queue") { actions.addToQueue(song) }
         .accessibilityAction(named: song.isFavorite ? "Remove from favorites" : "Add to favorites") { actions.toggleFavorite(song) }
-        .contextMenu { SongActionItems(song: song, actions: actions) }
+        .contextMenu {
+            SongActionItems(song: song, actions: actions)
+        } preview: {
+            HStack(spacing: Spacing.md) {
+                leading
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(song.title)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(isCurrent ? palette.primary : palette.onSurface)
+                        .lineLimit(1)
+                    Text(subtitle ?? [song.artist, song.album].filter { !$0.isBlank }.joined(separator: " - "))
+                        .font(.system(size: 12.5, weight: .regular))
+                        .foregroundStyle(palette.onSurfaceVariant)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, Spacing.md)
+            .padding(.vertical, 10)
+            .frame(minWidth: 280)
+            .background(palette.surface)
+        }
     }
 
     private func resetSwipe() {

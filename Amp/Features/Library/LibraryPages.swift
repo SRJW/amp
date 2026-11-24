@@ -169,11 +169,14 @@ struct SongList: View {
     var source: PlaybackSource?
     var selection: Binding<Set<Int64>>? = nil
     var showsFileDetails = false
+    var continuousFromSearch = false
     var onPlay: (() -> Void)? = nil
     var onPlaySong: ((Song) -> Void)? = nil
+    @Environment(LibraryStore.self) private var library
     @Environment(LibraryActions.self) private var actions
     @Environment(PlayerController.self) private var player
     @Environment(AppRouter.self) private var router
+    @Environment(AppSettings.self) private var settings
 
     var body: some View {
         let songActions = router.songActions(actions, source: source ?? origin.map { PlaybackSource($0) })
@@ -204,7 +207,12 @@ struct SongList: View {
                             onPlay?()
                             onPlaySong?(song)
                             if player.state.currentSong?.id != song.id {
-                                actions.play(songs, startIndex: index, origin: origin, source: source)
+                                if continuousFromSearch && settings.continuousPlayback {
+                                    let resolved = ContinuousPlayback.queue(startingAt: song, allSongs: library.songs, facts: library.browseFacts)
+                                    actions.play(resolved.songs, startIndex: resolved.startIndex, origin: nil, source: .library)
+                                } else {
+                                    actions.play(songs, startIndex: index, origin: origin, source: source)
+                                }
                             } else if !player.state.isPlaying {
                                 player.play()
                             }

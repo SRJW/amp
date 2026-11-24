@@ -86,6 +86,7 @@ struct SearchView: View {
     @Environment(LibraryActions.self) private var actions
     @Environment(PlayerController.self) private var player
     @Environment(AppRouter.self) private var router
+    @Environment(AppSettings.self) private var settings
     @Environment(\.dismiss) private var dismiss
     @FocusState private var focused: Bool
     @AppStorage("library.search.sort") private var sort = "relevance"
@@ -142,8 +143,8 @@ struct SearchView: View {
                     }.padding(.horizontal, Spacing.gutter)
                 }
                 CategoryHeader(title: "Search", icon: "magnifyingglass", count: tracks.count, selecting: search.selecting,
-                               shuffle: { dismissKeyboard(); rememberQuery(); actions.playShuffled(tracks) },
-                               play: { dismissKeyboard(); rememberQuery(); actions.playInOrder(tracks) },
+                               shuffle: { dismissKeyboard(); rememberQuery(); playSearchResults(tracks, shuffled: true) },
+                               play: { dismissKeyboard(); rememberQuery(); playSearchResults(tracks, shuffled: false) },
                                search: { focused = true },
                                select: { search.selecting.toggle(); if !search.selecting { search.selected.removeAll() } }, options: {
                     Picker(L("Sort by"), selection: $sort) {
@@ -161,6 +162,7 @@ struct SearchView: View {
                     if search.selecting || search.type == .all || search.type == .songs {
                         SongList(songs: tracks, emptyMessage: L("No songs match this search."), emptyIcon: "magnifyingglass",
                                  selection: search.selecting ? $search.selected : nil, showsFileDetails: true,
+                                 continuousFromSearch: true,
                                  onPlay: { dismissKeyboard(); rememberQuery() },
                                  onPlaySong: { dismissKeyboard(); search.remember(.song($0)) })
                     } else if tracks.isEmpty && !hasEntityResults {
@@ -318,12 +320,31 @@ struct SearchView: View {
         }
     }
 
+    private func playSearchResults(_ tracks: [Song], shuffled: Bool) {
+        guard !tracks.isEmpty else { return }
+        if settings.continuousPlayback {
+            let picked = shuffled ? tracks.randomElement()! : tracks[0]
+            player.setShuffleModeEnabled(shuffled)
+            let resolved = ContinuousPlayback.queue(startingAt: picked, allSongs: library.songs, facts: library.browseFacts)
+            actions.play(resolved.songs, startIndex: resolved.startIndex, origin: nil, source: .library)
+        } else if shuffled {
+            actions.playShuffled(tracks)
+        } else {
+            actions.playInOrder(tracks)
+        }
+    }
+
     private func reopen(_ item: RecentSearchItem) {
         switch item {
         case .song(let song):
             dismissKeyboard()
             search.remember(item)
-            actions.play([song], startIndex: 0)
+            if settings.continuousPlayback {
+                let resolved = ContinuousPlayback.queue(startingAt: song, allSongs: library.songs, facts: library.browseFacts)
+                actions.play(resolved.songs, startIndex: resolved.startIndex, origin: nil, source: .library)
+            } else {
+                actions.play([song], startIndex: 0)
+            }
             router.openPlayer()
         default:
             open(item)

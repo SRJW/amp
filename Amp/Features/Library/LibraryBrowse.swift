@@ -222,3 +222,42 @@ private struct BrowseEntry<Value> {
         return result == .orderedSame ? a < b : result == .orderedAscending
     }
 }
+
+/// Resolves Poweramp-style continuous playback from a song picked in Search into All Songs,
+/// respecting the user's All Songs sort order as well as shuffle / repeat modes.
+enum ContinuousPlayback {
+    static let allSongsSortKey = "library.songs.sort"
+
+    static func currentSort(defaults: UserDefaults = .standard) -> LibrarySort {
+        let raw = defaults.string(forKey: allSongsSortKey) ?? LibraryCategory.songs.defaultSort.rawValue
+        return LibrarySort(rawValue: raw) ?? .title
+    }
+
+    static func orderedAllSongs(allSongs: [Song], facts: [Int64: LibraryBrowseFact], sort: LibrarySort) -> [Song] {
+        SongBrowseRequest(songs: allSongs, facts: facts, query: "", sort: sort).results()
+    }
+
+    /// Returns the full sorted All Songs list and the exact index of [selected] within it.
+    static func queue(startingAt selected: Song, allSongs: [Song], facts: [Int64: LibraryBrowseFact],
+                      sort: LibrarySort? = nil) -> (songs: [Song], startIndex: Int) {
+        let ordered = orderedAllSongs(allSongs: allSongs, facts: facts, sort: sort ?? currentSort())
+        if let index = ordered.firstIndex(where: { $0.id == selected.id }) {
+            return (ordered, index)
+        }
+        return ([selected], 0)
+    }
+
+    /// Remaining tracks after [song] in sorted All Songs (used if a short queue reaches its end while
+    /// Continuous Playback is enabled).
+    static func remaining(after song: Song, in allSongs: [Song], facts: [Int64: LibraryBrowseFact],
+                          excluding existingIds: Set<Int64> = [], shuffled: Bool, sort: LibrarySort? = nil) -> [Song] {
+        let ordered = orderedAllSongs(allSongs: allSongs, facts: facts, sort: sort ?? currentSort())
+        if shuffled {
+            return ordered.filter { $0.id != song.id && !existingIds.contains($0.id) }.shuffled()
+        }
+        guard let index = ordered.firstIndex(where: { $0.id == song.id }) else { return [] }
+        let nextIndex = index + 1
+        guard nextIndex < ordered.count else { return [] }
+        return ordered[nextIndex...].filter { !existingIds.contains($0.id) }
+    }
+}

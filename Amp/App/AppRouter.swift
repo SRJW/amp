@@ -221,6 +221,18 @@ final class AppRouter {
                 self.open(.radio(.song(song.id)))
             },
             addToPlaylist: { [weak self] song in self?.songsForPlaylist = [song] },
+            goToAlbum: { [weak self] song in
+                guard let self, song.albumId > 0 else { return }
+                self.presentedTool = nil
+                self.showsNowPlaying = false
+                self.open(.album(song.albumId))
+            },
+            goToArtist: { [weak self] song in
+                guard let self, song.artistId > 0 else { return }
+                self.presentedTool = nil
+                self.showsNowPlaying = false
+                self.open(.artist(song.artistId))
+            },
             viewDetails: { [weak self] song in self?.songForDetails = song },
             editTags: { [weak self] song in self?.songForTagEdit = song },
             fixTags: { song in actions.fixTags([song]) },

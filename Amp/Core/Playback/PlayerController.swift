@@ -51,13 +51,49 @@ final class PlayerController {
     @ObservationIgnored private var preparingPlayIntent = false
     private(set) var playbackError: String?
     private(set) var restoreFinished = false
+    private(set) var sleepTimerDeadline: Date?
+    private(set) var sleepTimerEndOfTrack = false
+    @ObservationIgnored private var sleepTimerTask: Task<Void, Never>?
+    var sleepTimerActive: Bool { sleepTimerEndOfTrack || sleepTimerDeadline != nil }
     @ObservationIgnored private var consecutiveErrors = 0
     @ObservationIgnored private var plannedTransition: (entryId: UUID, nextEntryId: UUID, plan: Planned)?
     @ObservationIgnored private var pendingTransitionCommit: Task<Void, Never>?
     @ObservationIgnored private var wasPlayingBeforeInterruption = false
+    @ObservationIgnored private var headphonePolicy = HeadphoneRoutePolicy()
+    @ObservationIgnored private let settings: AppSettings?
+    @ObservationIgnored var continuousContinuation: ((_ current: Song, _ existingIds: Set<Int64>, _ shuffled: Bool) -> [Song])?
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
     @ObservationIgnored private var artwork: MPMediaItemArtwork?
     @ObservationIgnored private var artworkSongId: Int64?
+
+    func setSleepTimer(minutes: Int) {
+        cancelSleepTimer()
+        guard minutes > 0 else { return }
+        let deadline = Date().addingTimeInterval(TimeInterval(minutes * 60))
+        sleepTimerDeadline = deadline
+        sleepTimerTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(minutes * 60))
+            guard !Task.isCancelled else { return }
+            self?.triggerSleepTimer()
+        }
+    }
+
+    func setSleepTimerEndOfTrack() {
+        cancelSleepTimer()
+        sleepTimerEndOfTrack = true
+    }
+
+    func cancelSleepTimer() {
+        sleepTimerTask?.cancel()
+        sleepTimerTask = nil
+        sleepTimerDeadline = nil
+        sleepTimerEndOfTrack = false
+    }
+
+    private func triggerSleepTimer() {
+        cancelSleepTimer()
+        if intendsToPlay { pause() }
+    }
 
     /// Media3's "previous restarts the song after 3 s".
     private static let restartThreshold: Int64 = 3_000
@@ -71,9 +107,10 @@ final class PlayerController {
     /// The next track is queued gaplessly once this little of the current one remains.
     private static let gaplessLeadMs: Int64 = 8_000
 
-    init(database: LibraryDatabase, transitions: TransitionSettingsStore) {
+    init(database: LibraryDatabase, transitions: TransitionSettingsStore, settings: AppSettings? = nil) {
         self.database = database
         self.transitions = transitions
+        self.settings = settings
         transitions.onChange = { [weak self] in self?.reevaluateTransition() }
         engine.onEntryFinished = { [weak self] id in self?.entryFinished(id) }
         engine.onConfigurationChange = { [weak self] in self?.restartAfterConfigurationChange() }
@@ -99,6 +136,7 @@ final class PlayerController {
 
     func play() {
         guard !state.queue.isEmpty else { return }
+        headphonePolicy.userDidPlay()
         if state.status == .idle || engine.currentPosition()?.entryId != state.currentEntry?.id {
             startCurrent(at: state.positionMs, playing: true)
             return
@@ -113,6 +151,11 @@ final class PlayerController {
     }
 
     func pause() {
+        headphonePolicy.userDidPause()
+        pauseInternal()
+    }
+
+    private func pauseInternal() {
         cancelPendingTransitionCommit()
         audioPreparation?.cancel(); audioPreparation = nil; preparingPlayIntent = false
         refreshPosition()
@@ -134,6 +177,7 @@ final class PlayerController {
     /// playlist positions (parallel), so duplicates stay distinct.
     func playCollection(_ songs: [Song], startIndex: Int, origin: CollectionRef?, slots: [Int]? = nil, source: PlaybackSource? = nil) {
         guard !songs.isEmpty else { return }
+        headphonePolicy.userDidPlay()
         let index = songs.indices.contains(startIndex) ? startIndex : 0
         consecutiveErrors = 0
         var order = Array(songs.indices)
@@ -491,6 +535,22 @@ final class PlayerController {
     /// An entry played to its end on the engine.
     private func entryFinished(_ entryId: UUID) {
         guard entryId == state.currentEntry?.id else { return }
+        if sleepTimerEndOfTrack {
+            cancelSleepTimer()
+            pause()
+            return
+        }
+        if PlayOrder.next(after: state.currentIndex, count: state.queue.count, repeatMode: state.repeatMode, userSkip: false) == nil,
+           settings?.continuousPlayback == true,
+           let currentSong = state.currentSong,
+           let continuation = continuousContinuation {
+            let existing = Set(state.queue.map(\.song.id))
+            let upcoming = continuation(currentSong, existing, state.shuffleModeEnabled)
+            if !upcoming.isEmpty {
+                state.queue.append(contentsOf: upcoming.map { QueueEntry(song: $0, source: .library) })
+                queueChanged()
+            }
+        }
         guard let next = PlayOrder.next(after: state.currentIndex, count: state.queue.count, repeatMode: state.repeatMode, userSkip: false)
         else {
             // End of the queue: back to the start of the last track, paused (Media3's ENDED).
@@ -816,11 +876,13 @@ final class PlayerController {
             let options = note.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt
             MainActor.assumeIsolated { self?.handleInterruption(type: type, options: options) }
         })
-        // Unplugging headphones pauses playback ("becoming noisy").
+        // Headphone / Bluetooth disconnect & reconnect handling ("Pause on Disconnect" / "Resume on Connect").
         observers.append(center.addObserver(forName: AVAudioSession.routeChangeNotification, object: session, queue: .main) { [weak self] note in
-            let reason = note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt
+            let reasonRaw = note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt
+            let previousRoute = note.userInfo?[AVAudioSessionRouteChangePreviousRouteKey] as? AVAudioSessionRouteDescription
+            let previousHadHeadphones = previousRoute.map { HeadphoneRoutePolicy.containsHeadphones($0.outputs) } ?? false
             MainActor.assumeIsolated {
-                if reason == AVAudioSession.RouteChangeReason.oldDeviceUnavailable.rawValue, self?.intendsToPlay == true { self?.pause() }
+                self?.handleRouteChange(reasonRaw: reasonRaw, previousHadHeadphones: previousHadHeadphones)
             }
         })
         observers.append(center.addObserver(forName: AVAudioSession.mediaServicesWereResetNotification, object: session, queue: .main) { [weak self] _ in
@@ -857,13 +919,35 @@ final class PlayerController {
         })
     }
 
+    private func handleRouteChange(reasonRaw: UInt?, previousHadHeadphones: Bool) {
+        guard let reasonRaw, let reason = AVAudioSession.RouteChangeReason(rawValue: reasonRaw) else { return }
+        let currentHasHeadphones = HeadphoneRoutePolicy.containsHeadphones(AVAudioSession.sharedInstance().currentRoute.outputs)
+        let action = headphonePolicy.handleRouteChange(
+            reason: reason,
+            previousHadHeadphones: previousHadHeadphones,
+            currentHasHeadphones: currentHasHeadphones,
+            intendsToPlay: intendsToPlay,
+            hasCurrentSong: state.currentSong != nil,
+            pauseOnDisconnect: settings?.pauseOnDisconnect ?? true,
+            resumeOnConnect: settings?.resumeOnConnect ?? false
+        )
+        switch action {
+        case .none:
+            break
+        case .pause:
+            pauseInternal()
+        case .resume:
+            play()
+        }
+    }
+
     private func handleInterruption(type: UInt?, options: UInt?) {
         guard let type, let interruption = AVAudioSession.InterruptionType(rawValue: type) else { return }
         switch interruption {
         case .began:
             wasPlayingBeforeInterruption = intendsToPlay
             if wasPlayingBeforeInterruption {
-                pause()
+                pauseInternal()
             }
         case .ended:
             let shouldResume = wasPlayingBeforeInterruption
@@ -1019,4 +1103,78 @@ private enum CollectionKindRef {
 @Observable
 final class PlaybackClock {
     var positionMs: Int64 = 0
+}
+
+enum HeadphoneRouteAction: Equatable, Sendable {
+    case none
+    case pause
+    case resume
+}
+
+/// Decides whether wired or Bluetooth headphone route changes should auto-pause or auto-resume
+/// playback without overriding a manual user pause.
+struct HeadphoneRoutePolicy: Equatable, Sendable {
+    private(set) var pausedByDisconnect = false
+    private(set) var manuallyPaused = false
+
+    static func containsHeadphones(_ outputs: [AVAudioSessionPortDescription]) -> Bool {
+        outputs.contains { isHeadphonePort($0.portType) }
+    }
+
+    static func isHeadphonePort(_ port: AVAudioSession.Port) -> Bool {
+        switch port {
+        case .headphones, .bluetoothA2DP, .bluetoothHFP, .bluetoothLE, .usbAudio, .carAudio, .lineOut:
+            return true
+        default:
+            return false
+        }
+    }
+
+    mutating func userDidPlay() {
+        pausedByDisconnect = false
+        manuallyPaused = false
+    }
+
+    mutating func userDidPause() {
+        pausedByDisconnect = false
+        manuallyPaused = true
+    }
+
+    mutating func handleRouteChange(
+        reason: AVAudioSession.RouteChangeReason,
+        previousHadHeadphones: Bool,
+        currentHasHeadphones: Bool,
+        intendsToPlay: Bool,
+        hasCurrentSong: Bool,
+        pauseOnDisconnect: Bool,
+        resumeOnConnect: Bool
+    ) -> HeadphoneRouteAction {
+        switch reason {
+        case .oldDeviceUnavailable:
+            guard previousHadHeadphones && !currentHasHeadphones else { return .none }
+            if intendsToPlay {
+                if pauseOnDisconnect {
+                    pausedByDisconnect = true
+                    manuallyPaused = false
+                    return .pause
+                } else {
+                    pausedByDisconnect = false
+                    return .none
+                }
+            } else {
+                // Playback was already paused before disconnecting (e.g. manually): never arm auto-resume.
+                pausedByDisconnect = false
+                return .none
+            }
+        case .newDeviceAvailable:
+            guard currentHasHeadphones else { return .none }
+            if resumeOnConnect && pausedByDisconnect && !manuallyPaused && !intendsToPlay && hasCurrentSong {
+                pausedByDisconnect = false
+                return .resume
+            }
+            return .none
+        default:
+            return .none
+        }
+    }
 }

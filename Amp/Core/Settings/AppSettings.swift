@@ -20,6 +20,14 @@ final class AppSettings {
         /// An imported theme in use instead of [theme], by id.
         var customThemeId: String?
         var importedThemes: [ImportedTheme] = []
+        /// Continue playing through All Songs after a song chosen from search finishes.
+        var continuousPlayback = false
+        /// Pause automatically when wired or Bluetooth headphones disconnect.
+        var pauseOnDisconnect = true
+        /// Resume automatically from the same position when headphones reconnect after an automatic disconnect pause.
+        var resumeOnConnect = false
+        /// The 5 configurable secondary action buttons on Now Playing.
+        var nowPlayingButtons: [NowPlayingActionButton] = NowPlayingActionButton.defaults
 
         init() {}
 
@@ -37,6 +45,11 @@ final class AppSettings {
             playerBackground = (try? c.decodeIfPresent(PlayerBackgroundSettings.self, forKey: .playerBackground)) ?? PlayerBackgroundSettings()
             customThemeId = try? c.decodeIfPresent(String.self, forKey: .customThemeId)
             importedThemes = (try? c.decodeIfPresent([ImportedTheme].self, forKey: .importedThemes)) ?? []
+            continuousPlayback = try c.decodeIfPresent(Bool.self, forKey: .continuousPlayback) ?? false
+            pauseOnDisconnect = try c.decodeIfPresent(Bool.self, forKey: .pauseOnDisconnect) ?? true
+            resumeOnConnect = try c.decodeIfPresent(Bool.self, forKey: .resumeOnConnect) ?? false
+            let decodedButtons = (try? c.decodeIfPresent([NowPlayingActionButton].self, forKey: .nowPlayingButtons)) ?? NowPlayingActionButton.defaults
+            nowPlayingButtons = NowPlayingActionButton.normalized(decodedButtons)
         }
     }
 
@@ -99,6 +112,33 @@ final class AppSettings {
         set { update { $0.playerBackground = newValue } }
     }
 
+    var continuousPlayback: Bool {
+        get { stored.continuousPlayback }
+        set { update { $0.continuousPlayback = newValue } }
+    }
+
+    var pauseOnDisconnect: Bool {
+        get { stored.pauseOnDisconnect }
+        set { update { $0.pauseOnDisconnect = newValue } }
+    }
+
+    var resumeOnConnect: Bool {
+        get { stored.resumeOnConnect }
+        set { update { $0.resumeOnConnect = newValue } }
+    }
+
+    var nowPlayingButtons: [NowPlayingActionButton] {
+        get { NowPlayingActionButton.normalized(stored.nowPlayingButtons) }
+        set { update { $0.nowPlayingButtons = NowPlayingActionButton.normalized(newValue) } }
+    }
+
+    func setNowPlayingButton(_ button: NowPlayingActionButton, at slot: Int) {
+        guard (0..<NowPlayingActionButton.slotCount).contains(slot) else { return }
+        var updated = nowPlayingButtons
+        updated[slot] = button
+        nowPlayingButtons = updated
+    }
+
     /// The imported theme in use, if any.
     var customTheme: ImportedTheme? {
         stored.customThemeId.flatMap { id in stored.importedThemes.first { $0.id == id } }
@@ -139,5 +179,79 @@ final class AppSettings {
     private func update(_ change: (inout Stored) -> Void) {
         change(&stored)
         store.save(stored)
+    }
+}
+
+/// Configurable buttons for the 5-slot secondary action row in Now Playing.
+enum NowPlayingActionButton: String, CaseIterable, Codable, Identifiable, Hashable, Sendable {
+    case favorite
+    case share
+    case more
+    case shuffle
+    case repeatMode
+    case lyrics
+    case queue
+    case addToPlaylist
+    case visualizer
+    case bookmarks
+    case musicInfo
+    case goToAlbum
+    case goToArtist
+    case audioOutput
+    case eqToggle
+    case sleepTimer
+
+    var id: String { rawValue }
+    static let slotCount = 5
+    static let defaults: [Self] = [.favorite, .share, .more, .shuffle, .repeatMode]
+
+    static func normalized(_ list: [Self]) -> [Self] {
+        var result = Array(list.prefix(slotCount))
+        while result.count < slotCount {
+            result.append(defaults[result.count])
+        }
+        return result
+    }
+
+    var label: String {
+        switch self {
+        case .favorite: "Favorite"
+        case .share: "Share"
+        case .more: "More options"
+        case .shuffle: "Shuffle"
+        case .repeatMode: "Repeat"
+        case .lyrics: "Lyrics"
+        case .queue: "Queue"
+        case .addToPlaylist: "Add to playlist"
+        case .visualizer: "Visualizer"
+        case .bookmarks: "Bookmarks & A–B loop"
+        case .musicInfo: "Music information"
+        case .goToAlbum: "Go to album"
+        case .goToArtist: "Go to artist"
+        case .audioOutput: "Audio output"
+        case .eqToggle: "Equalizer"
+        case .sleepTimer: "Sleep timer"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .favorite: "heart"
+        case .share: "square.and.arrow.up"
+        case .more: "ellipsis"
+        case .shuffle: "shuffle"
+        case .repeatMode: "repeat"
+        case .lyrics: "quote.bubble"
+        case .queue: "list.bullet"
+        case .addToPlaylist: "music.note.list"
+        case .visualizer: "waveform"
+        case .bookmarks: "bookmark.square"
+        case .musicInfo: "info.circle"
+        case .goToAlbum: "square.stack"
+        case .goToArtist: "person"
+        case .audioOutput: "airplayaudio"
+        case .eqToggle: "slider.vertical.3"
+        case .sleepTimer: "moon.zzz"
+        }
     }
 }

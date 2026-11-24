@@ -36,9 +36,10 @@ enum SongAlphabet {
 
 enum SongAlphabetMetrics {
     static let width: CGFloat = 24
-    static let rowHeight: CGFloat = 20
-    static let maximumHeight: CGFloat = 620
-    static let letterSize: CGFloat = 10.5
+    static let rowHeight: CGFloat = 14
+    static let maximumHeight: CGFloat = 385
+    static let bottomPadding: CGFloat = 8
+    static let letterSize: CGFloat = 10
     static let bubbleSize: CGFloat = 68
     static let bubbleTextSize: CGFloat = 42
     static let bubbleGap: CGFloat = 18

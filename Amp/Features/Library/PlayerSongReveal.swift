@@ -35,7 +35,7 @@ struct PlayerSongReveal<Content: View>: View {
         ScrollViewReader { proxy in
             content
                 .padding(.trailing, showsAlphabetIndex ? SongAlphabetMetrics.width : 0)
-                .overlay(alignment: .trailing) {
+                .overlay(alignment: .bottomTrailing) {
                     if showsAlphabetIndex {
                         SongAlphabetIndex(songs: songs, key: alphabetKey) { id in
                             alphabetTarget = id
@@ -43,6 +43,7 @@ struct PlayerSongReveal<Content: View>: View {
                                 proxy.scrollTo(Self.anchor(id), anchor: .top)
                             }
                         }
+                        .padding(.bottom, SongAlphabetMetrics.bottomPadding)
                     }
                 }
                 .task(id: alphabetTarget) {

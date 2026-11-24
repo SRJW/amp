@@ -97,6 +97,7 @@ struct AllSongsView: View {
                         }
                         SongList(songs: results, emptyMessage: scopedSongs.isEmpty ? L("No songs found.") : L("No songs match these filters."),
                                  emptyIcon: "music.note", source: playbackSource, selection: selecting ? $selected : nil, showsFileDetails: true,
+                                 continuousFromSearch: !query.trimmed.isEmpty,
                                  onPlay: { dismissSearchKeyboard(); SearchHistoryStore.shared.remember(query, in: "songs") })
                     } else { ProgressView().frame(maxWidth: .infinity).padding() }
                 }.padding(.top, Spacing.sm)

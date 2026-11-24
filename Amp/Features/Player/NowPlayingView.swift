@@ -1,5 +1,6 @@
 import SwiftUI
 import AVFoundation
+import AVKit
 
 /// Full-bleed artwork player with waveform transport and compact library navigation.
 struct NowPlayingView: View {
@@ -8,6 +9,7 @@ struct NowPlayingView: View {
     @Environment(AppRouter.self) private var router
     @Environment(LibraryStore.self) private var library
     @Environment(AppSettings.self) private var settings
+    @Environment(SoundStore.self) private var sound
     @Environment(\.playerForegroundInk) private var playerInk
     @Environment(\.playerArtworkPresent) private var playerArtworkPresent
     @Environment(\.colorScheme) private var themeScheme
@@ -235,17 +237,37 @@ struct NowPlayingView: View {
     }
 
     private func menu(width: CGFloat) -> some View {
-        let song = player.state.currentSong
+        let current = player.state.currentSong
+        let song = current.flatMap { c in library.songs.first(where: { $0.id == c.id }) ?? c }
         return Menu {
             Button { showsQueue = true } label: { Label(L("Queue"), systemImage: "list.bullet") }
             Button { showsLyrics = true } label: { Label(L("Lyrics"), systemImage: "quote.bubble") }
             Button { if let song { router.songsForPlaylist = [song] } } label: { Label(L("Add to playlist"), systemImage: "music.note.list") }
+            if let song, song.albumId > 0, library.album(song.albumId) != nil {
+                Button {
+                    close()
+                    router.select(.library)
+                    router.open(.album(song.albumId))
+                } label: { Label(L("Go to album"), systemImage: "square.stack") }
+            }
+            if let song, song.artistId > 0, library.artist(song.artistId) != nil {
+                Button {
+                    close()
+                    router.select(.library)
+                    router.open(.artist(song.artistId))
+                } label: { Label(L("Go to artist"), systemImage: "person") }
+            }
             Button { showsVisualizer = true } label: { Label(L("Visualizer"), systemImage: "waveform") }
             Button { showsMarks = true } label: {
                 Label(player.state.abLoop?.enabled == true ? L("Bookmarks & A–B loop (on)") : L("Bookmarks & A–B loop"), systemImage: "bookmark.square")
             }
             Button { router.songForDetails = song } label: { Label(L("Music information"), systemImage: "info.circle") }
             Divider()
+            if let song {
+                Button(role: .destructive) { actions.songPendingDeletion = song } label: {
+                    Label(L("Delete from device"), systemImage: "trash")
+                }
+            }
             Button { close() } label: { Label(L("Close player"), systemImage: "chevron.down") }
                 .accessibilityIdentifier("closeNowPlaying")
         } label: {
@@ -265,21 +287,129 @@ struct NowPlayingView: View {
     }
 
     private func referenceOptions(_ song: Song, state: PlaybackState, width: CGFloat) -> some View {
-        ZStack {
+        let buttons = settings.nowPlayingButtons
+        return ZStack {
+            ForEach(0..<NowPlayingActionButton.slotCount, id: \.self) { index in
+                secondaryActionButton(buttons[index], song: song, state: state, width: width)
+                    .position(x: width * PlayerLayoutMetrics.secondaryCentresW[index], y: 24)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func secondaryActionButton(_ kind: NowPlayingActionButton, song: Song, state: PlaybackState, width: CGFloat) -> some View {
+        let iconWidth = width * PlayerLayoutMetrics.secondaryIconW
+        switch kind {
+        case .favorite:
             PlayerFavoriteButton(isFavorite: song.isFavorite, iconWidth: width * PlayerLayoutMetrics.heartIconW, ink: playerInk, reduceMotion: reduceMotion) {
                 actions.toggleFavorite(song)
             }
-            .position(x: width * PlayerLayoutMetrics.secondaryCentresW[0], y: 24)
-            PlayerShareButton(song: song, iconWidth: width * PlayerLayoutMetrics.secondaryIconW)
-                .position(x: width * PlayerLayoutMetrics.secondaryCentresW[1], y: 24)
-            menu(width: width).position(x: width * PlayerLayoutMetrics.secondaryCentresW[2], y: 24)
-            ToggleIcon(systemImage: "shuffle", active: state.shuffleModeEnabled, iconWidth: width * PlayerLayoutMetrics.secondaryIconW) {
+        case .share:
+            PlayerShareButton(song: song, iconWidth: iconWidth)
+        case .more:
+            menu(width: width)
+        case .shuffle:
+            ToggleIcon(systemImage: "shuffle", active: state.shuffleModeEnabled, iconWidth: iconWidth) {
                 player.setShuffleModeEnabled(!state.shuffleModeEnabled)
-            }.accessibilityLabel("Shuffle").position(x: width * PlayerLayoutMetrics.secondaryCentresW[3], y: 24)
-            ToggleIcon(systemImage: state.repeatMode == .one ? "repeat.1" : "repeat", active: state.repeatMode != .off, iconWidth: width * PlayerLayoutMetrics.secondaryIconW) {
+            }
+            .accessibilityLabel("Shuffle")
+        case .repeatMode:
+            ToggleIcon(systemImage: state.repeatMode == .one ? "repeat.1" : "repeat", active: state.repeatMode != .off, iconWidth: iconWidth) {
                 player.cycleRepeatMode()
-            }.accessibilityLabel("Repeat").position(x: width * PlayerLayoutMetrics.secondaryCentresW[4], y: 24)
+            }
+            .accessibilityLabel("Repeat")
+        case .lyrics:
+            ToggleIcon(systemImage: "quote.bubble", active: showsLyrics, iconWidth: iconWidth) {
+                showsLyrics = true
+            }
+            .accessibilityLabel(L("Lyrics"))
+        case .queue:
+            ToggleIcon(systemImage: "list.bullet", active: showsQueue, iconWidth: iconWidth) {
+                showsQueue = true
+            }
+            .accessibilityLabel(L("Queue"))
+        case .addToPlaylist:
+            ToggleIcon(systemImage: "music.note.list", active: false, iconWidth: iconWidth) {
+                router.songsForPlaylist = [song]
+            }
+            .accessibilityLabel(L("Add to playlist"))
+        case .visualizer:
+            ToggleIcon(systemImage: "waveform", active: showsVisualizer, iconWidth: iconWidth) {
+                showsVisualizer = true
+            }
+            .accessibilityLabel(L("Visualizer"))
+        case .bookmarks:
+            ToggleIcon(systemImage: "bookmark.square", active: state.abLoop?.enabled == true, iconWidth: iconWidth) {
+                showsMarks = true
+            }
+            .accessibilityLabel(L("Bookmarks & A–B loop"))
+        case .musicInfo:
+            ToggleIcon(systemImage: "info.circle", active: false, iconWidth: iconWidth) {
+                router.songForDetails = song
+            }
+            .accessibilityLabel(L("Music information"))
+        case .goToAlbum:
+            ToggleIcon(systemImage: "square.stack", active: false, iconWidth: iconWidth) {
+                guard song.albumId > 0, library.album(song.albumId) != nil else { return }
+                close()
+                router.select(.library)
+                router.open(.album(song.albumId))
+            }
+            .disabled(song.albumId <= 0 || library.album(song.albumId) == nil)
+            .opacity(song.albumId > 0 && library.album(song.albumId) != nil ? 1 : 0.4)
+            .accessibilityLabel(L("Go to album"))
+        case .goToArtist:
+            ToggleIcon(systemImage: "person", active: false, iconWidth: iconWidth) {
+                guard song.artistId > 0, library.artist(song.artistId) != nil else { return }
+                close()
+                router.select(.library)
+                router.open(.artist(song.artistId))
+            }
+            .disabled(song.artistId <= 0 || library.artist(song.artistId) == nil)
+            .opacity(song.artistId > 0 && library.artist(song.artistId) != nil ? 1 : 0.4)
+            .accessibilityLabel(L("Go to artist"))
+        case .audioOutput:
+            AirPlayRouteButton(tint: playerInk.opacity(PlayerLayoutMetrics.idleOpacity), activeTint: playerInk, iconWidth: iconWidth)
+                .frame(width: 48, height: 48)
+                .accessibilityLabel(L("Audio output"))
+        case .eqToggle:
+            ToggleIcon(systemImage: "slider.vertical.3", active: sound.settings.isEqEnabled, iconWidth: iconWidth) {
+                sound.setEqEnabled(!sound.settings.isEqEnabled)
+            }
+            .accessibilityLabel(L("Equalizer"))
+        case .sleepTimer:
+            sleepTimerMenu(iconWidth: iconWidth)
         }
+    }
+
+    private func sleepTimerMenu(iconWidth: CGFloat) -> some View {
+        let active = player.sleepTimerActive
+        return Menu {
+            if player.sleepTimerEndOfTrack {
+                Text(L("Active: End of track"))
+            } else if let deadline = player.sleepTimerDeadline {
+                let remaining = max(1, Int(ceil(deadline.timeIntervalSinceNow / 60)))
+                Text(L("Active: %d min left", remaining))
+            }
+            Button(L("15 minutes")) { player.setSleepTimer(minutes: 15) }
+            Button(L("30 minutes")) { player.setSleepTimer(minutes: 30) }
+            Button(L("45 minutes")) { player.setSleepTimer(minutes: 45) }
+            Button(L("60 minutes")) { player.setSleepTimer(minutes: 60) }
+            Button(L("End of track")) { player.setSleepTimerEndOfTrack() }
+            if active {
+                Divider()
+                Button(L("Turn off timer"), role: .destructive) { player.cancelSleepTimer() }
+            }
+        } label: {
+            Image(systemName: active ? "moon.zzz.fill" : "moon.zzz")
+                .resizable().scaledToFit()
+                .frame(width: iconWidth, height: iconWidth)
+                .foregroundStyle(playerInk.opacity(active ? 1 : PlayerLayoutMetrics.idleOpacity))
+                .frame(width: 48, height: 48)
+                .contentShape(Rectangle())
+        }
+        .menuStyle(.button)
+        .accessibilityLabel(L("Sleep timer"))
     }
 
     private func controls(_ state: PlaybackState, width: CGFloat) -> some View {
@@ -836,5 +966,26 @@ struct QueueSheet: View {
             Spacer(minLength: 0)
         }
         .contentShape(Rectangle())
+    }
+}
+
+/// Native iOS audio output / AirPlay route picker styled to match Now Playing's secondary icons.
+private struct AirPlayRouteButton: UIViewRepresentable {
+    let tint: Color
+    let activeTint: Color
+    let iconWidth: CGFloat
+
+    func makeUIView(context: Context) -> AVRoutePickerView {
+        let picker = AVRoutePickerView()
+        picker.backgroundColor = .clear
+        picker.prioritizesVideoDevices = false
+        picker.tintColor = UIColor(tint)
+        picker.activeTintColor = UIColor(activeTint)
+        return picker
+    }
+
+    func updateUIView(_ view: AVRoutePickerView, context: Context) {
+        view.tintColor = UIColor(tint)
+        view.activeTintColor = UIColor(activeTint)
     }
 }

@@ -161,7 +161,33 @@ private struct AlbumTrackRow: View {
         .onDisappear { swipe = 0 }
         .accessibilityAction(named: "Add to queue") { actions.addToQueue(song) }
         .accessibilityAction(named: song.isFavorite ? "Remove from favorites" : "Add to favorites") { actions.toggleFavorite(song) }
-        .contextMenu { SongActionItems(song: song, actions: actions) }
+        .contextMenu {
+            SongActionItems(song: song, actions: actions)
+        } preview: {
+            HStack(spacing: 10) {
+                Text("\(trackNumber)")
+                    .font(.system(size: 15, weight: .regular).monospacedDigit())
+                    .foregroundStyle(isCurrent ? palette.primary : palette.onSurfaceVariant)
+                    .frame(width: 24, alignment: .leading)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(song.title)
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(isCurrent ? palette.primary : palette.onSurface)
+                        .lineLimit(1)
+                    if !song.artist.isBlank {
+                        Text(song.artist)
+                            .font(.system(size: 13.5, weight: .regular))
+                            .foregroundStyle(palette.onSurfaceVariant)
+                            .lineLimit(1)
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, Spacing.lg)
+            .padding(.vertical, 12)
+            .frame(minWidth: 280)
+            .background(palette.surface)
+        }
     }
 
     private func resetSwipe() {

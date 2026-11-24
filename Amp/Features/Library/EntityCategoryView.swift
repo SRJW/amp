@@ -117,7 +117,7 @@ struct EntityCategoryView: View {
             }
             .scrollIndicators(showsAlphabetIndex ? .hidden : .automatic)
             .padding(.trailing, showsAlphabetIndex ? SongAlphabetMetrics.width : 0)
-            .overlay(alignment: .trailing) {
+            .overlay(alignment: .bottomTrailing) {
                 if showsAlphabetIndex {
                     AlphabetIndexView(anchors: anchors) { id in
                         alphabetTarget = id
@@ -125,6 +125,7 @@ struct EntityCategoryView: View {
                             proxy.scrollTo(id, anchor: .top)
                         }
                     }
+                    .padding(.bottom, SongAlphabetMetrics.bottomPadding)
                 }
             }
             .task(id: alphabetTarget) {

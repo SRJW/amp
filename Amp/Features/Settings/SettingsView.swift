@@ -2,7 +2,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 import UIKit
 
-enum SettingsPageRoute: String, Hashable { case appearance, language, visualizer, playback, library, metadata, about, playerBackground, imageCredits }
+enum SettingsPageRoute: String, Hashable { case appearance, language, visualizer, playback, audio, library, metadata, about, playerBackground, imageCredits }
 
 struct SettingsDestinationView: View {
     let page: SettingsPageRoute
@@ -13,6 +13,7 @@ struct SettingsDestinationView: View {
             case .language: LanguageSettingsView()
             case .visualizer: VisualizerSettingsView()
             case .playback: PlaybackSettingsView()
+            case .audio: AudioSettingsView()
             case .library: LibrarySettingsView()
             case .metadata: MetadataSettingsView()
             case .about: AboutSettingsView()
@@ -36,7 +37,10 @@ struct SettingsView: View {
                     .accessibilityIdentifier("settingsLanguage")
             }
             SettingsGroup(L("Sound")) {
-                SettingsLink(L("Playback"), subtitle: L("Song transitions and waveform mode"), icon: "play.circle", page: .playback)
+                SettingsLink(L("Playback"), subtitle: L("Continuous playback, song transitions and waveform"), icon: "play.circle", page: .playback)
+                Divider().padding(.leading, 72)
+                SettingsLink(L("Audio"), subtitle: L("Pause on disconnect and resume on connect"), icon: "headphones", page: .audio)
+                    .accessibilityIdentifier("settingsAudio")
                 Divider().padding(.leading, 72)
                 SettingsLink(L("Audio & Equalizer"), subtitle: L("8-band equalizer, presets and audio effects"), icon: "slider.vertical.3", tool: .equalizer)
                 Divider().padding(.leading, 72)
@@ -605,9 +609,36 @@ private struct PlayerBackgroundSettingsView: View {
                         .padding(Spacing.lg)
                     }
 
+                    SettingsGroup(L("Action buttons")) {
+                        VStack(spacing: 0) {
+                            ForEach(0..<NowPlayingActionButton.slotCount, id: \.self) { slot in
+                                if slot > 0 { Divider().padding(.leading, Spacing.lg) }
+                                HStack(spacing: Spacing.md) {
+                                    Text(L("Button %d", slot + 1))
+                                        .font(.body.weight(.medium))
+                                        .foregroundStyle(palette.onSurface)
+                                    Spacer()
+                                    Picker(L("Button %d", slot + 1), selection: Binding(
+                                        get: { settings.nowPlayingButtons[slot] },
+                                        set: { settings.setNowPlayingButton($0, at: slot) }
+                                    )) {
+                                        ForEach(NowPlayingActionButton.allCases) { option in
+                                            Label(L(option.label), systemImage: option.systemImage).tag(option)
+                                        }
+                                    }
+                                    .labelsHidden()
+                                    .pickerStyle(.menu)
+                                }
+                                .padding(.horizontal, Spacing.lg)
+                                .padding(.vertical, 10)
+                            }
+                        }
+                    }
+
                     SettingsGroup("") {
                         Button {
                             settings.playerBackground = PlayerBackgroundSettings()
+                            settings.nowPlayingButtons = NowPlayingActionButton.defaults
                         } label: {
                             HStack {
                                 Image(systemName: "arrow.counterclockwise")
@@ -1220,7 +1251,39 @@ private enum TransitionStyleOption: String, CaseIterable, Identifiable {
     }
 }
 
+private struct AudioSettingsView: View {
+    @Environment(AppSettings.self) private var settings
+    @Environment(\.palette) private var palette
+
+    var body: some View {
+        @Bindable var settings = settings
+        SettingsPage {
+            VStack(alignment: .leading, spacing: Spacing.sm) {
+                SettingsGroup(L("Headphones & Bluetooth")) {
+                    Toggle(L("Pause on Disconnect"), isOn: $settings.pauseOnDisconnect)
+                        .font(.body.weight(.medium))
+                        .padding(.horizontal, Spacing.lg)
+                        .padding(.vertical, 14)
+                        .accessibilityIdentifier("pauseOnDisconnectToggle")
+                    Divider().padding(.leading, Spacing.lg)
+                    Toggle(L("Resume on Connect"), isOn: $settings.resumeOnConnect)
+                        .font(.body.weight(.medium))
+                        .padding(.horizontal, Spacing.lg)
+                        .padding(.vertical, 14)
+                        .accessibilityIdentifier("resumeOnConnectToggle")
+                }
+                Text(L("Supports wired and Bluetooth headphones. Auto-resume continues from the exact position where playback paused on disconnect and will not start if you paused manually."))
+                    .font(.footnote)
+                    .foregroundStyle(palette.onSurfaceVariant)
+                    .padding(.horizontal, Spacing.lg)
+            }
+        }
+        .navigationTitle(L("Audio"))
+    }
+}
+
 struct PlaybackSettingsView: View {
+    @Environment(AppSettings.self) private var settings
     @Environment(TransitionSettingsStore.self) private var transitions
     @Environment(\.palette) private var palette
     @AppStorage(PlaybackPreferences.waveformKey) private var waveformMode = PlaybackPreferences.defaultWaveform
@@ -1284,7 +1347,21 @@ struct PlaybackSettingsView: View {
     }
 
     var body: some View {
+        @Bindable var settings = settings
         SettingsPage {
+            VStack(alignment: .leading, spacing: Spacing.sm) {
+                Toggle(L("Continuous Playback"), isOn: $settings.continuousPlayback)
+                    .font(.body.weight(.medium))
+                    .padding(.horizontal, Spacing.lg)
+                    .padding(.vertical, 14)
+                    .background(palette.surface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                    .accessibilityIdentifier("continuousPlaybackToggle")
+                Text(L("When you play a song from Search, playback continues through All Songs in your chosen sort order while respecting Shuffle and Repeat."))
+                    .font(.footnote)
+                    .foregroundStyle(palette.onSurfaceVariant)
+                    .padding(.horizontal, Spacing.lg)
+            }
+
             // Top master toggle card + footer caption (matching Song Transitions layout)
             VStack(alignment: .leading, spacing: Spacing.sm) {
                 Toggle(L("Song Transitions"), isOn: transitionsEnabledBinding)
@@ -1414,7 +1491,7 @@ struct PlaybackSettingsView: View {
                 .accessibilityIdentifier("waveformMode")
             }
         }
-        .navigationTitle(L("Song Transitions"))
+        .navigationTitle(L("Playback"))
     }
 
     private func transitionStyleRow(_ style: TransitionStyleOption) -> some View {

@@ -25,12 +25,17 @@ final class AppServices {
         // A database that cannot be opened falls back to memory: the app still works this session.
         database = (try? LibraryDatabase.open()) ?? (try! LibraryDatabase.inMemory())
         library = LibraryStore(database: database)
+        settings = AppSettings()
         transitions = TransitionSettingsStore()
-        player = PlayerController(database: database, transitions: transitions)
+        player = PlayerController(database: database, transitions: transitions, settings: settings)
+        let libraryRef = library
+        player.continuousContinuation = { current, existingIds, shuffled in
+            ContinuousPlayback.remaining(after: current, in: libraryRef.songs, facts: libraryRef.browseFacts,
+                                         excluding: existingIds, shuffled: shuffled)
+        }
         mixes = MixStore(database: database)
         actions = LibraryActions(database: database, player: player, mixes: mixes)
         search = SearchStore(library: library)
-        settings = AppSettings()
         sound = SoundStore(kernel: player.engine.eqKernel)
         lyrics = LyricsStore(database: database,
                              repository: OnlineLyricsRepository(providers: [LrclibProvider(), LyricsOvhProvider()],
