@@ -27,7 +27,7 @@ enum LibraryCategory: String, CaseIterable, Identifiable {
         case .mostPlayed: "chart.bar"
         case .recentlyPlayed: "clock"
         case .recentlyAdded: "calendar.badge.plus"
-        case .favorites: "heart"
+        case .favorites: "star"
         case .folders: "folder"
         case .radio: "dot.radiowaves.left.and.right"
         }

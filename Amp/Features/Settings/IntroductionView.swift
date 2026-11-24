@@ -130,7 +130,7 @@ private struct IntroductionIllustration: View {
                 VStack(spacing: 9) {
                     previewRow("All Songs", detail: "Every track, in one place", symbol: "music.note.list")
                     previewRow("Albums & Artists", detail: "The people and records you love", symbol: "square.stack")
-                    previewRow("Playlists & Favorites", detail: "Your own listening collections", symbol: "heart.fill")
+                    previewRow("Playlists & Favorites", detail: "Your own listening collections", symbol: "star.fill")
                 }
             case "import":
                 VStack(spacing: 18) {

@@ -261,7 +261,7 @@ enum NowPlayingActionButton: String, CaseIterable, Codable, Identifiable, Hashab
 
     var systemImage: String {
         switch self {
-        case .favorite: "heart"
+        case .favorite: "star"
         case .share: "square.and.arrow.up"
         case .more: "ellipsis"
         case .shuffle: "shuffle"

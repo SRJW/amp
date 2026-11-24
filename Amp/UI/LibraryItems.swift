@@ -32,7 +32,7 @@ struct SongActionItems: View {
         ControlGroup {
             Button { actions.toggleFavorite(song) } label: {
                 Label(song.isFavorite ? L("Remove from favorites") : L("Add to favorites"),
-                      systemImage: song.isFavorite ? "heart.slash" : "heart")
+                      systemImage: song.isFavorite ? "star.slash" : "star")
             }
             if let share = actions.share {
                 Button { share(song) } label: {
@@ -155,14 +155,14 @@ struct TrackRow: View {
                                 .font(.system(size: 11, weight: .medium))
                                 .lineLimit(1)
                             if song.isFavorite {
-                                Image(systemName: "heart.fill")
+                                Image(systemName: "star.fill")
                                     .font(.system(size: 9, weight: .semibold))
                                     .foregroundStyle(palette.primary)
                             }
                         }
                         .foregroundStyle(palette.primary.opacity(0.78))
                     } else if song.isFavorite {
-                        Image(systemName: "heart.fill")
+                        Image(systemName: "star.fill")
                             .font(.system(size: 9, weight: .semibold))
                             .foregroundStyle(palette.primary)
                     }
@@ -214,7 +214,7 @@ struct TrackRow: View {
         .offset(x: swipe)
         .background(alignment: swipe >= 0 ? .leading : .trailing) {
             if swipe != 0 {
-                Image(systemName: swipe > 0 ? "text.badge.plus" : (song.isFavorite ? "heart.slash" : "heart.fill"))
+                Image(systemName: swipe > 0 ? "text.badge.plus" : (song.isFavorite ? "star.slash" : "star.fill"))
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(palette.primary)
                     .frame(width: 64)
@@ -459,9 +459,9 @@ struct LibraryActionToast: View {
     var body: some View {
         HStack(spacing: LibraryToastMetrics.spacing) {
             if actions.messageKind != .info {
-                Image(systemName: actions.messageKind == .liked ? "checkmark.circle.fill" : "heart")
+                Image(systemName: actions.messageKind == .liked ? "star.fill" : "star.slash")
                     .font(.system(size: LibraryToastMetrics.iconSize, weight: .semibold))
-                    .foregroundStyle(actions.messageKind == .liked ? Color.green : palette.onSurfaceVariant)
+                    .foregroundStyle(actions.messageKind == .liked ? palette.primary : palette.onSurfaceVariant)
             }
             Text(text).font(.system(size: LibraryToastMetrics.fontSize, weight: .semibold))
                 .foregroundStyle(settings.glassEnabled ? Color.primary : palette.onSurface)

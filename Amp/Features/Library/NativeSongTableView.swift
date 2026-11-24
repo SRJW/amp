@@ -382,7 +382,7 @@ final class NativeSongTableController<Header: View>: UITableViewController, UITa
             actions.toggleFavorite(song)
             done(true)
         }
-        fav.image = UIImage(systemName: song.isFavorite ? "heart.slash" : "heart.fill")
+        fav.image = UIImage(systemName: song.isFavorite ? "star.slash" : "star.fill")
         fav.backgroundColor = UIColor(palette.primary)
         let config = UISwipeActionsConfiguration(actions: [fav])
         config.performsFirstActionWithFullSwipe = true
@@ -507,7 +507,7 @@ private final class NativeSongCell: UITableViewCell {
         detailsLabel.numberOfLines = 1
         detailsLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        heartIconView.image = UIImage(systemName: "heart.fill")
+        heartIconView.image = UIImage(systemName: "star.fill")
         heartIconView.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 9, weight: .semibold)
         heartIconView.contentMode = .scaleAspectFit
         heartIconView.setContentHuggingPriority(.required, for: .horizontal)
@@ -791,7 +791,7 @@ func makeAppleMusicSongMenu(song: Song, actions: SongActions) -> UIMenu {
     var topActions: [UIAction] = [
         UIAction(
             title: song.isFavorite ? L("Remove from favorites") : L("Add to favorites"),
-            image: UIImage(systemName: song.isFavorite ? "heart.slash" : "heart")
+            image: UIImage(systemName: song.isFavorite ? "star.slash" : "star")
         ) { _ in actions.toggleFavorite(song) },
     ]
     if let share = actions.share {

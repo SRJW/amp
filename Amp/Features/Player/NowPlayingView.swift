@@ -309,7 +309,7 @@ struct NowPlayingView: View {
         let iconWidth = width * PlayerLayoutMetrics.secondaryIconW
         switch kind {
         case .favorite:
-            PlayerFavoriteButton(isFavorite: song.isFavorite, iconWidth: width * PlayerLayoutMetrics.heartIconW, ink: playerInk, reduceMotion: reduceMotion) {
+            PlayerFavoriteButton(songID: song.id, isFavorite: song.isFavorite, iconWidth: width * PlayerLayoutMetrics.heartIconW, ink: playerInk, reduceMotion: reduceMotion) {
                 actions.toggleFavorite(song)
             }
         case .share:
@@ -519,96 +519,144 @@ struct NowPlayingView: View {
 
 }
 
-/// Apple Music–style favorite button: spring pop + radial micro-burst synchronized with tactile haptic feedback.
+/// Apple Music–style favorite star button: instant optimistic state + single-pass GPU keyframeAnimator
+/// (zero layout mutation, zero Task.sleep jitter, 120 Hz ProMotion fluid).
 private struct PlayerFavoriteButton: View {
+    let songID: Int64
     let isFavorite: Bool
     let iconWidth: CGFloat
     let ink: Color
     let reduceMotion: Bool
     let action: () -> Void
+
+    @State private var optimisticFavorite: Bool?
     @State private var addPulse = 0
     @State private var removePulse = 0
-    @State private var popScale: CGFloat = 1
-    @State private var burstProgress: CGFloat = 0
-    @State private var showingBurst = false
-    @State private var animationTask: Task<Void, Never>?
+
+    private var displayedFavorite: Bool { optimisticFavorite ?? isFavorite }
+
+    private struct AddAnimValues {
+        var scale: CGFloat = 1.0
+        var rotation: Double = 0.0
+        var burstScale: CGFloat = 0.45
+        var burstOpacity: Double = 0.0
+        var ringScale: CGFloat = 0.55
+        var ringOpacity: Double = 0.0
+    }
+
+    private struct RemoveAnimValues {
+        var scale: CGFloat = 1.0
+    }
 
     var body: some View {
+        let active = displayedFavorite
         Button {
-            let adding = !isFavorite
-            action()
-            if adding {
+            let nextState = !active
+            optimisticFavorite = nextState
+            if nextState {
                 addPulse += 1
-                playFavoriteAnimation()
             } else {
                 removePulse += 1
-                playUnfavoriteAnimation()
             }
+            action()
         } label: {
-            ZStack {
-                if showingBurst && !reduceMotion {
-                    Circle()
-                        .strokeBorder(ink.opacity(Double(max(0, 1 - burstProgress)) * 0.55), lineWidth: max(0.5, 2.2 * (1 - burstProgress)))
-                        .frame(width: iconWidth * (0.75 + burstProgress * 0.95), height: iconWidth * (0.75 + burstProgress * 0.95))
-                    ForEach(0..<6, id: \.self) { index in
-                        let angle = Double(index) * (.pi / 3) - .pi / 6
-                        let radius = iconWidth * (0.42 + burstProgress * 0.62)
-                        Circle()
-                            .fill(ink)
-                            .frame(width: max(1.5, 3.6 * (1 - burstProgress)), height: max(1.5, 3.6 * (1 - burstProgress)))
-                            .opacity(Double(max(0, 1 - burstProgress)))
-                            .offset(x: CGFloat(cos(angle)) * radius, y: CGFloat(sin(angle)) * radius)
+            Color.clear
+                .frame(width: 44, height: 44)
+                .overlay {
+                    ZStack {
+                        // Fixed-size GPU-only burst layer (never mutates layout frames).
+                        if !reduceMotion {
+                            ZStack {
+                                Circle()
+                                    .strokeBorder(ink, lineWidth: 1.8)
+                                    .frame(width: iconWidth * 1.15, height: iconWidth * 1.15)
+                                    .scaleEffect(1)
+                            }
+                            .keyframeAnimator(initialValue: AddAnimValues(), trigger: addPulse) { view, v in
+                                view
+                                    .scaleEffect(v.ringScale)
+                                    .opacity(v.ringOpacity)
+                            } keyframes: { _ in
+                                KeyframeTrack(\.ringScale) {
+                                    LinearKeyframe(0.55, duration: 0.02)
+                                    CubicKeyframe(1.65, duration: 0.36)
+                                    LinearKeyframe(0.55, duration: 0.01)
+                                }
+                                KeyframeTrack(\.ringOpacity) {
+                                    LinearKeyframe(0.65, duration: 0.04)
+                                    CubicKeyframe(0.0, duration: 0.34)
+                                }
+                            }
+
+                            ZStack {
+                                ForEach(0..<5, id: \.self) { index in
+                                    let angle = Double(index) * (.pi * 2 / 5) - .pi / 2
+                                    Capsule()
+                                        .fill(ink)
+                                        .frame(width: 2.2, height: 5.5)
+                                        .offset(y: -iconWidth * 0.82)
+                                        .rotationEffect(.radians(angle))
+                                }
+                            }
+                            .keyframeAnimator(initialValue: AddAnimValues(), trigger: addPulse) { view, v in
+                                view
+                                    .scaleEffect(v.burstScale)
+                                    .opacity(v.burstOpacity)
+                            } keyframes: { _ in
+                                KeyframeTrack(\.burstScale) {
+                                    LinearKeyframe(0.52, duration: 0.04)
+                                    CubicKeyframe(1.38, duration: 0.34)
+                                    LinearKeyframe(0.52, duration: 0.01)
+                                }
+                                KeyframeTrack(\.burstOpacity) {
+                                    LinearKeyframe(0.0, duration: 0.03)
+                                    LinearKeyframe(0.95, duration: 0.05)
+                                    CubicKeyframe(0.0, duration: 0.30)
+                                }
+                            }
+                        }
+
+                        Image(systemName: active ? "star.fill" : "star")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: iconWidth, height: iconWidth)
+                            .font(.system(size: 25, weight: .bold))
+                            .keyframeAnimator(initialValue: AddAnimValues(), trigger: addPulse) { view, v in
+                                view
+                                    .scaleEffect(reduceMotion ? 1 : v.scale)
+                                    .rotationEffect(.degrees(reduceMotion ? 0 : v.rotation))
+                            } keyframes: { _ in
+                                KeyframeTrack(\.scale) {
+                                    CubicKeyframe(0.74, duration: 0.06)
+                                    SpringKeyframe(1.30, duration: 0.16, spring: .bouncy(duration: 0.20, extraBounce: 0.18))
+                                    SpringKeyframe(1.0, duration: 0.18, spring: .smooth(duration: 0.18))
+                                }
+                                KeyframeTrack(\.rotation) {
+                                    CubicKeyframe(-14, duration: 0.06)
+                                    SpringKeyframe(9, duration: 0.15, spring: .bouncy(duration: 0.18))
+                                    SpringKeyframe(0, duration: 0.18, spring: .smooth(duration: 0.18))
+                                }
+                            }
+                            .keyframeAnimator(initialValue: RemoveAnimValues(), trigger: removePulse) { view, v in
+                                view.scaleEffect(reduceMotion ? 1 : v.scale)
+                            } keyframes: { _ in
+                                KeyframeTrack(\.scale) {
+                                    CubicKeyframe(0.80, duration: 0.07)
+                                    SpringKeyframe(1.0, duration: 0.18, spring: .smooth(duration: 0.18))
+                                }
+                            }
                     }
+                    .allowsHitTesting(false)
                 }
-                Image(systemName: isFavorite ? "heart.fill" : "heart")
-                    .resizable().scaledToFit()
-                    .frame(width: iconWidth, height: iconWidth)
-                    .font(.system(size: 25, weight: .bold))
-                    .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
-                    .scaleEffect(popScale)
-            }
-            .frame(width: 44, height: 44)
-            .contentShape(Rectangle())
+                .contentShape(Rectangle())
         }
-        .accessibilityLabel(isFavorite ? L("Remove from favorites") : L("Add to favorites"))
+        .buttonStyle(.plain)
+        .accessibilityLabel(active ? L("Remove from favorites") : L("Add to favorites"))
         .sensoryFeedback(.success, trigger: addPulse)
         .sensoryFeedback(.impact(flexibility: .soft, intensity: 0.55), trigger: removePulse)
-        .onDisappear { animationTask?.cancel() }
-    }
-
-    private func playFavoriteAnimation() {
-        animationTask?.cancel()
-        guard !reduceMotion else { return }
-        popScale = 0.78
-        burstProgress = 0
-        showingBurst = true
-        withAnimation(.spring(response: 0.28, dampingFraction: 0.45)) {
-            popScale = 1.24
-        }
-        withAnimation(.easeOut(duration: 0.42)) {
-            burstProgress = 1
-        }
-        animationTask = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(140))
-            guard !Task.isCancelled else { return }
-            withAnimation(.spring(response: 0.30, dampingFraction: 0.65)) {
-                popScale = 1.0
-            }
-            try? await Task.sleep(for: .milliseconds(300))
-            guard !Task.isCancelled else { return }
-            showingBurst = false
-            burstProgress = 0
-        }
-    }
-
-    private func playUnfavoriteAnimation() {
-        animationTask?.cancel()
-        showingBurst = false
-        burstProgress = 0
-        guard !reduceMotion else { return }
-        popScale = 0.86
-        withAnimation(.spring(response: 0.25, dampingFraction: 0.72)) {
-            popScale = 1.0
+        .onChange(of: songID) { _, _ in optimisticFavorite = nil }
+        .onChange(of: isFavorite) { _, actual in
+            if optimisticFavorite == actual { optimisticFavorite = nil }
         }
     }
 }

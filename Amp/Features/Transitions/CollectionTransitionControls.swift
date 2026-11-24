@@ -146,7 +146,7 @@ private struct AlbumTrackRow: View {
         .offset(x: swipe)
         .background(alignment: swipe >= 0 ? .leading : .trailing) {
             if swipe != 0 {
-                Image(systemName: swipe > 0 ? "text.badge.plus" : (song.isFavorite ? "heart.slash" : "heart.fill"))
+                Image(systemName: swipe > 0 ? "text.badge.plus" : (song.isFavorite ? "star.slash" : "star.fill"))
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(palette.primary)
                     .frame(width: 64)

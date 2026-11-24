@@ -215,7 +215,7 @@ private struct CarouselCard: View, Equatable {
                 Spacer(minLength: 0)
                 if isCurrent {
                     Button { actions.toggleFavorite(song) } label: {
-                        Image(systemName: song.isFavorite ? "heart.fill" : "heart").font(.title3)
+                        Image(systemName: song.isFavorite ? "star.fill" : "star").font(.title3)
                             .foregroundStyle(song.isFavorite ? palette.primary : colors.content)
                             .symbolEffect(.bounce, value: song.isFavorite)
                             .frame(width: 48, height: 48)

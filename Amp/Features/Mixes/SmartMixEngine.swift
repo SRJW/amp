@@ -439,7 +439,7 @@ enum SmartMixEngine {
 
     static func favourites(_ profile: ListeningProfile) -> SmartMix? {
         let ranked = profile.tracks.values.filter(\.isFavorite).map { ($0.songId, Float(profile.history($0.songId).plays)) }
-        return finish(profile, .favourites, ranked, minimum: 3, description: "Songs you marked with a heart", perArtist: .max)
+        return finish(profile, .favourites, ranked, minimum: 3, description: "Songs you starred as favorites", perArtist: .max)
     }
 
     static func fresh(_ profile: ListeningProfile) -> SmartMix? {
