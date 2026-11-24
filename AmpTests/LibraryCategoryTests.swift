@@ -1,3 +1,4 @@
+import UIKit
 import XCTest
 @testable import Amp
 
@@ -58,5 +59,32 @@ final class LibraryCategoryTests: XCTestCase {
         let database = try LibraryDatabase.inMemory()
         try database.db.execute("INSERT INTO album_artist_cross_ref (album_id, artist_id, position) VALUES (10, 9, 0), (11, 9, 0), (12, 8, 0)")
         XCTAssertEqual(try database.albumArtistAlbumIDs(), [9: Set([10, 11]), 8: Set([12])])
+    }
+
+    func testArtworkLoaderDiskCacheAndRevisionInvalidation() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("amp-art-test-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = folder.appendingPathComponent("cover.png")
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 64, height: 64))
+        let png = renderer.pngData { ctx in
+            UIColor.systemIndigo.setFill()
+            ctx.fill(CGRect(x: 0, y: 0, width: 64, height: 64))
+        }
+        try png.write(to: file)
+
+        let loader = ArtworkLoader.shared
+        let initialRev = loader.revision(for: file.path)
+        let first = await loader.image(atPath: file.path, maxPixels: 144)
+        XCTAssertNotNil(first)
+        XCTAssertNotNil(loader.cachedImage(atPath: file.path, maxPixels: 144))
+
+        loader.clearMemoryCache()
+        XCTAssertNil(loader.cachedImage(atPath: file.path, maxPixels: 144))
+        let fromDisk = await loader.image(atPath: file.path, maxPixels: 144)
+        XCTAssertNotNil(fromDisk)
+
+        loader.forget(path: file.path)
+        XCTAssertEqual(loader.revision(for: file.path), initialRev + 1)
     }
 }

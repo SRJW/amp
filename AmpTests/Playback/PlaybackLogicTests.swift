@@ -1,3 +1,4 @@
+import AVFoundation
 import XCTest
 @testable import Amp
 
@@ -443,5 +444,162 @@ final class TransitionPlannerTests: XCTestCase {
         var beyond = spec
         beyond.incomingStartMs = 200_000
         XCTAssertEqual(.tooShort, reason(info(spec: beyond)))
+    }
+}
+
+final class HeadphoneRoutePolicyTests: XCTestCase {
+    func testPauseOnDisconnectAndResumeOnConnectPreservesManualPause() {
+        var policy = HeadphoneRoutePolicy()
+        policy.userDidPlay()
+
+        // Disconnect while playing -> pauses when pauseOnDisconnect is enabled
+        XCTAssertEqual(
+            policy.handleRouteChange(
+                reason: .oldDeviceUnavailable,
+                previousHadHeadphones: true,
+                currentHasHeadphones: false,
+                intendsToPlay: true,
+                hasCurrentSong: true,
+                pauseOnDisconnect: true,
+                resumeOnConnect: true
+            ),
+            .pause
+        )
+        XCTAssertTrue(policy.pausedByDisconnect)
+
+        // Reconnect -> resumes automatically when resumeOnConnect is enabled
+        XCTAssertEqual(
+            policy.handleRouteChange(
+                reason: .newDeviceAvailable,
+                previousHadHeadphones: false,
+                currentHasHeadphones: true,
+                intendsToPlay: false,
+                hasCurrentSong: true,
+                pauseOnDisconnect: true,
+                resumeOnConnect: true
+            ),
+            .resume
+        )
+        XCTAssertFalse(policy.pausedByDisconnect)
+
+        // Manual pause BEFORE disconnect must NEVER auto-resume on reconnect
+        policy.userDidPause()
+        XCTAssertEqual(
+            policy.handleRouteChange(
+                reason: .oldDeviceUnavailable,
+                previousHadHeadphones: true,
+                currentHasHeadphones: false,
+                intendsToPlay: false,
+                hasCurrentSong: true,
+                pauseOnDisconnect: true,
+                resumeOnConnect: true
+            ),
+            .none
+        )
+        XCTAssertEqual(
+            policy.handleRouteChange(
+                reason: .newDeviceAvailable,
+                previousHadHeadphones: false,
+                currentHasHeadphones: true,
+                intendsToPlay: false,
+                hasCurrentSong: true,
+                pauseOnDisconnect: true,
+                resumeOnConnect: true
+            ),
+            .none
+        )
+    }
+
+    func testDisabledTogglesAndManualPauseAfterDisconnectPreventAutoActions() {
+        var policy = HeadphoneRoutePolicy()
+        policy.userDidPlay()
+
+        // Pause on disconnect disabled -> does not pause
+        XCTAssertEqual(
+            policy.handleRouteChange(
+                reason: .oldDeviceUnavailable,
+                previousHadHeadphones: true,
+                currentHasHeadphones: false,
+                intendsToPlay: true,
+                hasCurrentSong: true,
+                pauseOnDisconnect: false,
+                resumeOnConnect: true
+            ),
+            .none
+        )
+
+        // Pause on disconnect enabled, then user manually pauses before reconnecting -> does not auto-resume
+        XCTAssertEqual(
+            policy.handleRouteChange(
+                reason: .oldDeviceUnavailable,
+                previousHadHeadphones: true,
+                currentHasHeadphones: false,
+                intendsToPlay: true,
+                hasCurrentSong: true,
+                pauseOnDisconnect: true,
+                resumeOnConnect: true
+            ),
+            .pause
+        )
+        policy.userDidPause()
+        XCTAssertEqual(
+            policy.handleRouteChange(
+                reason: .newDeviceAvailable,
+                previousHadHeadphones: false,
+                currentHasHeadphones: true,
+                intendsToPlay: false,
+                hasCurrentSong: true,
+                pauseOnDisconnect: true,
+                resumeOnConnect: true
+            ),
+            .none
+        )
+
+        // Resume on connect disabled -> does not auto-resume even after disconnect-pause
+        policy.userDidPlay()
+        XCTAssertEqual(
+            policy.handleRouteChange(
+                reason: .oldDeviceUnavailable,
+                previousHadHeadphones: true,
+                currentHasHeadphones: false,
+                intendsToPlay: true,
+                hasCurrentSong: true,
+                pauseOnDisconnect: true,
+                resumeOnConnect: false
+            ),
+            .pause
+        )
+        XCTAssertEqual(
+            policy.handleRouteChange(
+                reason: .newDeviceAvailable,
+                previousHadHeadphones: false,
+                currentHasHeadphones: true,
+                intendsToPlay: false,
+                hasCurrentSong: true,
+                pauseOnDisconnect: true,
+                resumeOnConnect: false
+            ),
+            .none
+        )
+    }
+
+    func testHeadphonePortClassificationCoversWiredAndBluetooth() {
+        XCTAssertTrue(HeadphoneRoutePolicy.isHeadphonePort(.headphones))
+        XCTAssertTrue(HeadphoneRoutePolicy.isHeadphonePort(.bluetoothA2DP))
+        XCTAssertTrue(HeadphoneRoutePolicy.isHeadphonePort(.bluetoothHFP))
+        XCTAssertTrue(HeadphoneRoutePolicy.isHeadphonePort(.bluetoothLE))
+        XCTAssertTrue(HeadphoneRoutePolicy.isHeadphonePort(.usbAudio))
+        XCTAssertFalse(HeadphoneRoutePolicy.isHeadphonePort(.builtInSpeaker))
+        XCTAssertFalse(HeadphoneRoutePolicy.isHeadphonePort(.builtInReceiver))
+    }
+
+    func testNowPlayingActionButtonsNormalizeToFiveSlots() {
+        XCTAssertEqual(NowPlayingActionButton.allCases.count, 16)
+        XCTAssertEqual(NowPlayingActionButton.defaults, [.favorite, .share, .more, .shuffle, .repeatMode])
+        XCTAssertEqual(NowPlayingActionButton.normalized([.lyrics, .queue]), [.lyrics, .queue, .more, .shuffle, .repeatMode])
+        XCTAssertEqual(
+            NowPlayingActionButton.normalized([.sleepTimer, .eqToggle, .audioOutput, .goToAlbum, .goToArtist, .share]),
+            [.sleepTimer, .eqToggle, .audioOutput, .goToAlbum, .goToArtist]
+        )
     }
 }

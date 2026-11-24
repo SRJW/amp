@@ -101,6 +101,32 @@ final class LibraryBrowseTests: XCTestCase {
         XCTAssertEqual(drawer.pinnedOffset, 0)
         XCTAssertFalse(drawer.collapsed)
     }
+
+    func testContinuousPlaybackResolvesPositionAndRemainingInSortedAllSongs() {
+        let pablito = Song(id: 1, title: "Pablito", artist: "Zeta", album: "A", albumId: 1, durationMs: 180_000, path: "1.mp3")
+        let pedrito = Song(id: 2, title: "Pedrito", artist: "Beta", album: "A", albumId: 1, durationMs: 180_000, path: "2.mp3")
+        let alma = Song(id: 3, title: "Alma", artist: "Alpha", album: "A", albumId: 1, durationMs: 180_000, path: "3.mp3")
+        let all = [pedrito, pablito, alma]
+
+        let resolved = ContinuousPlayback.queue(startingAt: pablito, allSongs: all, facts: [:], sort: .title)
+        XCTAssertEqual(resolved.songs.map(\.title), ["Alma", "Pablito", "Pedrito"])
+        XCTAssertEqual(resolved.startIndex, 1)
+
+        let descending = ContinuousPlayback.queue(startingAt: pablito, allSongs: all, facts: [:], sort: .titleDescending)
+        XCTAssertEqual(descending.songs.map(\.title), ["Pedrito", "Pablito", "Alma"])
+        XCTAssertEqual(descending.startIndex, 1)
+
+        let byArtist = ContinuousPlayback.queue(startingAt: pedrito, allSongs: all, facts: [:], sort: .artist)
+        XCTAssertEqual(byArtist.songs.map(\.artist), ["Alpha", "Beta", "Zeta"])
+        XCTAssertEqual(byArtist.startIndex, 1)
+
+        let linearNext = ContinuousPlayback.remaining(after: pablito, in: all, facts: [:], shuffled: false, sort: .title)
+        XCTAssertEqual(linearNext.map(\.title), ["Pedrito"])
+        XCTAssertTrue(ContinuousPlayback.remaining(after: pedrito, in: all, facts: [:], shuffled: false, sort: .title).isEmpty)
+
+        let shuffledNext = ContinuousPlayback.remaining(after: pablito, in: all, facts: [:], excluding: [alma.id], shuffled: true, sort: .title)
+        XCTAssertEqual(shuffledNext.map(\.id), [pedrito.id])
+    }
 }
 
 final class LibraryBrowseHistoryTests: XCTestCase {
