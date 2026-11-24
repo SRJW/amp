@@ -225,7 +225,7 @@ struct NowPlayingView: View {
     private var toast: some View {
         if let message = actions.message {
             LibraryActionToast(text: message, id: actions.messageID)
-                .padding(.bottom, navigationBottomInset + AppNavigationMetrics.bottomPadding + AppNavigationMetrics.buttonsHeight + LibraryToastMetrics.navigationGap)
+                .padding(.bottom, AppNavigationMetrics.effectiveBottomInset(navigationBottomInset) + AppNavigationMetrics.bottomPadding + AppNavigationMetrics.buttonsHeight + LibraryToastMetrics.navigationGap)
         }
     }
 

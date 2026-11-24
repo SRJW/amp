@@ -58,7 +58,8 @@ func collectionFacts(year: Int? = nil, songs: [Song]) -> String {
     return [yearText, countLabel(songs.count, "song"), duration].compactMap { $0 }.joined(separator: " · ")
 }
 
-/// An album: cover, facts (and "Lossless" when any track is), Play / Shuffle, its tracks by number.
+/// An album: centered cover, title/artist/genre·year, Shuffle / Play / Add controls,
+/// numbered hairline-divided tracks, footer summary, and Transition Studio.
 struct AlbumDetailView: View {
     @Environment(\.radioAvailable) private var radioAvailable
     let albumId: Int64
@@ -73,19 +74,27 @@ struct AlbumDetailView: View {
         PlayerSongReveal(destination: .album(albumId), songs: songs) {
             ScrollView {
                 if let album = library.album(albumId) {
-                    let facts = collectionFacts(year: album.year, songs: songs)
-                    VStack(spacing: 0) {
-                        CollectionHeroHeader(title: album.title, subtitle: album.artist, facts: songs.contains(where: \.isLossless) ? "\(facts) · Lossless" : facts,
-                                         separatesMetadata: true,
-                                         canPlay: !songs.isEmpty, onPlay: { actions.playInOrder(songs, origin: origin) },
-                                         onShuffle: { actions.playShuffled(songs, origin: origin) }) {
-                            AlbumArtworkView(albumId: albumId, maxPixels: 1200, immersiveHero: true)
-                        }
-                        TransitionStudioRow(collection: origin).padding(.bottom, Spacing.sm)
+                    VStack(alignment: .leading, spacing: 0) {
+                        AlbumHeroHeader(
+                            album: album,
+                            songs: songs,
+                            canPlay: !songs.isEmpty,
+                            onPlay: { actions.playInOrder(songs, origin: origin) },
+                            onShuffle: { actions.playShuffled(songs, origin: origin) },
+                            onAddToPlaylist: { router.songsForPlaylist = songs },
+                            onOpenArtist: album.artistId > 0 ? { router.open(.artist(album.artistId)) } : nil
+                        )
                         ScopedTagRepairSummary(songs: songs)
-                        CollectionTransitionTrackList(collection: origin,
-                                                      tracks: songs.map { StudioTrack(song: $0, occurrence: TrackOccurrence($0.id)) },
-                                                      showTrackNumbers: true)
+                        CollectionTransitionTrackList(
+                            collection: origin,
+                            tracks: songs.map { StudioTrack(song: $0, occurrence: TrackOccurrence($0.id)) },
+                            showTrackNumbers: true,
+                            albumStyle: true
+                        )
+                        AlbumFooterSummary(album: album, songs: songs)
+                        TransitionStudioRow(collection: origin)
+                            .padding(.top, Spacing.xs)
+                            .padding(.bottom, Spacing.md)
                     }
                 } else {
                     EmptyState(message: "This album is no longer in your library.", systemImage: "square.stack")
@@ -93,7 +102,6 @@ struct AlbumDetailView: View {
             }
         }
         .tracksLibraryScrolling()
-        .ignoresSafeArea(.container, edges: .top)
         .toolbarBackground(.hidden, for: .navigationBar)
         .modifier(CollectionTopEdgeEffect())
         .navigationBarTitleDisplayMode(.inline)
@@ -109,13 +117,185 @@ struct AlbumDetailView: View {
                 if let album = library.album(albumId) {
                     Button { artworkTarget = .album(album) } label: { Label("Find a cover", systemImage: "photo") }
                 }
-            } label: { Image(systemName: "ellipsis.circle") }
+            } label: { Image(systemName: "ellipsis") }
             .accessibilityLabel("Album options")
         }
         .sheet(item: $artworkTarget) { ArtworkPickerSheet(target: $0) }
         .task(id: library.songs) { songs = (try? library.database.songsOfAlbum(albumId)) ?? [] }
-        .background { CollectionPageBackground() }
-        .collectionArtworkTheme(.track(library.albumCoverSong[albumId]?.url))
+        .background { AlbumPageBackground() }
+        .collectionArtworkTheme(.track(library.albumCoverSong[albumId]?.url), alwaysFollowArtwork: true)
+    }
+}
+
+private struct AlbumPageBackground: View {
+    @Environment(\.palette) private var palette
+    var body: some View {
+        ZStack {
+            palette.background.ignoresSafeArea()
+            LinearGradient(
+                colors: [palette.surface.opacity(0.28), .clear],
+                startPoint: .top,
+                endPoint: .center
+            )
+            .ignoresSafeArea()
+        }
+    }
+}
+
+private struct AlbumHeroHeader: View {
+    let album: Album
+    let songs: [Song]
+    let canPlay: Bool
+    let onPlay: () -> Void
+    let onShuffle: () -> Void
+    let onAddToPlaylist: () -> Void
+    let onOpenArtist: (() -> Void)?
+    @Environment(\.palette) private var palette
+
+    private var metadataLine: String {
+        let genre = songs.compactMap { $0.genre?.trimmed }.first(where: { !$0.isEmpty })
+        let resolvedYear = (1900...2099).contains(album.year)
+            ? album.year
+            : songs.map(\.year).first(where: { (1900...2099).contains($0) })
+        let yearText = resolvedYear.map(String.init)
+        let lossless = songs.contains(where: \.isLossless) ? "Lossless" : nil
+        return [genre, yearText, lossless].compactMap { $0 }.joined(separator: " · ")
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Color.clear
+                .aspectRatio(1, contentMode: .fit)
+                .overlay { AlbumArtworkView(albumId: album.id, maxPixels: 1200) }
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .frame(maxWidth: 256)
+                .shadow(color: .black.opacity(0.34), radius: 18, y: 10)
+                .padding(.top, Spacing.sm)
+
+            VStack(spacing: 5) {
+                Text(CollectionDisplayTitle.normalized(album.title))
+                    .font(.system(size: 22, weight: .bold))
+                    .foregroundStyle(palette.onSurface)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .accessibilityIdentifier("collectionHeroTitle")
+
+                if let onOpenArtist, !album.artist.isBlank {
+                    Button(action: onOpenArtist) {
+                        Text(album.artist)
+                            .font(.system(size: 18, weight: .regular))
+                            .foregroundStyle(palette.onSurface.opacity(0.88))
+                            .lineLimit(1)
+                    }
+                    .buttonStyle(.plain)
+                } else if !album.artist.isBlank {
+                    Text(album.artist)
+                        .font(.system(size: 18, weight: .regular))
+                        .foregroundStyle(palette.onSurface.opacity(0.88))
+                        .lineLimit(1)
+                }
+
+                if !metadataLine.isEmpty {
+                    Text(metadataLine)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(palette.onSurfaceVariant)
+                        .lineLimit(1)
+                        .padding(.top, 1)
+                }
+            }
+            .padding(.horizontal, Spacing.heroGutter)
+            .padding(.top, 18)
+
+            HStack(spacing: 14) {
+                Button(action: onShuffle) {
+                    Image(systemName: "shuffle")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(palette.onSurface)
+                        .frame(width: 48, height: 48)
+                        .background(Circle().fill(palette.onSurface.opacity(0.14)))
+                        .contentShape(Circle())
+                }
+                .buttonStyle(FloatingControlPressStyle())
+                .accessibilityLabel(L("Shuffle"))
+
+                Button(action: onPlay) {
+                    Label(L("Play"), systemImage: "play.fill")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(palette.onFilledButton)
+                        .frame(minWidth: 168, minHeight: 48)
+                        .padding(.horizontal, Spacing.lg)
+                        .background(Capsule().fill(palette.filledButton))
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(FloatingControlPressStyle())
+
+                Button(action: onAddToPlaylist) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(palette.onSurface)
+                        .frame(width: 48, height: 48)
+                        .background(Circle().fill(palette.onSurface.opacity(0.14)))
+                        .contentShape(Circle())
+                }
+                .buttonStyle(FloatingControlPressStyle())
+                .accessibilityLabel(L("Add to playlist"))
+            }
+            .disabled(!canPlay)
+            .opacity(canPlay ? 1 : 0.4)
+            .padding(.top, 18)
+            .padding(.bottom, 22)
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
+
+private struct AlbumFooterSummary: View {
+    let album: Album
+    let songs: [Song]
+    @Environment(\.palette) private var palette
+
+    private var summaryLine: String {
+        let totalMs = songs.reduce(Int64(0)) { $0 + $1.durationMs }
+        let totalMinutes = totalMs > 0 ? max(1, Int((totalMs + 30_000) / 60_000)) : 0
+        let duration: String?
+        if totalMinutes <= 0 {
+            duration = nil
+        } else if totalMinutes < 60 {
+            duration = "\(totalMinutes) \(totalMinutes == 1 ? "minute" : "minutes")"
+        } else {
+            let hours = totalMinutes / 60
+            let mins = totalMinutes % 60
+            let hText = "\(hours) \(hours == 1 ? "hour" : "hours")"
+            duration = mins > 0 ? "\(hText), \(mins) \(mins == 1 ? "minute" : "minutes")" : hText
+        }
+        return [countLabel(songs.count, "song"), duration].compactMap { $0 }.joined(separator: ", ")
+    }
+
+    private var detailsLine: String? {
+        let resolvedYear = (1900...2099).contains(album.year)
+            ? album.year
+            : songs.map(\.year).first(where: { (1900...2099).contains($0) })
+        let codec = songs.compactMap { $0.codec?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first(where: { !$0.isEmpty })?.uppercased()
+        let parts = [resolvedYear.map(String.init), codec].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    var body: some View {
+        if !songs.isEmpty {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(summaryLine)
+                if let detailsLine {
+                    Text(detailsLine)
+                }
+            }
+            .font(.system(size: 14, weight: .regular))
+            .foregroundStyle(palette.onSurfaceVariant)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, Spacing.lg)
+            .padding(.top, Spacing.md)
+            .padding(.bottom, Spacing.sm)
+        }
     }
 }
 

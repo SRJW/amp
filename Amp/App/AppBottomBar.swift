@@ -7,13 +7,19 @@ enum AppNavigationMetrics {
     static let buttonsHeight: CGFloat = 48
     static let horizontalInset: CGFloat = Spacing.md
     static let capsuleHeight: CGFloat = 60
-    static let stripSpacing: CGFloat = 12
+    static let stripSpacing: CGFloat = 14
     static let selectionInset: CGFloat = 3
     static let selectionWidthFraction: CGFloat = 0.238
     static let selectionDuration = 0.30
     static let bottomPadding: CGFloat = Spacing.xs
+    /// On Face ID devices (safeAreaBottom ≈ 34 pt), float the glass navigation capsule lower
+    /// near the home indicator (~18 pt from the screen bottom) like iOS 26's floating tab bar,
+    /// while keeping zero-inset devices safely above the bottom edge.
+    static func effectiveBottomInset(_ safeAreaBottom: CGFloat) -> CGFloat {
+        safeAreaBottom > 20 ? max(safeAreaBottom - 14, 14) : max(safeAreaBottom, 8)
+    }
     static func centreY(height: CGFloat, safeAreaBottom: CGFloat) -> CGFloat {
-        height - max(safeAreaBottom, 0) - bottomPadding - buttonsHeight / 2
+        height - effectiveBottomInset(safeAreaBottom) - bottomPadding - buttonsHeight / 2
     }
     static let reservedHeight: CGFloat = stripHeight + buttonsHeight + 36
     static let emptyTitle = "No song loaded"
@@ -24,6 +30,7 @@ enum AppNavigationMetrics {
 struct AppBottomBar: View {
     var showsButtons = true
     @Environment(\.appKeyboardVisible) private var keyboardVisible
+    @Environment(\.appNavigationBottomInset) private var safeAreaBottom
     @Environment(PlayerController.self) private var player
     @Environment(AppRouter.self) private var router
     @Environment(AppSettings.self) private var settings
@@ -43,10 +50,12 @@ struct AppBottomBar: View {
             .frame(height: AppNavigationMetrics.stripHeight)
             .modifier(FloatingControlGlass(enabled: settings.glassEnabled, cornerRadius: MiniPlayerMetrics.cornerRadius))
             if !keyboardVisible {
-            GeometryReader { geometry in
-                if showsButtons { AppNavigationButtons(width: geometry.size.width) }
-            }
-            .frame(height: AppNavigationMetrics.buttonsHeight)
+                let drop = safeAreaBottom - AppNavigationMetrics.effectiveBottomInset(safeAreaBottom)
+                let rowHeight = showsButtons ? AppNavigationMetrics.buttonsHeight : max(AppNavigationMetrics.buttonsHeight - drop, 0)
+                GeometryReader { geometry in
+                    if showsButtons { AppNavigationButtons(width: geometry.size.width) }
+                }
+                .frame(height: rowHeight)
             }
         }
         .padding(.horizontal, AppNavigationMetrics.horizontalInset).padding(.bottom, AppNavigationMetrics.bottomPadding)

@@ -983,6 +983,7 @@ private struct VisualizerSettingsView: View {
                 }
                 SettingsValueRow(title: L("Reduce motion"), icon: "figure.walk.motion") {
                     Toggle(L("Reduce motion"), isOn: $settings.visualizer.reduceMotion)
+                        .fixedSize()
                 }
             }
             SettingsGroup(L("Now Playing")) {
@@ -1028,6 +1029,7 @@ private struct LibrarySettingsView: View {
             SettingsGroup(L("Navigation")) {
                 SettingsValueRow(title: L(SongAlphabetPreferences.hapticsTitle), icon: "hand.tap") {
                     Toggle(L(SongAlphabetPreferences.hapticsTitle), isOn: $alphabetHaptics)
+                        .fixedSize()
                 }
                 Text(L(SongAlphabetPreferences.hapticsDescription))
                     .font(.footnote).foregroundStyle(.secondary)

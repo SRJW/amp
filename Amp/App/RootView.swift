@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import UniformTypeIdentifiers
 
 /// Persistent section stacks, full player and tools share the same bottom navigation.
@@ -67,6 +68,9 @@ struct RootView: View {
         .animation(reduceMotion ? .linear(duration: 0.12) : .easeInOut(duration: 0.28), value: router.section)
         .coordinateSpace(name: PlayerArtworkSpace.root)
         .onChange(of: router.showsNowPlaying, initial: true) { _, shown in
+            if shown {
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+            }
             playerMotion.setPresented(shown, reduceMotion: reduceMotion)
         }
         .animation(.easeInOut(duration: 0.2), value: actions.message)

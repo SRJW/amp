@@ -1,5 +1,6 @@
 import SwiftUI
 import Observation
+import UIKit
 
 /// A recently opened search result.
 enum RecentSearchItem: Identifiable, Equatable {
@@ -141,8 +142,8 @@ struct SearchView: View {
                     }.padding(.horizontal, Spacing.gutter)
                 }
                 CategoryHeader(title: "Search", icon: "magnifyingglass", count: tracks.count, selecting: search.selecting,
-                               shuffle: { rememberQuery(); actions.playShuffled(tracks) },
-                               play: { rememberQuery(); actions.playInOrder(tracks) },
+                               shuffle: { dismissKeyboard(); rememberQuery(); actions.playShuffled(tracks) },
+                               play: { dismissKeyboard(); rememberQuery(); actions.playInOrder(tracks) },
                                search: { focused = true },
                                select: { search.selecting.toggle(); if !search.selecting { search.selected.removeAll() } }, options: {
                     Picker(L("Sort by"), selection: $sort) {
@@ -160,7 +161,8 @@ struct SearchView: View {
                     if search.selecting || search.type == .all || search.type == .songs {
                         SongList(songs: tracks, emptyMessage: L("No songs match this search."), emptyIcon: "magnifyingglass",
                                  selection: search.selecting ? $search.selected : nil, showsFileDetails: true,
-                                 onPlay: rememberQuery, onPlaySong: { search.remember(.song($0)) })
+                                 onPlay: { dismissKeyboard(); rememberQuery() },
+                                 onPlaySong: { dismissKeyboard(); search.remember(.song($0)) })
                     } else if tracks.isEmpty && !hasEntityResults {
                         EmptyState(message: L("No results for this filter."), systemImage: "magnifyingglass")
                     }
@@ -170,12 +172,13 @@ struct SearchView: View {
         .scrollDismissesKeyboard(.interactively)
         .safeAreaInset(edge: .top, spacing: 0) {
             GlassSearchField(text: $search.query, prompt: L("Search your library"), focused: $focused,
-                             close: { focused = false; router.activate(.library) })
+                             close: { dismissKeyboard(); router.activate(.library) })
                 .padding(.horizontal, Spacing.gutter).padding(.vertical, Spacing.sm)
         }
         .toolbar(.hidden, for: .navigationBar)
-        .onAppear { focused = router.section == .search }
-        .onChange(of: router.section) { _, section in focused = section == .search }
+        .onAppear { focused = router.section == .search && !router.showsNowPlaying }
+        .onChange(of: router.section) { _, section in focused = section == .search && !router.showsNowPlaying }
+        .onChange(of: router.showsNowPlaying) { _, shown in if shown { dismissKeyboard() } }
         .onChange(of: search.type) { _, _ in search.selected.removeAll() }
         .task(id: library.songs) { await search.run() }
         .task(id: library.playlists) { await search.run() }
@@ -199,6 +202,11 @@ struct SearchView: View {
             artistMatchSongIDs = loaded
         }
         .modifier(ToolPageAppearance())
+    }
+
+    private func dismissKeyboard() {
+        focused = false
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
 
     private func rememberQuery() { SearchHistoryStore.shared.remember(search.query, in: "library") }
@@ -229,7 +237,7 @@ struct SearchView: View {
             SectionHeading(title: L("Folders"))
             ForEach(search.extras.folders, id: \.self) { path in
                 Button {
-                    rememberQuery(); focused = false; router.open(.songFolder(path))
+                    dismissKeyboard(); rememberQuery(); router.open(.songFolder(path))
                 } label: {
                     Label(path.isEmpty ? L("Music folder") : path, systemImage: "folder")
                         .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).padding(.horizontal, Spacing.gutter)
@@ -313,16 +321,18 @@ struct SearchView: View {
     private func reopen(_ item: RecentSearchItem) {
         switch item {
         case .song(let song):
+            dismissKeyboard()
             search.remember(item)
             actions.play([song], startIndex: 0)
+            router.openPlayer()
         default:
             open(item)
         }
     }
 
     private func open(_ item: RecentSearchItem) {
+        dismissKeyboard()
         search.remember(item)
-        focused = false
         switch item {
         case .album(let album): router.open(.album(album.id))
         case .artist(let artist): router.open(.artist(artist.id))

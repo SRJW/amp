@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Songs keeps amp's theme, with collection-wide play, focused tools and explicit bulk actions.
 struct AllSongsView: View {
@@ -88,7 +89,7 @@ struct AllSongsView: View {
                         }
                         SongList(songs: results, emptyMessage: scopedSongs.isEmpty ? L("No songs found.") : L("No songs match these filters."),
                                  emptyIcon: "music.note", source: playbackSource, selection: selecting ? $selected : nil, showsFileDetails: true,
-                                 onPlay: { SearchHistoryStore.shared.remember(query, in: "songs") })
+                                 onPlay: { dismissSearchKeyboard(); SearchHistoryStore.shared.remember(query, in: "songs") })
                     } else { ProgressView().frame(maxWidth: .infinity).padding() }
                 }.padding(.top, Spacing.sm)
             }
@@ -98,6 +99,7 @@ struct AllSongsView: View {
         .tracksLibraryScrolling()
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
+        .onChange(of: router.showsNowPlaying) { _, shown in if shown { dismissSearchKeyboard() } }
         .task(id: request) {
             let snapshot = request
             if !snapshot.query.isEmpty { try? await Task.sleep(for: .milliseconds(120)) }
@@ -136,8 +138,8 @@ struct AllSongsView: View {
     private var header: some View {
         CategoryHeader(title: title, icon: folderPath == nil ? category.icon : "folder", count: (results ?? scopedSongs).count,
                        selecting: selecting,
-                       shuffle: { actions.playShuffled(results ?? [], source: playbackSource) },
-                       play: { actions.playInOrder(results ?? [], source: playbackSource) },
+                       shuffle: { dismissSearchKeyboard(); actions.playShuffled(results ?? [], source: playbackSource) },
+                       play: { dismissSearchKeyboard(); actions.playInOrder(results ?? [], source: playbackSource) },
                        search: { showsSearch = true; searchFocused = true },
                        select: { selecting.toggle(); if !selecting { selected.removeAll() } }) {
             Picker(L("Sort by"), selection: $sort) {
@@ -235,5 +237,10 @@ struct AllSongsView: View {
         }.padding(.horizontal, Spacing.gutter)
     }
 
-    private func closeSearch() { searchFocused = false; query = ""; showsSearch = false }
+    private func dismissSearchKeyboard() {
+        searchFocused = false
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    }
+
+    private func closeSearch() { dismissSearchKeyboard(); query = ""; showsSearch = false }
 }
