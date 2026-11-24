@@ -53,7 +53,11 @@ final class LibraryStore {
     /// reducing RAM, disk reads, and JPEG decodes by ~10-15x during fast scrolling while keeping
     /// per-track artwork for compilations, unknown albums, and Now Playing.
     func listThumbnailURL(for song: Song) -> URL {
-        if song.albumId > 0,
+        Self.thumbnailURL(for: song, albumsById: albumsById, albumCoverSong: albumCoverSong)
+    }
+
+    nonisolated static func thumbnailURL(for song: Song, albumsById: [Int64: Album], albumCoverSong: [Int64: Song]) -> URL {
+        if song.albumId != 0,
            let album = albumsById[song.albumId],
            !album.isCompilation,
            !song.album.isBlank,

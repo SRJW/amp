@@ -243,19 +243,27 @@ struct NowPlayingView: View {
             Button { showsQueue = true } label: { Label(L("Queue"), systemImage: "list.bullet") }
             Button { showsLyrics = true } label: { Label(L("Lyrics"), systemImage: "quote.bubble") }
             Button { if let song { router.songsForPlaylist = [song] } } label: { Label(L("Add to playlist"), systemImage: "music.note.list") }
-            if let song, song.albumId > 0, library.album(song.albumId) != nil {
+            if let song, song.albumId != 0, library.album(song.albumId) != nil {
                 Button {
                     close()
                     router.select(.library)
                     router.open(.album(song.albumId))
-                } label: { Label(L("Go to album"), systemImage: "square.stack") }
+                } label: {
+                    Text(L("Go to album"))
+                    if !song.album.isBlank { Text(song.album) }
+                    Image(systemName: "square.stack")
+                }
             }
-            if let song, song.artistId > 0, library.artist(song.artistId) != nil {
+            if let song, song.artistId != 0, library.artist(song.artistId) != nil {
                 Button {
                     close()
                     router.select(.library)
                     router.open(.artist(song.artistId))
-                } label: { Label(L("Go to artist"), systemImage: "person") }
+                } label: {
+                    Text(L("Go to artist"))
+                    if !song.artist.isBlank { Text(song.artist) }
+                    Image(systemName: "person")
+                }
             }
             Button { showsVisualizer = true } label: { Label(L("Visualizer"), systemImage: "waveform") }
             Button { showsMarks = true } label: {
@@ -350,23 +358,23 @@ struct NowPlayingView: View {
             .accessibilityLabel(L("Music information"))
         case .goToAlbum:
             ToggleIcon(systemImage: "square.stack", active: false, iconWidth: iconWidth) {
-                guard song.albumId > 0, library.album(song.albumId) != nil else { return }
+                guard song.albumId != 0, library.album(song.albumId) != nil else { return }
                 close()
                 router.select(.library)
                 router.open(.album(song.albumId))
             }
-            .disabled(song.albumId <= 0 || library.album(song.albumId) == nil)
-            .opacity(song.albumId > 0 && library.album(song.albumId) != nil ? 1 : 0.4)
+            .disabled(song.albumId == 0 || library.album(song.albumId) == nil)
+            .opacity(song.albumId != 0 && library.album(song.albumId) != nil ? 1 : 0.4)
             .accessibilityLabel(L("Go to album"))
         case .goToArtist:
             ToggleIcon(systemImage: "person", active: false, iconWidth: iconWidth) {
-                guard song.artistId > 0, library.artist(song.artistId) != nil else { return }
+                guard song.artistId != 0, library.artist(song.artistId) != nil else { return }
                 close()
                 router.select(.library)
                 router.open(.artist(song.artistId))
             }
-            .disabled(song.artistId <= 0 || library.artist(song.artistId) == nil)
-            .opacity(song.artistId > 0 && library.artist(song.artistId) != nil ? 1 : 0.4)
+            .disabled(song.artistId == 0 || library.artist(song.artistId) == nil)
+            .opacity(song.artistId != 0 && library.artist(song.artistId) != nil ? 1 : 0.4)
             .accessibilityLabel(L("Go to artist"))
         case .audioOutput:
             AirPlayRouteButton(tint: playerInk.opacity(PlayerLayoutMetrics.idleOpacity), activeTint: playerInk, iconWidth: iconWidth)

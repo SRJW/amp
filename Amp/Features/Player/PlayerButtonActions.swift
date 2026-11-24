@@ -97,7 +97,7 @@ struct PlayerShareButton: View {
     }
 }
 
-private struct AudioFileShareSheet: UIViewControllerRepresentable {
+struct AudioFileShareSheet: UIViewControllerRepresentable {
     let url: URL
     let completed: () -> Void
 

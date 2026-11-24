@@ -108,6 +108,7 @@ final class AppRouter {
     var songForDetails: Song?
     /// The song whose tags are being edited by hand.
     var songForTagEdit: Song?
+    var songToShare: PreparedAudioShare?
     var songReveal: SongRevealRequest?
     /// A title tap must reveal an unfiltered All Songs view even when that route is already open.
     var allSongsRevealID = UUID()
@@ -211,6 +212,24 @@ final class AppRouter {
         if request.dismissesPlayer { showsNowPlaying = false }
     }
 
+    func share(_ song: Song, actions: LibraryActions) {
+        guard PreparedAudioShare.available(song.url) else {
+            actions.show(PlayerButtonConstants.shareFailed)
+            return
+        }
+        let source = song.url
+        Task { @MainActor [weak self] in
+            do {
+                let copy = try await Task.detached(priority: .userInitiated) { try PreparedAudioShare.prepare(source) }.value
+                guard let self else { copy.remove(); return }
+                self.songToShare?.remove()
+                self.songToShare = copy
+            } catch {
+                actions.show(PlayerButtonConstants.shareFailed)
+            }
+        }
+    }
+
     func songActions(_ actions: LibraryActions, source: PlaybackSource? = nil) -> SongActions {
         SongActions(
             toggleFavorite: { actions.toggleFavorite($0) },
@@ -221,14 +240,15 @@ final class AppRouter {
                 self.open(.radio(.song(song.id)))
             },
             addToPlaylist: { [weak self] song in self?.songsForPlaylist = [song] },
+            share: { [weak self] song in self?.share(song, actions: actions) },
             goToAlbum: { [weak self] song in
-                guard let self, song.albumId > 0 else { return }
+                guard let self, song.albumId != 0 else { return }
                 self.presentedTool = nil
                 self.showsNowPlaying = false
                 self.open(.album(song.albumId))
             },
             goToArtist: { [weak self] song in
-                guard let self, song.artistId > 0 else { return }
+                guard let self, song.artistId != 0 else { return }
                 self.presentedTool = nil
                 self.showsNowPlaying = false
                 self.open(.artist(song.artistId))

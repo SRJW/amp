@@ -87,4 +87,35 @@ final class LibraryCategoryTests: XCTestCase {
         loader.forget(path: file.path)
         XCTAssertEqual(loader.revision(for: file.path), initialRev + 1)
     }
+
+    @MainActor func testSongAlphabetIndexAnchorsAndNegativeHashIDsInMenuAndThumbnails() {
+        let negAlbumId: Int64 = -4_821_992_011
+        let negArtistId: Int64 = -9_123_456_789
+        let s1 = Song(id: 1, title: "  624 part1", artist: "fat jon", album: "departure", artistId: negArtistId, albumId: negAlbumId, durationMs: 180_000, path: "1.m4a")
+        let s2 = Song(id: 2, title: "Álbum", artist: "fat jon", album: "departure", artistId: negArtistId, albumId: negAlbumId, durationMs: 180_000, path: "2.m4a")
+        let s3 = Song(id: 3, title: "zebra", artist: "Z", album: "Z", artistId: 5, albumId: 6, durationMs: 180_000, path: "3.m4a")
+
+        XCTAssertEqual(SongAlphabet.indexAnchors([s1, s2, s3], title: \.title), ["#": 0, "A": 1, "Z": 2])
+
+        let album = Album(id: negAlbumId, title: "departure", artist: "fat jon", artistId: negArtistId, songCount: 2, year: 2004)
+        let dedupURL = LibraryStore.thumbnailURL(for: s2, albumsById: [negAlbumId: album], albumCoverSong: [negAlbumId: s1])
+        XCTAssertEqual(dedupURL, s1.url, "Negative FNV-1a album IDs must still deduplicate list thumbnails")
+
+        let actions = SongActions(
+            toggleFavorite: { _ in },
+            playNext: { _ in },
+            addToQueue: { _ in },
+            startRadio: { _ in },
+            addToPlaylist: { _ in },
+            share: { _ in },
+            goToAlbum: { _ in },
+            goToArtist: { _ in },
+            deleteFromDevice: { _ in }
+        )
+        let menu = makeAppleMusicSongMenu(song: s1, actions: actions)
+        let flattened = menu.children.flatMap { ($0 as? UIMenu)?.children ?? [$0] }.compactMap { $0 as? UIAction }
+        XCTAssertTrue(flattened.contains { $0.title == L("Go to album") && $0.subtitle == "departure" })
+        XCTAssertTrue(flattened.contains { $0.title == L("Go to artist") && $0.subtitle == "fat jon" })
+        XCTAssertTrue(flattened.contains { $0.title == L("Share") })
+    }
 }

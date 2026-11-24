@@ -82,7 +82,7 @@ struct AlbumDetailView: View {
                             onPlay: { actions.playInOrder(songs, origin: origin) },
                             onShuffle: { actions.playShuffled(songs, origin: origin) },
                             onAddToPlaylist: { router.songsForPlaylist = songs },
-                            onOpenArtist: album.artistId > 0 ? { router.open(.artist(album.artistId)) } : nil
+                            onOpenArtist: album.artistId != 0 ? { router.open(.artist(album.artistId)) } : nil
                         )
                         ScopedTagRepairSummary(songs: songs)
                         CollectionTransitionTrackList(
@@ -92,8 +92,6 @@ struct AlbumDetailView: View {
                             albumStyle: true
                         )
                         AlbumFooterSummary(album: album, songs: songs)
-                        TransitionStudioRow(collection: origin)
-                            .padding(.top, Spacing.xs)
                             .padding(.bottom, Spacing.md)
                     }
                 } else {

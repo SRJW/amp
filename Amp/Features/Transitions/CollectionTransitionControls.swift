@@ -51,7 +51,7 @@ struct CollectionTransitionTrackList: View {
                     }
                     .id(anchorID)
                 }
-                if pairs.indices.contains(index) {
+                if !albumStyle && pairs.indices.contains(index) {
                     CollectionTransitionConnector(pair: pairs[index]) {
                         draft = EditorDraft.open(.pair(pairs[index]), config: transitions.config)
                     }
@@ -164,28 +164,30 @@ private struct AlbumTrackRow: View {
         .contextMenu {
             SongActionItems(song: song, actions: actions)
         } preview: {
-            HStack(spacing: 10) {
-                Text("\(trackNumber)")
-                    .font(.system(size: 15, weight: .regular).monospacedDigit())
-                    .foregroundStyle(isCurrent ? palette.primary : palette.onSurfaceVariant)
-                    .frame(width: 24, alignment: .leading)
-                VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: Spacing.md) {
+                SongArtworkView(url: song.url, maxPixels: 144)
+                    .frame(width: 58, height: 58)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                VStack(alignment: .leading, spacing: 3) {
                     Text(song.title)
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundStyle(isCurrent ? palette.primary : palette.onSurface)
-                        .lineLimit(1)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(palette.onSurface)
+                        .lineLimit(2)
                     if !song.artist.isBlank {
                         Text(song.artist)
                             .font(.system(size: 13.5, weight: .regular))
                             .foregroundStyle(palette.onSurfaceVariant)
-                            .lineLimit(1)
+                            .lineLimit(2)
                     }
                 }
-                Spacer(minLength: 0)
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(palette.onSurfaceVariant.opacity(0.6))
             }
             .padding(.horizontal, Spacing.lg)
-            .padding(.vertical, 12)
-            .frame(minWidth: 280)
+            .padding(.vertical, 14)
+            .frame(minWidth: 300)
             .background(palette.surface)
         }
     }

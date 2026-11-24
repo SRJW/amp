@@ -7,6 +7,7 @@ struct SongActions {
     var addToQueue: (Song) -> Void
     var startRadio: (Song) -> Void
     var addToPlaylist: (Song) -> Void
+    var share: ((Song) -> Void)? = nil
     var goToAlbum: ((Song) -> Void)? = nil
     var goToArtist: ((Song) -> Void)? = nil
     var viewDetails: ((Song) -> Void)?
@@ -17,7 +18,8 @@ struct SongActions {
     var deleteFromDevice: ((Song) -> Void)?
 }
 
-/// The song actions as menu items (a row's "…" button and its long-press menu).
+/// The song actions as menu items (a row's "…" button and its long-press menu),
+/// styled after Apple Music's compact action sheet.
 struct SongActionItems: View {
     let song: Song
     let actions: SongActions
@@ -27,20 +29,40 @@ struct SongActionItems: View {
     }
 
     var body: some View {
-        Section {
-            Button { actions.playNext(song) } label: { Label(L("Play next"), systemImage: "text.line.first.and.arrowtriangle.forward") }
-            Button { actions.addToQueue(song) } label: { Label(L("Add to queue"), systemImage: "text.badge.plus") }
+        ControlGroup {
+            Button { actions.toggleFavorite(song) } label: {
+                Label(song.isFavorite ? L("Remove from favorites") : L("Add to favorites"),
+                      systemImage: song.isFavorite ? "heart.slash" : "heart")
+            }
+            if let share = actions.share {
+                Button { share(song) } label: {
+                    Label(L("Share"), systemImage: "square.and.arrow.up")
+                }
+            }
         }
         Section {
-            Button { actions.addToPlaylist(song) } label: { Label(L("Add to playlist"), systemImage: "music.note.list") }
-            Button { actions.toggleFavorite(song) } label: {
-                Label(song.isFavorite ? L("Remove from favorites") : L("Add to favorites"), systemImage: song.isFavorite ? "heart.slash" : "heart")
-            }
-            if let goToAlbum = actions.goToAlbum, song.albumId > 0 {
-                Button { goToAlbum(song) } label: { Label(L("Go to album"), systemImage: "square.stack") }
-            }
-            if let goToArtist = actions.goToArtist, song.artistId > 0 {
-                Button { goToArtist(song) } label: { Label(L("Go to artist"), systemImage: "person") }
+            Button { actions.addToPlaylist(song) } label: { Label(L("Add to playlist"), systemImage: "text.badge.plus") }
+        }
+        Section {
+            Button { actions.playNext(song) } label: { Label(L("Play next"), systemImage: "text.line.first.and.arrowtriangle.forward") }
+            Button { actions.addToQueue(song) } label: { Label(L("Add to queue"), systemImage: "text.append") }
+        }
+        if (actions.goToAlbum != nil && song.albumId != 0) || (actions.goToArtist != nil && song.artistId != 0) {
+            Section {
+                if let goToAlbum = actions.goToAlbum, song.albumId != 0 {
+                    Button { goToAlbum(song) } label: {
+                        Text(L("Go to album"))
+                        if !song.album.isBlank { Text(song.album) }
+                        Image(systemName: "square.stack")
+                    }
+                }
+                if let goToArtist = actions.goToArtist, song.artistId != 0 {
+                    Button { goToArtist(song) } label: {
+                        Text(L("Go to artist"))
+                        if !song.artist.isBlank { Text(song.artist) }
+                        Image(systemName: "person")
+                    }
+                }
             }
         }
         if hasInfoMenu {
@@ -211,22 +233,27 @@ struct TrackRow: View {
             SongActionItems(song: song, actions: actions)
         } preview: {
             HStack(spacing: Spacing.md) {
-                leading
-                VStack(alignment: .leading, spacing: 2) {
+                SongArtworkView(url: artworkURL ?? song.url, maxPixels: 144)
+                    .frame(width: 58, height: 58)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                VStack(alignment: .leading, spacing: 3) {
                     Text(song.title)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(isCurrent ? palette.primary : palette.onSurface)
-                        .lineLimit(1)
-                    Text(subtitle ?? [song.artist, song.album].filter { !$0.isBlank }.joined(separator: " - "))
-                        .font(.system(size: 12.5, weight: .regular))
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(palette.onSurface)
+                        .lineLimit(2)
+                    Text(subtitle ?? [song.artist, song.album].filter { !$0.isBlank }.joined(separator: " — "))
+                        .font(.system(size: 13.5, weight: .regular))
                         .foregroundStyle(palette.onSurfaceVariant)
-                        .lineLimit(1)
+                        .lineLimit(2)
                 }
-                Spacer(minLength: 0)
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(palette.onSurfaceVariant.opacity(0.6))
             }
-            .padding(.horizontal, Spacing.md)
-            .padding(.vertical, 10)
-            .frame(minWidth: 280)
+            .padding(.horizontal, Spacing.lg)
+            .padding(.vertical, 14)
+            .frame(minWidth: 300)
             .background(palette.surface)
         }
     }

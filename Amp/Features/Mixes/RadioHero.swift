@@ -7,7 +7,7 @@ enum RadioHeroSelection {
         let ordered = ([plan.startSongId] + plan.songIds).compactMap { byID[$0] }
         var artists = Set<String>()
         return Array(ordered.filter { song in
-            let key = song.artistId > 0 ? "id:\(song.artistId)" : foldForMatch(song.artist)
+            let key = song.artistId != 0 ? "id:\(song.artistId)" : foldForMatch(song.artist)
             return artists.insert(key).inserted
         }.prefix(3))
     }

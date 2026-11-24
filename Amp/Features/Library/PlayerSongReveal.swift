@@ -20,8 +20,7 @@ struct PlayerSongReveal<Content: View>: View {
     var alphabetKey: (Song) -> String = \.title
     @ViewBuilder let content: Content
     @Environment(AppRouter.self) private var router
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var alphabetTarget: Int64?
+    @State private var cachedAnchors: [String: Int64] = [:]
 
     private var readyRequest: SongRevealRequest? {
         guard let request = router.songReveal, request.destination == destination,
@@ -31,32 +30,34 @@ struct PlayerSongReveal<Content: View>: View {
 
     private var showsAlphabetIndex: Bool { alphabetEnabled && songs.count >= 8 }
 
+    private var anchorCacheKey: Int {
+        var hasher = Hasher()
+        hasher.combine(songs.count)
+        hasher.combine(songs.first?.id)
+        hasher.combine(songs.last?.id)
+        if let first = songs.first { hasher.combine(alphabetKey(first)) }
+        if let last = songs.last { hasher.combine(alphabetKey(last)) }
+        return hasher.finalize()
+    }
+
     var body: some View {
         ScrollViewReader { proxy in
             content
                 .padding(.trailing, showsAlphabetIndex ? SongAlphabetMetrics.width : 0)
                 .overlay(alignment: .bottomTrailing) {
                     if showsAlphabetIndex {
-                        SongAlphabetIndex(songs: songs, key: alphabetKey) { id in
-                            alphabetTarget = id
-                            withAnimation(reduceMotion ? nil : .easeOut(duration: SongAlphabetMetrics.scrollDuration)) {
-                                proxy.scrollTo(Self.anchor(id), anchor: .top)
-                            }
+                        AlphabetIndexView(anchors: cachedAnchors) { id in
+                            proxy.scrollTo(Self.anchor(id), anchor: .top)
                         }
                         .padding(.bottom, SongAlphabetMetrics.bottomPadding)
                     }
                 }
-                .task(id: alphabetTarget) {
-                    guard let id = alphabetTarget else { return }
-                    do {
-                        // Rapid letter changes can outrun lazy row measurement. Once the
-                        // latest scroll has settled, resolve that same identity again.
-                        try await Task.sleep(for: .seconds(SongAlphabetMetrics.scrollDuration))
-                        try Task.checkCancellation()
-                        withAnimation(reduceMotion ? nil : .easeOut(duration: SongAlphabetMetrics.scrollDuration)) {
-                            proxy.scrollTo(Self.anchor(id), anchor: .top)
-                        }
-                    } catch { /* A newer letter or navigation cancels this refinement. */ }
+                .onAppear {
+                    if showsAlphabetIndex { cachedAnchors = SongAlphabet.anchors(songs, key: alphabetKey) }
+                }
+                .onChange(of: anchorCacheKey) { _, _ in
+                    if showsAlphabetIndex { cachedAnchors = SongAlphabet.anchors(songs, key: alphabetKey) }
+                    else { cachedAnchors = [:] }
                 }
                 .task(id: readyRequest) {
                 guard let request = readyRequest else { return }

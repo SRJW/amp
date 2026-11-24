@@ -1,22 +1,59 @@
 import SwiftUI
+import UIKit
+
+/// Direct imperative bridge to UIKit scroll containers so alphabet scrubbing jumps in O(1)
+/// without triggering any SwiftUI view-tree diffing.
+@MainActor
+final class NativeScrollHandle {
+    var scrollToRow: ((Int, UITableView.ScrollPosition, Bool) -> Void)?
+    var scrollToGridItem: ((Int, Bool) -> Void)?
+}
 
 enum SongAlphabet {
     static let letters = ["#"] + Array("ABCDEFGHIJKLMNOPQRSTUVWXYZ").map(String.init)
+    private static let posixLocale = Locale(identifier: "en_US_POSIX")
+
     static func key(_ title: String) -> String {
-        let normalized = title.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "en_US_POSIX")).uppercased()
-        guard let first = normalized.trimmingCharacters(in: .whitespacesAndNewlines).first,
-              ("A"..."Z").contains(String(first)) else { return "#" }
-        return String(first)
+        for scalar in title.unicodeScalars {
+            if scalar.properties.isWhitespace { continue }
+            let value = scalar.value
+            // Fast path for ASCII letters & digits (avoids ICU Locale/folding allocation on ~95% of titles).
+            if value >= 65 && value <= 90 { return String(scalar) }
+            if value >= 97 && value <= 122 {
+                return String(UnicodeScalar(value - 32)!)
+            }
+            if value >= 48 && value <= 57 { return "#" }
+            // Non-ASCII leading character (e.g., Á, É, Ñ): fold only the first character.
+            let folded = String(scalar).folding(options: [.diacriticInsensitive, .caseInsensitive], locale: posixLocale).uppercased()
+            if let first = folded.unicodeScalars.first, first.value >= 65 && first.value <= 90 {
+                return String(first)
+            }
+            return "#"
+        }
+        return "#"
     }
+
     static func anchors(_ songs: [Song], key: (Song) -> String = \.title) -> [String: Int64] {
         anchors(songs, id: \.id, title: key)
     }
 
     static func anchors<Item, ID: Hashable>(_ items: [Item], id: (Item) -> ID, title: (Item) -> String) -> [String: ID] {
         var result: [String: ID] = [:]
+        result.reserveCapacity(27)
         for item in items {
             let letter = key(title(item))
             if result[letter] == nil { result[letter] = id(item) }
+        }
+        return result
+    }
+
+    /// Maps each populated alphabet letter to its first 0-based row/item index for O(1) UIKit scrolling.
+    static func indexAnchors<Item>(_ items: [Item], title: (Item) -> String) -> [String: Int] {
+        var result: [String: Int] = [:]
+        result.reserveCapacity(27)
+        for (index, item) in items.enumerated() {
+            let letter = key(title(item))
+            if result[letter] == nil { result[letter] = index }
         }
         return result
     }

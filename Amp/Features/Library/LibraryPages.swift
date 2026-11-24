@@ -227,7 +227,6 @@ struct SongList: View {
                         }
                     }
                 }
-                .modifier(PlayerRevealedSong(songID: song.id))
                 .id(song.listScrollAnchor)
                 .onAppear {
                     if !showTrackNumbers {

@@ -7,8 +7,11 @@ struct AllSongsView: View {
     var category: LibraryCategory = .songs
     @Environment(LibraryStore.self) private var library
     @Environment(LibraryActions.self) private var actions
+    @Environment(PlayerController.self) private var player
     @Environment(AppRouter.self) private var router
     @Environment(AppSettings.self) private var settings
+    @Environment(\.palette) private var palette
+    @Environment(\.colorScheme) private var colorScheme
     @AppStorage private var sort: String
     @State private var selecting = false
     @State private var selected = Set<Int64>()
@@ -22,8 +25,11 @@ struct AllSongsView: View {
     @State private var mood = LibraryMood.all
     @State private var format = ""
     @State private var results: [Song]?
+    @State private var rows: [NativeSongRow] = []
+    @State private var indexAnchors: [String: Int] = [:]
     @State private var genres: [String] = []
     @State private var formats: [String] = []
+    @State private var scrollHandle = NativeScrollHandle()
     @FocusState private var searchFocused: Bool
 
     init(folderPath: String? = nil, category: LibraryCategory = .songs) {
@@ -31,6 +37,16 @@ struct AllSongsView: View {
         self.category = category
         let key = category == .songs ? "library.songs.sort" : "library.\(category.rawValue).sort"
         _sort = AppStorage(wrappedValue: category.defaultSort.rawValue, key)
+    }
+
+    private var destination: Route {
+        folderPath.map(Route.songFolder) ?? (category == .songs ? .allSongs : .category(category))
+    }
+
+    private var readyRevealRequest: SongRevealRequest? {
+        guard let request = router.songReveal, request.destination == destination,
+              rows.contains(where: { $0.song.id == request.songID }) else { return nil }
+        return request
     }
 
     private var scopedSongs: [Song] {
@@ -60,14 +76,6 @@ struct AllSongsView: View {
     private var selectedSongs: [Song] {
         SongBrowseRequest(songs: scopedSongs.filter { selected.contains($0.id) }, facts: library.browseFacts,
                           query: "", sort: LibrarySort(rawValue: sort) ?? .title).results()
-    }
-
-    private var alphabetKey: (Song) -> String {
-        switch LibrarySort(rawValue: sort) {
-        case .artist: \.artist
-        case .album: \.album
-        default: \.title
-        }
     }
 
     private struct BrowseTaskKey: Equatable {
@@ -104,9 +112,49 @@ struct AllSongsView: View {
     }
 
     var body: some View {
-        PlayerSongReveal(destination: folderPath.map(Route.songFolder) ?? (category == .songs ? .allSongs : .category(category)),
-                         songs: results ?? [], alphabetEnabled: true, alphabetKey: alphabetKey) {
-            ScrollView {
+        let showsAlphabet = rows.count >= 8 && indexAnchors.count > 1
+        let songActions = router.songActions(actions, source: playbackSource)
+        let artworkVersion = ArtworkChangeBroker.shared.version
+
+        ZStack(alignment: .bottomTrailing) {
+            NativeSongTableView(
+                rows: rows,
+                currentSongID: player.currentSongID,
+                highlightedSongID: router.highlightedSongID,
+                selecting: selecting,
+                selectedIDs: selected,
+                showsFileDetails: true,
+                showsAlphabetPadding: showsAlphabet,
+                emptyMessage: scopedSongs.isEmpty ? L("No songs found.") : L("No songs match these filters."),
+                emptyIcon: "music.note",
+                isLoading: results == nil,
+                palette: palette,
+                colorScheme: colorScheme,
+                artworkChangeVersion: artworkVersion,
+                scrollHandle: scrollHandle,
+                actions: songActions,
+                accessibilityIdentifier: "songsPage",
+                onTapSong: { index, song in
+                    dismissSearchKeyboard()
+                    SearchHistoryStore.shared.remember(query, in: "songs")
+                    if player.currentSongID != song.id {
+                        if !query.trimmed.isEmpty && settings.continuousPlayback {
+                            let resolved = ContinuousPlayback.queue(startingAt: song, allSongs: library.songs, facts: library.browseFacts)
+                            actions.play(resolved.songs, startIndex: resolved.startIndex, origin: nil, source: .library)
+                        } else if let list = results {
+                            actions.play(list, startIndex: index, origin: nil, source: playbackSource)
+                        }
+                    } else if !player.state.isPlaying {
+                        player.play()
+                    }
+                    router.openPlayer()
+                },
+                onToggleSelect: { song in
+                    if selected.contains(song.id) { selected.remove(song.id) }
+                    else { selected.insert(song.id) }
+                },
+                onRefresh: { library.scan() }
+            ) {
                 VStack(alignment: .leading, spacing: Spacing.md) {
                     header
                     if showsFilters { filters }
@@ -123,38 +171,76 @@ struct AllSongsView: View {
                     }
                     if selecting { selectionActions }
                     if category == .recentlyPlayed { recentCollections }
-                    if let results {
-                        if hasFilters || !query.trimmed.isEmpty {
-                            Text(results.count == 1 ? L("1 match") : L("%d matches", results.count)).font(.caption).foregroundStyle(.secondary)
-                                .padding(.horizontal, Spacing.gutter)
-                        }
-                        SongList(songs: results, emptyMessage: scopedSongs.isEmpty ? L("No songs found.") : L("No songs match these filters."),
-                                 emptyIcon: "music.note", source: playbackSource, selection: selecting ? $selected : nil, showsFileDetails: true,
-                                 continuousFromSearch: !query.trimmed.isEmpty,
-                                 onPlay: { dismissSearchKeyboard(); SearchHistoryStore.shared.remember(query, in: "songs") })
-                    } else { ProgressView().frame(maxWidth: .infinity).padding() }
-                }.padding(.top, Spacing.sm)
+                    if let results, (hasFilters || !query.trimmed.isEmpty) {
+                        Text(results.count == 1 ? L("1 match") : L("%d matches", results.count))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, Spacing.gutter)
+                    }
+                }
+                .padding(.top, Spacing.sm)
+                .padding(.bottom, Spacing.xs)
             }
-            .scrollIndicators(.hidden)
-            .accessibilityIdentifier("songsPage")
+            .ignoresSafeArea()
+
+            if showsAlphabet {
+                AlphabetIndexView(anchors: indexAnchors) { rowIndex in
+                    scrollHandle.scrollToRow?(rowIndex, .top, false)
+                }
+                .padding(.bottom, SongAlphabetMetrics.bottomPadding)
+            }
         }
-        .tracksLibraryScrolling()
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .onChange(of: router.showsNowPlaying) { _, shown in if shown { dismissSearchKeyboard() } }
         .task(id: browseTaskKey) {
             let snapshot = request
+            let sortMode = LibrarySort(rawValue: sort) ?? .title
+            let albumCovers = library.albumCoverSong
+            let albumsMap = Dictionary(library.albums.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
             if !snapshot.query.isEmpty { try? await Task.sleep(for: .milliseconds(120)) }
             guard !Task.isCancelled else { return }
-            let updated = await Task.detached(priority: .userInitiated) {
-                (snapshot.results(), LibraryBrowse.genres(in: snapshot.songs), LibraryBrowse.formats(in: snapshot.songs))
+            let updated = await Task.detached(priority: .userInitiated) { () -> ([Song], [NativeSongRow], [String: Int], [String], [String]) in
+                let sorted = snapshot.results()
+                let builtRows = sorted.map { song in
+                    let thumb = LibraryStore.thumbnailURL(for: song, albumsById: albumsMap, albumCoverSong: albumCovers)
+                    return NativeSongRow.build(song: song, thumbnailURL: thumb, showsFileDetails: true)
+                }
+                let anchors: [String: Int]
+                switch sortMode {
+                case .artist: anchors = SongAlphabet.indexAnchors(sorted, title: \.artist)
+                case .album: anchors = SongAlphabet.indexAnchors(sorted, title: \.album)
+                default: anchors = SongAlphabet.indexAnchors(sorted, title: \.title)
+                }
+                return (sorted, builtRows, anchors, LibraryBrowse.genres(in: snapshot.songs), LibraryBrowse.formats(in: snapshot.songs))
             }.value
             guard !Task.isCancelled else { return }
-            results = updated.0; genres = updated.1; formats = updated.2
-            let initialURLs = updated.0.prefix(20).map { library.listThumbnailURL(for: $0) }
+            results = updated.0
+            rows = updated.1
+            indexAnchors = updated.2
+            genres = updated.3
+            formats = updated.4
+            let initialURLs = updated.1.prefix(20).map(\.thumbnailURL)
             ArtworkLoader.shared.prefetch(urls: initialURLs, maxPixels: 144)
         }
-        .refreshable { library.scan() }
+        .task(id: readyRevealRequest) {
+            guard let reveal = readyRevealRequest else { return }
+            defer {
+                if !Task.isCancelled, router.songReveal?.id == reveal.id {
+                    router.highlightedSongID = nil
+                    router.songReveal = nil
+                }
+            }
+            do {
+                try await Task.sleep(for: .milliseconds(60))
+                if let idx = rows.firstIndex(where: { $0.song.id == reveal.songID }) {
+                    scrollHandle.scrollToRow?(idx, .middle, false)
+                }
+                router.completeSongReveal(reveal)
+                try await Task.sleep(for: .seconds(PlayerButtonConstants.highlightSeconds
+                    + (reveal.dismissesPlayer ? PlayerMotionTiming.duration : 0)))
+            } catch {}
+        }
         .onChange(of: library.songs) { _, songs in selected.formIntersection(Set(songs.map(\.id))) }
         .alert("Delete \(countLabel(pendingDeletion.count, "song")) from device?", isPresented: $confirmsDeletion) {
             Button(L("Delete from device"), role: .destructive) {

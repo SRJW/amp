@@ -253,6 +253,12 @@ private struct RouterSheets: ViewModifier {
             .sheet(item: Binding(get: { active ? router.songForTagEdit : nil }, set: { router.songForTagEdit = $0 })) { song in
                 EditTagsSheet(song: song).preferredColorScheme(themeScheme)
             }
+            .sheet(item: Binding(get: { active ? router.songToShare : nil }, set: { next in
+                if next == nil, let current = router.songToShare { current.remove() }
+                router.songToShare = next
+            })) { prepared in
+                AudioFileShareSheet(url: prepared.url) { router.songToShare = nil }
+            }
     }
 }
 

@@ -183,7 +183,7 @@ final class LibraryInteractionTests: XCTestCase {
 
     @MainActor func testLibraryVisibilityPersistsAndPlayerTitleRevealsUnfilteredAllSongs() {
         let app = launch("songs")
-        let page = app.scrollViews["songsPage"]
+        let page = app.tables["songsPage"]
         XCTAssertTrue(page.waitForExistence(timeout: 30))
         app.buttons["appSection.library"].tap()
         app.buttons["Library options"].tap()
@@ -232,7 +232,7 @@ final class LibraryInteractionTests: XCTestCase {
 
     @MainActor func testPlayerTitleScrollsToAnOffscreenSong() {
         let app = launch("songs-reveal")
-        let page = app.scrollViews["songsPage"]
+        let page = app.tables["songsPage"]
         XCTAssertTrue(page.waitForExistence(timeout: 30))
         let target = page.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "ZZZ offscreen song")).firstMatch
         let alphabet = app.descendants(matching: .any).matching(identifier: "songAlphabetIndex").firstMatch
@@ -639,7 +639,7 @@ final class LibraryInteractionTests: XCTestCase {
 
     @MainActor func testSongsHistoryPersistsAndSelectionAddsToPlaylistAndConfirmsDeletion() {
         let app = launch("songs")
-        let page = app.scrollViews["songsPage"]
+        let page = app.tables["songsPage"]
         XCTAssertTrue(page.waitForExistence(timeout: 30))
         let search = page.buttons["sectionSearchButton"]
         XCTAssertTrue(search.waitForExistence(timeout: 30))
