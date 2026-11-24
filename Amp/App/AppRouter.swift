@@ -102,6 +102,7 @@ final class AppRouter {
     }
     var showsImporter = false
     var showsNowPlaying = false
+    var showsLyrics = false
     var presentedTool: Tool?
     var toolPath = NavigationPath()
     var songsForPlaylist: [Song]?
@@ -131,6 +132,7 @@ final class AppRouter {
         songReveal = nil
         highlightedSongID = nil
         presentedTool = nil
+        showsLyrics = false
         showsNowPlaying = false
         if target == .library { select(target) }
         else { section = target }

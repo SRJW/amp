@@ -64,12 +64,30 @@ struct RootView: View {
             if let tool = router.presentedTool { toolScreen(tool).transition(.opacity) }
         }
         .overlay(alignment: .bottom) { AppFixedNavigation() }
+        .overlay {
+            if router.showsLyrics && router.showsNowPlaying && router.presentedTool == nil {
+                ExpandedLyrics(
+                    previous: { player.skipPrevious() },
+                    next: { player.skipNext() },
+                    onDismiss: {
+                        withAnimation(reduceMotion ? .linear(duration: 0.16) : .easeInOut(duration: 0.38)) {
+                            router.showsLyrics = false
+                        }
+                    }
+                )
+                .transition(.opacity)
+                .zIndex(5)
+            }
+        }
+        .animation(reduceMotion ? .linear(duration: 0.16) : .easeInOut(duration: 0.42), value: router.showsLyrics)
         .animation(reduceMotion ? nil : .easeInOut(duration: AppNavigationMetrics.duration), value: router.presentedTool)
         .animation(reduceMotion ? .linear(duration: 0.12) : .easeInOut(duration: 0.28), value: router.section)
         .coordinateSpace(name: PlayerArtworkSpace.root)
         .onChange(of: router.showsNowPlaying, initial: true) { _, shown in
             if shown {
                 UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+            } else if router.showsLyrics {
+                router.showsLyrics = false
             }
             playerMotion.setPresented(shown, reduceMotion: reduceMotion)
         }

@@ -24,7 +24,6 @@ struct NowPlayingView: View {
     @State private var artworkRevision = 0
     let drag: PlayerDragState
     @State private var showsQueue = false
-    @State private var showsLyrics = false
     @State private var showsMarks = false
     @State private var marksRevision = 0
     @State private var showsVisualizer = false
@@ -109,6 +108,12 @@ struct NowPlayingView: View {
                 }
             }
         }
+        .opacity(router.showsLyrics ? 0 : 1)
+        .scaleEffect(router.showsLyrics && !reduceMotion ? 0.96 : 1.0)
+        .blur(radius: router.showsLyrics && !reduceMotion ? 8 : 0)
+        .allowsHitTesting(!router.showsLyrics)
+        .accessibilityHidden(router.showsLyrics)
+        .animation(reduceMotion ? .linear(duration: 0.16) : .easeInOut(duration: 0.36), value: router.showsLyrics)
         .ignoresSafeArea()
         .persistentSystemOverlays(.visible)
         .buttonStyle(.plain)
@@ -148,7 +153,6 @@ struct NowPlayingView: View {
         .sheet(isPresented: $showsMarks, onDismiss: { marksRevision += 1 }) { MarksSheet().preferredColorScheme(themeScheme) }
         .sheet(isPresented: $showsAudioDetails) { AudioDetailsView().preferredColorScheme(themeScheme) }
         .fullScreenCover(isPresented: $showsVisualizer) { VisualizerView().preferredColorScheme(themeScheme) }
-        .fullScreenCover(isPresented: $showsLyrics) { ExpandedLyrics(previous: { player.skipPrevious() }, next: next).preferredColorScheme(themeScheme) }
     }
 
     private func artworkInteraction(width: CGFloat) -> some View {
@@ -228,6 +232,12 @@ struct NowPlayingView: View {
 
     private func next() { player.skipNext() }
 
+    private func openLyrics() {
+        withAnimation(reduceMotion ? .linear(duration: 0.16) : .easeInOut(duration: 0.42)) {
+            router.showsLyrics = true
+        }
+    }
+
     @ViewBuilder
     private var toast: some View {
         if let message = actions.message {
@@ -241,7 +251,7 @@ struct NowPlayingView: View {
         let song = current.flatMap { c in library.songs.first(where: { $0.id == c.id }) ?? c }
         return Menu {
             Button { showsQueue = true } label: { Label(L("Queue"), systemImage: "list.bullet") }
-            Button { showsLyrics = true } label: { Label(L("Lyrics"), systemImage: "quote.bubble") }
+            Button { openLyrics() } label: { Label(L("Lyrics"), systemImage: "quote.bubble") }
             Button { if let song { router.songsForPlaylist = [song] } } label: { Label(L("Add to playlist"), systemImage: "music.note.list") }
             if let song, song.albumId != 0, library.album(song.albumId) != nil {
                 Button {
@@ -327,8 +337,8 @@ struct NowPlayingView: View {
             }
             .accessibilityLabel("Repeat")
         case .lyrics:
-            ToggleIcon(systemImage: "quote.bubble", active: showsLyrics, iconWidth: iconWidth) {
-                showsLyrics = true
+            ToggleIcon(systemImage: "quote.bubble", active: router.showsLyrics, iconWidth: iconWidth) {
+                openLyrics()
             }
             .accessibilityLabel(L("Lyrics"))
         case .queue:
@@ -710,17 +720,22 @@ struct PlayerArtworkBackground<Artwork: View>: View {
 
 /// Full-screen editorial lyrics view: full-bleed top artwork smoothly dissolving into a luminous
 /// cover-tinted backdrop, compact Title/Artist + Pause seam row, and large focused line-by-line lyrics.
-private struct ExpandedLyrics: View {
+/// Presented in-place over Now Playing so both screens melt seamlessly through the cover's dominant colour.
+struct ExpandedLyrics: View {
     let previous: () -> Void
     let next: () -> Void
+    let onDismiss: () -> Void
     @Environment(PlayerController.self) private var player
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.playerReduceMotion) private var reduceMotion
     @State private var artworkPalette = ArtworkPaletteState()
+    @State private var contentAppeared = false
+    @State private var dragOffset: CGFloat = 0
 
     var body: some View {
         let state = player.state
         let sampled = artworkPalette.palette(for: state.currentSong?.url).forScheme(.dark)
         let colors = LyricsColors(sampled)
+        let dismissProgress = min(max(dragOffset / 240.0, 0.0), 1.0)
         GeometryReader { geo in
             let width = geo.size.width
             let topInset = geo.safeAreaInsets.top
@@ -730,9 +745,12 @@ private struct ExpandedLyrics: View {
             let seamSpacerHeight = max(totalHeight * 0.48 - topInset, 120)
 
             ZStack(alignment: .top) {
-                // Luminous blurred cover canvas filling the entire viewport (strictly clipped to width).
+                // Luminous blurred cover canvas anchored in the track's dominant colour
+                // so Now Playing and Lyrics fuse cleanly without any flash or hard seam.
                 ZStack {
+                    Color(argb: sampled.artworkDominant)
                     LinearGradient(colors: colors.gradient, startPoint: .top, endPoint: .bottom)
+                        .opacity(0.92)
                     if let song = state.currentSong {
                         SongArtworkView(url: song.url, maxPixels: 320)
                             .frame(width: width, height: totalHeight)
@@ -797,17 +815,30 @@ private struct ExpandedLyrics: View {
                     }
                     .frame(width: width, height: heroTotalHeight)
                     .clipped()
+                    .scaleEffect(reduceMotion ? 1.0 : (contentAppeared ? 1.0 : 1.03))
                     .ignoresSafeArea(edges: .top)
                     .contentShape(Rectangle())
                     .gesture(
-                        DragGesture(minimumDistance: 20)
+                        DragGesture(minimumDistance: 14)
+                            .onChanged { value in
+                                let dy = value.translation.height
+                                let dx = value.translation.width
+                                if dy > 0 && dy > abs(dx) {
+                                    dragOffset = dy
+                                }
+                            }
                             .onEnded { value in
                                 let dx = value.translation.width
                                 let dy = value.translation.height
                                 if abs(dx) > abs(dy) && abs(dx) > 48 {
+                                    withAnimation(.easeOut(duration: 0.2)) { dragOffset = 0 }
                                     if dx < 0 { next() } else { previous() }
-                                } else if dy > 60 {
-                                    dismiss()
+                                } else if dy > 65 || value.predictedEndTranslation.height > 180 {
+                                    onDismiss()
+                                } else {
+                                    withAnimation(.spring(response: 0.28, dampingFraction: 0.85)) {
+                                        dragOffset = 0
+                                    }
                                 }
                             }
                     )
@@ -822,7 +853,7 @@ private struct ExpandedLyrics: View {
 
                     HStack(alignment: .center, spacing: 12) {
                         if let song = state.currentSong {
-                            LyricsOptionsMenu(song: song, onClose: { dismiss() }) {
+                            LyricsOptionsMenu(song: song, onClose: onDismiss) {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(song.title)
                                         .font(.system(size: 16, weight: .bold))
@@ -858,10 +889,19 @@ private struct ExpandedLyrics: View {
                     .frame(width: width)
                     .contentShape(Rectangle())
                     .gesture(
-                        DragGesture(minimumDistance: 20)
+                        DragGesture(minimumDistance: 14)
+                            .onChanged { value in
+                                if value.translation.height > 0 && value.translation.height > abs(value.translation.width) {
+                                    dragOffset = value.translation.height
+                                }
+                            }
                             .onEnded { value in
-                                if value.translation.height > 55 && abs(value.translation.height) > abs(value.translation.width) {
-                                    dismiss()
+                                if value.translation.height > 55 || value.predictedEndTranslation.height > 160 {
+                                    onDismiss()
+                                } else {
+                                    withAnimation(.spring(response: 0.28, dampingFraction: 0.85)) {
+                                        dragOffset = 0
+                                    }
                                 }
                             }
                     )
@@ -875,10 +915,22 @@ private struct ExpandedLyrics: View {
                     }
                 }
                 .frame(width: width, height: geo.size.height, alignment: .top)
+                .offset(y: (contentAppeared || reduceMotion ? 0 : 16) + dragOffset * 0.22)
+                .opacity(contentAppeared ? 1.0 : 0.0)
             }
             .frame(width: width, height: geo.size.height, alignment: .top)
+            .opacity(1.0 - dismissProgress * 0.85)
         }
         .preferredColorScheme(.dark)
+        .onAppear {
+            if reduceMotion {
+                contentAppeared = true
+            } else {
+                withAnimation(.easeOut(duration: 0.36)) {
+                    contentAppeared = true
+                }
+            }
+        }
         .task(id: state.currentSong?.url) {
             guard let url = state.currentSong?.url else { return }
             let revision = ArtworkLoader.shared.revision(for: url.path)

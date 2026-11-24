@@ -72,6 +72,7 @@ struct AppFixedNavigation: View {
 
     var body: some View {
         let playerProgress: CGFloat = (playerMotion.isPresented && router.presentedTool == nil) ? playerMotion.progress : 0
+        let hiddenByLyrics = router.showsLyrics && router.showsNowPlaying && router.presentedTool == nil
         Group {
             if !keyboardVisible {
                 GeometryReader { geometry in
@@ -85,7 +86,11 @@ struct AppFixedNavigation: View {
                               y: AppNavigationMetrics.centreY(height: geometry.size.height, safeAreaBottom: bottomInset))
                 }
                 .ignoresSafeArea()
+                .opacity(hiddenByLyrics ? 0 : 1)
+                .allowsHitTesting(!hiddenByLyrics)
+                .accessibilityHidden(hiddenByLyrics)
                 .animation(reduceMotion ? nil : .easeInOut(duration: AppNavigationMetrics.duration), value: router.presentedTool == nil)
+                .animation(reduceMotion ? .linear(duration: 0.16) : .easeInOut(duration: 0.34), value: hiddenByLyrics)
             }
         }
     }

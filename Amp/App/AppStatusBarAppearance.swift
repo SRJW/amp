@@ -19,7 +19,7 @@ struct AppStatusBarAppearance: ViewModifier {
     func body(content: Content) -> some View {
         let theme = settings.colorScheme ?? systemScheme
         let playerVisible = router.showsNowPlaying && router.presentedTool == nil
-        let activePlayerScheme = router.playerStatusBarScheme ?? playerScheme
+        let activePlayerScheme = router.showsLyrics ? .dark : (router.playerStatusBarScheme ?? playerScheme)
         content
             .environment(\.colorScheme, theme)
             .preferredColorScheme(playerVisible ? (activePlayerScheme ?? theme) : settings.colorScheme)
