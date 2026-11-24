@@ -89,6 +89,9 @@ final class NativeEntityGridController<Header: View>: UICollectionViewController
         collectionView.showsVerticalScrollIndicator = false
         collectionView.keyboardDismissMode = .interactive
         collectionView.contentInsetAdjustmentBehavior = .automatic
+        let bottomClearance = AppNavigationMetrics.reservedHeight + 16
+        collectionView.contentInset.bottom = bottomClearance
+        collectionView.verticalScrollIndicatorInsets.bottom = bottomClearance
         collectionView.prefetchDataSource = self
         collectionView.register(NativeEntityTileCell.self, forCellWithReuseIdentifier: Self.cellID)
         collectionView.register(NativeGridHeaderReusableView.self,

@@ -30,6 +30,8 @@ final class AppSettings {
         var bitPerfectMode = false
         /// The 5 configurable secondary action buttons on Now Playing.
         var nowPlayingButtons: [NowPlayingActionButton] = NowPlayingActionButton.defaults
+        /// Artist IDs starred as favorites from the Artist page.
+        var favoriteArtistIds: [Int64] = []
 
         init() {}
 
@@ -53,6 +55,7 @@ final class AppSettings {
             bitPerfectMode = try c.decodeIfPresent(Bool.self, forKey: .bitPerfectMode) ?? false
             let decodedButtons = (try? c.decodeIfPresent([NowPlayingActionButton].self, forKey: .nowPlayingButtons)) ?? NowPlayingActionButton.defaults
             nowPlayingButtons = NowPlayingActionButton.normalized(decodedButtons)
+            favoriteArtistIds = (try? c.decodeIfPresent([Int64].self, forKey: .favoriteArtistIds)) ?? []
         }
     }
 
@@ -145,6 +148,20 @@ final class AppSettings {
         var updated = nowPlayingButtons
         updated[slot] = button
         nowPlayingButtons = updated
+    }
+
+    func isArtistFavorite(_ artistId: Int64) -> Bool {
+        stored.favoriteArtistIds.contains(artistId)
+    }
+
+    func toggleFavoriteArtist(_ artistId: Int64) {
+        update { stored in
+            if let index = stored.favoriteArtistIds.firstIndex(of: artistId) {
+                stored.favoriteArtistIds.remove(at: index)
+            } else {
+                stored.favoriteArtistIds.append(artistId)
+            }
+        }
     }
 
     /// The imported theme in use, if any.

@@ -780,8 +780,8 @@ struct PlayerArtworkBackground<Artwork: View>: View {
     }
 }
 
-/// The full lyrics over Now Playing (Android's ExpandedLyrics): the song at the top, the lyrics in
-/// the artwork's colours on its gradient, previous / play / next underneath.
+/// Full-screen editorial lyrics view: full-bleed top artwork smoothly dissolving into a luminous
+/// cover-tinted backdrop, compact Title/Artist + Pause seam row, and large focused line-by-line lyrics.
 private struct ExpandedLyrics: View {
     let previous: () -> Void
     let next: () -> Void
@@ -794,124 +794,160 @@ private struct ExpandedLyrics: View {
         let sampled = artworkPalette.palette(for: state.currentSong?.url).forScheme(.dark)
         let colors = LyricsColors(sampled)
         GeometryReader { geo in
-            let heroHeight = geo.size.height * 0.48
+            let width = geo.size.width
+            let topInset = geo.safeAreaInsets.top
+            let bottomInset = geo.safeAreaInsets.bottom
+            let totalHeight = geo.size.height + topInset + bottomInset
+            let heroTotalHeight = totalHeight * 0.58
+            let seamSpacerHeight = max(totalHeight * 0.48 - topInset, 120)
+
             ZStack(alignment: .top) {
-                // Atmospheric blurred artwork backdrop melted into the cover's tones.
+                // Luminous blurred cover canvas filling the entire viewport (strictly clipped to width).
                 ZStack {
                     LinearGradient(colors: colors.gradient, startPoint: .top, endPoint: .bottom)
                     if let song = state.currentSong {
-                        SongArtworkView(url: song.url, maxPixels: 300)
-                            .frame(width: geo.size.width * 1.15, height: geo.size.height * 1.15)
-                            .blur(radius: 58)
-                            .opacity(0.68)
+                        SongArtworkView(url: song.url, maxPixels: 320)
+                            .frame(width: width, height: totalHeight)
+                            .scaleEffect(1.38)
+                            .saturation(1.18)
+                            .blur(radius: 48)
+                            .opacity(0.92)
+                            .frame(width: width, height: totalHeight)
+                            .clipped()
                     }
                     LinearGradient(
                         stops: [
-                            .init(color: Color.black.opacity(0.18), location: 0),
-                            .init(color: Color.black.opacity(0.38), location: 0.45),
-                            .init(color: Color.black.opacity(0.56), location: 1),
+                            .init(color: Color.black.opacity(0.06), location: 0.00),
+                            .init(color: Color.black.opacity(0.18), location: 0.50),
+                            .init(color: Color.black.opacity(0.28), location: 1.00),
                         ],
                         startPoint: .top,
                         endPoint: .bottom
                     )
                 }
+                .frame(width: width, height: totalHeight)
+                .clipped()
                 .ignoresSafeArea()
 
-                // Full-bleed artwork hero at top, softly dissolving downward into the lyrics zone.
+                // Full-bleed edge-to-edge top artwork smoothly dissolving into the luminous backdrop.
                 if let song = state.currentSong {
-                    SongArtworkView(url: song.url, maxPixels: 1200)
-                        .frame(width: geo.size.width, height: heroHeight + geo.safeAreaInsets.top)
-                        .clipped()
-                        .mask(
-                            LinearGradient(
-                                stops: [
-                                    .init(color: .white, location: 0),
-                                    .init(color: .white, location: 0.66),
-                                    .init(color: .clear, location: 1.0),
-                                ],
-                                startPoint: .top,
-                                endPoint: .bottom
+                    ZStack {
+                        // Soft feathered transition bridge behind the dissolve band.
+                        SongArtworkView(url: song.url, maxPixels: 600)
+                            .frame(width: width, height: heroTotalHeight)
+                            .clipped()
+                            .blur(radius: 18)
+                            .mask(
+                                LinearGradient(
+                                    stops: [
+                                        .init(color: .clear, location: 0.45),
+                                        .init(color: .white.opacity(0.85), location: 0.72),
+                                        .init(color: .clear, location: 1.00),
+                                    ],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
                             )
-                        )
-                        .ignoresSafeArea(edges: .top)
-                        .contentShape(Rectangle())
-                        .gesture(
-                            DragGesture(minimumDistance: 24)
-                                .onEnded { value in
-                                    let dx = value.translation.width
-                                    let dy = value.translation.height
-                                    if abs(dx) > abs(dy) && abs(dx) > 48 {
-                                        if dx < 0 { next() } else { previous() }
-                                    } else if dy > 70 {
-                                        dismiss()
-                                    }
+                        // Sharp top artwork dissolving smoothly downward.
+                        SongArtworkView(url: song.url, maxPixels: 1200)
+                            .frame(width: width, height: heroTotalHeight)
+                            .clipped()
+                            .mask(
+                                LinearGradient(
+                                    stops: [
+                                        .init(color: .white, location: 0.00),
+                                        .init(color: .white, location: 0.55),
+                                        .init(color: .white.opacity(0.82), location: 0.67),
+                                        .init(color: .white.opacity(0.42), location: 0.79),
+                                        .init(color: .white.opacity(0.12), location: 0.90),
+                                        .init(color: .clear, location: 1.00),
+                                    ],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                            )
+                    }
+                    .frame(width: width, height: heroTotalHeight)
+                    .clipped()
+                    .ignoresSafeArea(edges: .top)
+                    .contentShape(Rectangle())
+                    .gesture(
+                        DragGesture(minimumDistance: 20)
+                            .onEnded { value in
+                                let dx = value.translation.width
+                                let dy = value.translation.height
+                                if abs(dx) > abs(dy) && abs(dx) > 48 {
+                                    if dx < 0 { next() } else { previous() }
+                                } else if dy > 60 {
+                                    dismiss()
                                 }
-                        )
+                            }
+                    )
                 }
 
-                // Main vertical flow: hero spacer -> seam header (title/artist + play/pause) -> synced lyrics.
+                // Foreground vertical layout strictly locked to viewport width:
+                // transparent hero zone -> seam header (Title/Artist menu + Pause) -> synced lyrics.
                 VStack(spacing: 0) {
                     Color.clear
-                        .frame(height: max(heroHeight - 76, 120))
+                        .frame(height: seamSpacerHeight)
                         .allowsHitTesting(false)
 
-                    HStack(alignment: .center, spacing: Spacing.md) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(state.currentSong?.title ?? "")
-                                .font(.system(size: 17, weight: .bold))
-                                .foregroundStyle(.white)
-                                .shadow(color: .black.opacity(0.35), radius: 6, y: 2)
-                                .lineLimit(1)
-                            Text(state.currentSong?.artist ?? "")
-                                .font(.system(size: 13.5, weight: .medium))
-                                .foregroundStyle(Color.white.opacity(0.82))
-                                .shadow(color: .black.opacity(0.30), radius: 4, y: 1)
-                                .lineLimit(1)
+                    HStack(alignment: .center, spacing: 12) {
+                        if let song = state.currentSong {
+                            LyricsOptionsMenu(song: song, onClose: { dismiss() }) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(song.title)
+                                        .font(.system(size: 16, weight: .bold))
+                                        .foregroundStyle(.white)
+                                        .shadow(color: .black.opacity(0.28), radius: 6, y: 1)
+                                        .lineLimit(1)
+                                    Text(song.artist)
+                                        .font(.system(size: 13, weight: .regular))
+                                        .foregroundStyle(Color.white.opacity(0.76))
+                                        .shadow(color: .black.opacity(0.24), radius: 4, y: 1)
+                                        .lineLimit(1)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .contentShape(Rectangle())
+                            }
+                        } else {
+                            Spacer()
                         }
-                        Spacer(minLength: Spacing.sm)
+
                         Button { player.togglePlayPause() } label: {
                             Image(systemName: state.isPlaying ? "pause.fill" : "play.fill")
-                                .font(.system(size: 19, weight: .bold))
+                                .font(.system(size: 18, weight: .bold))
                                 .contentTransition(.symbolEffect(.replace))
                                 .foregroundStyle(.white)
-                                .shadow(color: .black.opacity(0.35), radius: 6, y: 2)
-                                .frame(width: 44, height: 44)
+                                .shadow(color: .black.opacity(0.28), radius: 6, y: 1)
+                                .frame(width: 44, height: 44, alignment: .trailing)
                                 .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel(state.isPlaying ? "Pause" : "Play")
                     }
-                    .padding(.horizontal, Spacing.heroGutter)
-                    .padding(.bottom, Spacing.xs)
+                    .padding(.horizontal, 26)
+                    .frame(width: width)
+                    .contentShape(Rectangle())
+                    .gesture(
+                        DragGesture(minimumDistance: 20)
+                            .onEnded { value in
+                                if value.translation.height > 55 && abs(value.translation.height) > abs(value.translation.width) {
+                                    dismiss()
+                                }
+                            }
+                    )
 
                     if let song = state.currentSong {
                         LyricsPanel(song: song, immersive: true)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .frame(width: width, maxHeight: .infinity)
                     } else {
                         Spacer()
                     }
                 }
-
-                // Subtle floating top bar (dismiss + options including Embed in file & Adjust timing).
-                HStack {
-                    Button { dismiss() } label: {
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .frame(width: 36, height: 36)
-                            .background(.ultraThinMaterial, in: Circle())
-                            .environment(\.colorScheme, .dark)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Close lyrics")
-                    Spacer()
-                    if let song = state.currentSong {
-                        LyricsOptionsButton(song: song, floatingStyle: true)
-                    }
-                }
-                .padding(.horizontal, Spacing.lg)
-                .padding(.top, Spacing.sm)
+                .frame(width: width, height: geo.size.height, alignment: .top)
             }
+            .frame(width: width, height: geo.size.height, alignment: .top)
         }
         .preferredColorScheme(.dark)
         .task(id: state.currentSong?.url) {

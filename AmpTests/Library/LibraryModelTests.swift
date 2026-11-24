@@ -345,3 +345,43 @@ final class AcceptanceCriteriaTests: XCTestCase {
         XCTAssertEqual("Drake & 21 Savage", m.albums[0].displayArtist)
     }
 }
+
+final class ArtistPageOrganizerTests: XCTestCase {
+    func testOrganizesTopSongsFeaturedEssentialAndAlbumSections() {
+        let albums = [
+            Album(id: 1, title: "Un Verano Sin Ti", artist: "Bad Bunny", artistId: 9, songCount: 23, year: 2022),
+            Album(id: 2, title: "DeBÍ TiRAR MáS FOToS", artist: "Bad Bunny", artistId: 9, songCount: 17, year: 2025),
+            Album(id: 3, title: "Callaíta - Single", artist: "Bad Bunny", artistId: 9, songCount: 1, year: 2019),
+            Album(id: 4, title: "YHLQMDLG", artist: "Bad Bunny", artistId: 9, songCount: 20, year: 2020),
+            Album(id: 5, title: "OASIS", artist: "Bad Bunny", artistId: 9, songCount: 8, year: 2019),
+        ]
+        var s1 = Song(id: 10, title: "Efecto", artist: "Bad Bunny", album: "Un Verano Sin Ti", albumId: 1, durationMs: 213_000, path: "1.flac")
+        s1.year = 2022
+        var s2 = Song(id: 11, title: "Callaíta", artist: "Bad Bunny", album: "Callaíta - Single", albumId: 3, durationMs: 250_000, path: "2.flac")
+        s2.year = 2019
+        var s3 = Song(id: 12, title: "DÁKITI", artist: "Bad Bunny", album: "YHLQMDLG", albumId: 4, durationMs: 205_000, path: "3.flac")
+        s3.year = 2020
+        s3.isFavorite = true
+        var s4 = Song(id: 13, title: "LA CANCIÓN", artist: "Bad Bunny", album: "OASIS", albumId: 5, durationMs: 242_000, path: "4.flac")
+        s4.year = 2019
+        var s5 = Song(id: 14, title: "NUEVAYoL", artist: "Bad Bunny", album: "DeBÍ TiRAR MáS FOToS", albumId: 2, durationMs: 183_000, path: "5.flac")
+        s5.year = 2025
+        var s6 = Song(id: 15, title: "Extra Track", artist: "Bad Bunny", album: "OASIS", albumId: 5, durationMs: 180_000, path: "6.flac")
+        s6.year = 2019
+
+        let facts: [Int64: LibraryBrowseFact] = [
+            10: LibraryBrowseFact(plays: 50),
+            11: LibraryBrowseFact(plays: 30),
+            12: LibraryBrowseFact(plays: 10),
+        ]
+
+        let sections = ArtistPageOrganizer.organize(albums: albums, songs: [s1, s2, s3, s4, s5, s6], facts: facts)
+        XCTAssertEqual(sections.featuredAlbum?.id, 2, "Newest album should be the featured/latest release")
+        XCTAssertEqual(sections.topSongs.count, 5)
+        XCTAssertEqual(sections.topSongs.prefix(3).map(\.id), [10, 11, 12], "Top songs should rank by play count first")
+        XCTAssertEqual(sections.essentialAlbums.count, 3)
+        XCTAssertEqual(sections.essentialAlbums.first?.id, 1, "Most-played full album leads Essential Albums")
+        XCTAssertEqual(sections.fullAlbums.map(\.id), [2, 1, 4, 5])
+        XCTAssertEqual(sections.singlesAndEPs.map(\.id), [3])
+    }
+}

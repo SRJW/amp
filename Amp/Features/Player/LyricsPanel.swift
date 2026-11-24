@@ -89,12 +89,12 @@ extension AppPalette {
     }
 }
 
-/// Reusable lyrics options menu button (used both in standard headers and floating in immersive full-screen lyrics).
-struct LyricsOptionsButton: View {
+/// Reusable lyrics options menu with a custom label (used for standard headers and seamless immersive Title/Artist tap).
+struct LyricsOptionsMenu<LabelContent: View>: View {
     let song: Song
-    var floatingStyle = false
+    var onClose: (() -> Void)? = nil
+    @ViewBuilder let label: () -> LabelContent
     @Environment(LyricsStore.self) private var store
-    @Environment(\.palette) private var palette
     @State private var searching = false
     @State private var timingContext: LyricsTimingContext?
     @State private var searchText = ""
@@ -131,18 +131,14 @@ struct LyricsOptionsButton: View {
             if let lyrics, lyrics.hasFileLyrics, lyrics.origin != .file {
                 Button { store.useFileLyrics() } label: { Label(L("Use the file's lyrics"), systemImage: "doc.text") }
             }
-        } label: {
-            if floatingStyle {
-                Image(systemName: "ellipsis")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 36, height: 36)
-                    .background(.ultraThinMaterial, in: Circle())
-                    .environment(\.colorScheme, .dark)
-            } else {
-                Image(systemName: "ellipsis.circle").font(.body.weight(.semibold)).foregroundStyle(palette.onSurface)
-                    .frame(width: 44, height: 32).contentShape(Rectangle())
+            if let onClose {
+                Divider()
+                Button(action: onClose) {
+                    Label(L("Close lyrics"), systemImage: "chevron.down")
+                }
             }
+        } label: {
+            label()
         }
         .menuStyle(.button)
         .buttonStyle(.plain)
@@ -158,6 +154,29 @@ struct LyricsOptionsButton: View {
         }
         .onChange(of: song.id) { _, _ in timingContext = nil }
         .onChange(of: store.current?.sourceID) { _, _ in timingContext = nil }
+    }
+}
+
+/// Reusable lyrics options menu button for standard lyrics headers.
+struct LyricsOptionsButton: View {
+    let song: Song
+    var floatingStyle = false
+    @Environment(\.palette) private var palette
+
+    var body: some View {
+        LyricsOptionsMenu(song: song) {
+            if floatingStyle {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 36, height: 36)
+                    .background(.ultraThinMaterial, in: Circle())
+                    .environment(\.colorScheme, .dark)
+            } else {
+                Image(systemName: "ellipsis.circle").font(.body.weight(.semibold)).foregroundStyle(palette.onSurface)
+                    .frame(width: 44, height: 32).contentShape(Rectangle())
+            }
+        }
     }
 }
 
@@ -448,35 +467,37 @@ struct SyncedLyricsView: View {
     var body: some View {
         let wordTimed = lines.contains { !($0.words?.isEmpty ?? true) }
         let wantsSmoothSweep = (wordTimed || immersive) && budget.allowsDecorativeMotion && !reduceMotion
-        let interval = wantsSmoothSweep ? 0.1 : 0.25
+        let interval = wantsSmoothSweep ? 0.08 : 0.25
         TimelineView(.animation(minimumInterval: interval,
                                 paused: !player.state.isPlaying || !visible || scenePhase != .active || playerInMotion)) { _ in
             let position = LyricsTimingPreferences.lyricsPosition(playbackMs: player.currentPositionMs(), offsetMs: offsetMs)
             let currentLine = lyrics.lineAt(position)
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: compact ? Spacing.md : (immersive ? 22 : Spacing.lg)) {
+                    LazyVStack(alignment: .leading, spacing: compact ? Spacing.md : (immersive ? 26 : Spacing.lg)) {
                         ForEach(Array(lines.enumerated()), id: \.offset) { index, line in
                             Button { player.seek(to: LyricsTimingPreferences.playbackPosition(lyricMs: line.timeMs, offsetMs: offsetMs)) } label: {
                                 lineText(line, index: index, current: currentLine, position: position)
+                                    .multilineTextAlignment(.leading)
+                                    .fixedSize(horizontal: false, vertical: true)
                                     .frame(maxWidth: .infinity, alignment: .leading)
                             }
                             .buttonStyle(.plain)
                             .id(index)
                         }
                     }
-                    .padding(.horizontal, compact ? Spacing.lg : Spacing.heroGutter)
-                    .padding(.top, compact ? Spacing.lg : (immersive ? 38 : 120))
-                    .padding(.bottom, compact ? 200 : (immersive ? 160 : 120))
+                    .padding(.horizontal, compact ? Spacing.lg : (immersive ? 26 : Spacing.heroGutter))
+                    .padding(.top, compact ? Spacing.lg : (immersive ? 26 : 120))
+                    .padding(.bottom, compact ? 200 : (immersive ? 180 : 120))
                 }
                 .scrollIndicators(.hidden)
                 .mask {
                     if immersive {
                         LinearGradient(stops: [
-                            .init(color: .clear, location: 0),
-                            .init(color: .white, location: 0.12),
-                            .init(color: .white, location: 0.86),
-                            .init(color: .clear, location: 1),
+                            .init(color: .clear, location: 0.00),
+                            .init(color: .white, location: 0.14),
+                            .init(color: .white, location: 0.82),
+                            .init(color: .clear, location: 1.00),
                         ], startPoint: .top, endPoint: .bottom)
                     } else {
                         Rectangle()
@@ -498,12 +519,12 @@ struct SyncedLyricsView: View {
     /// In the card the current line sits nearer the top; in immersive mode it frames one blurred past line above.
     private var anchor: UnitPoint {
         if compact { return UnitPoint(x: 0.5, y: 0.25) }
-        return immersive ? UnitPoint(x: 0.5, y: 0.30) : .center
+        return immersive ? UnitPoint(x: 0.5, y: 0.32) : .center
     }
 
     private func wordColor(_ index: Int, sung: Int) -> Color {
         if immersive {
-            return index <= sung ? Color.white : Color.white.opacity(0.60)
+            return index <= sung ? Color.white : Color.white.opacity(0.50)
         }
         if index < sung { return palette.onSurface }
         return index == sung ? palette.primary : palette.onSurfaceVariant
@@ -524,7 +545,7 @@ struct SyncedLyricsView: View {
         let litCount = min(Int(ceil(progress * Double(tokens.count))), tokens.count)
         return tokens.enumerated().reduce(Text("")) { acc, pair in
             let suffix = pair.offset == tokens.count - 1 ? "" : " "
-            let color: Color = pair.offset < litCount ? .white : Color.white.opacity(0.62)
+            let color: Color = pair.offset < litCount ? .white : Color.white.opacity(0.50)
             return acc + Text(String(pair.element) + suffix).foregroundColor(color)
         }
     }
@@ -543,20 +564,31 @@ struct SyncedLyricsView: View {
         } else if isCurrent {
             styled = immersive ? immersiveLineSweep(text, index: index, position: position) : base.foregroundColor(palette.onSurface)
         } else if immersive {
-            let opacity = max(0.50 - Double(max(distance - 1, 0)) * 0.10, 0.24)
+            let opacity: Double
+            if index == current - 1 { opacity = 0.34 }
+            else if index == current + 1 { opacity = 0.42 }
+            else if distance == 2 { opacity = 0.30 }
+            else { opacity = 0.22 }
             styled = base.foregroundColor(Color.white.opacity(opacity))
         } else {
             let fade = compact ? 1 : max(1 - Double(distance) * 0.15, 0.45)
             styled = base.foregroundColor(palette.onSurfaceVariant.opacity(fade))
         }
-        let blurRadius: CGFloat = (immersive && !isCurrent && !reduceMotion && budget.allowsDecorativeMotion && distance <= 4)
-            ? min(1.6 + CGFloat(distance - 1) * 0.55, 2.8)
-            : 0
+        let blurRadius: CGFloat
+        if immersive && !isCurrent && !reduceMotion && budget.allowsDecorativeMotion && distance <= 5 {
+            if index == current - 1 { blurRadius = 3.0 }
+            else if index == current + 1 { blurRadius = 2.6 }
+            else if distance == 2 { blurRadius = 3.2 }
+            else { blurRadius = 3.6 }
+        } else {
+            blurRadius = 0
+        }
         return styled
-            .font(compact ? .headline : (immersive ? .system(size: 28, weight: .bold) : .title2.weight(.bold)))
-            .lineSpacing(immersive ? 3 : 0)
+            .font(compact ? .headline : (immersive ? .system(size: 31, weight: .bold) : .title2.weight(.bold)))
+            .tracking(immersive ? -0.4 : 0)
+            .lineSpacing(immersive ? 1 : 0)
             .blur(radius: blurRadius)
-            .scaleEffect(isCurrent || compact ? 1 : 0.96, anchor: .leading)
-            .animation(reduceMotion ? nil : .easeOut(duration: 0.22), value: isCurrent)
+            .scaleEffect(isCurrent || compact || immersive ? 1 : 0.96, anchor: .leading)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.24), value: isCurrent)
     }
 }

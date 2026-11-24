@@ -126,6 +126,9 @@ final class NativeSongTableController<Header: View>: UITableViewController, UITa
         tableView.estimatedSectionHeaderHeight = 0
         tableView.estimatedSectionFooterHeight = 0
         tableView.contentInsetAdjustmentBehavior = .automatic
+        let bottomClearance = AppNavigationMetrics.reservedHeight + 16
+        tableView.contentInset.bottom = bottomClearance
+        tableView.verticalScrollIndicatorInsets.bottom = bottomClearance
         tableView.accessibilityIdentifier = tableAccessibilityID
         tableView.register(NativeSongCell.self, forCellReuseIdentifier: Self.cellID)
         tableView.prefetchDataSource = self
