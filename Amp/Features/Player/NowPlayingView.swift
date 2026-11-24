@@ -109,11 +109,17 @@ struct NowPlayingView: View {
             }
         }
         .opacity(router.showsLyrics ? 0 : 1)
-        .scaleEffect(router.showsLyrics && !reduceMotion ? 0.96 : 1.0)
-        .blur(radius: router.showsLyrics && !reduceMotion ? 8 : 0)
+        .scaleEffect(router.showsLyrics && !reduceMotion ? 0.985 : 1.0)
         .allowsHitTesting(!router.showsLyrics)
         .accessibilityHidden(router.showsLyrics)
-        .animation(reduceMotion ? .linear(duration: 0.16) : .easeInOut(duration: 0.36), value: router.showsLyrics)
+        .animation(
+            reduceMotion
+                ? .linear(duration: 0.14)
+                : (router.showsLyrics
+                    ? .easeOut(duration: 0.22)
+                    : .easeOut(duration: 0.30).delay(0.14)),
+            value: router.showsLyrics
+        )
         .ignoresSafeArea()
         .persistentSystemOverlays(.visible)
         .buttonStyle(.plain)
@@ -233,7 +239,7 @@ struct NowPlayingView: View {
     private func next() { player.skipNext() }
 
     private func openLyrics() {
-        withAnimation(reduceMotion ? .linear(duration: 0.16) : .easeInOut(duration: 0.42)) {
+        withAnimation(reduceMotion ? .linear(duration: 0.14) : .easeInOut(duration: 0.34)) {
             router.showsLyrics = true
         }
     }
@@ -720,7 +726,8 @@ struct PlayerArtworkBackground<Artwork: View>: View {
 
 /// Full-screen editorial lyrics view: full-bleed top artwork smoothly dissolving into a luminous
 /// cover-tinted backdrop, compact Title/Artist + Pause seam row, and large focused line-by-line lyrics.
-/// Presented in-place over Now Playing so both screens melt seamlessly through the cover's dominant colour.
+/// Presented in-place over Now Playing with a symmetric two-phase album-color melt so both covers
+/// never ghost over each other.
 struct ExpandedLyrics: View {
     let previous: () -> Void
     let next: () -> Void
@@ -729,13 +736,32 @@ struct ExpandedLyrics: View {
     @Environment(\.playerReduceMotion) private var reduceMotion
     @State private var artworkPalette = ArtworkPaletteState()
     @State private var contentAppeared = false
+    @State private var isDismissing = false
     @State private var dragOffset: CGFloat = 0
+
+    private func dismissAnimated() {
+        guard !isDismissing else { return }
+        isDismissing = true
+        if reduceMotion {
+            onDismiss()
+            return
+        }
+        withAnimation(.easeIn(duration: 0.20)) {
+            contentAppeared = false
+        }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(100))
+            onDismiss()
+        }
+    }
 
     var body: some View {
         let state = player.state
         let sampled = artworkPalette.palette(for: state.currentSong?.url).forScheme(.dark)
         let colors = LyricsColors(sampled)
         let dismissProgress = min(max(dragOffset / 240.0, 0.0), 1.0)
+        let contentOpacity = (contentAppeared ? 1.0 : 0.0) * max(0.0, 1.0 - dismissProgress * 1.35)
+        let backdropOpacity = max(0.0, 1.0 - max(0.0, dismissProgress - 0.14) * 1.05)
         GeometryReader { geo in
             let width = geo.size.width
             let topInset = geo.safeAreaInsets.top
@@ -745,8 +771,8 @@ struct ExpandedLyrics: View {
             let seamSpacerHeight = max(totalHeight * 0.48 - topInset, 120)
 
             ZStack(alignment: .top) {
-                // Luminous blurred cover canvas anchored in the track's dominant colour
-                // so Now Playing and Lyrics fuse cleanly without any flash or hard seam.
+                // Phase 1 bridge: luminous cover-tinted color canvas that melts Now Playing into Lyrics
+                // smoothly in the album's dominant hue before the Lyrics hero blooms into view.
                 ZStack {
                     Color(argb: sampled.artworkDominant)
                     LinearGradient(colors: colors.gradient, startPoint: .top, endPoint: .bottom)
@@ -773,9 +799,10 @@ struct ExpandedLyrics: View {
                 }
                 .frame(width: width, height: totalHeight)
                 .clipped()
+                .opacity(backdropOpacity)
                 .ignoresSafeArea()
 
-                // Full-bleed edge-to-edge top artwork smoothly dissolving into the luminous backdrop.
+                // Phase 2: Full-bleed dissolving hero artwork emerging cleanly out of the album-color bridge.
                 if let song = state.currentSong {
                     ZStack {
                         // Soft feathered transition bridge behind the dissolve band.
@@ -815,7 +842,7 @@ struct ExpandedLyrics: View {
                     }
                     .frame(width: width, height: heroTotalHeight)
                     .clipped()
-                    .scaleEffect(reduceMotion ? 1.0 : (contentAppeared ? 1.0 : 1.03))
+                    .opacity(contentOpacity)
                     .ignoresSafeArea(edges: .top)
                     .contentShape(Rectangle())
                     .gesture(
@@ -834,7 +861,7 @@ struct ExpandedLyrics: View {
                                     withAnimation(.easeOut(duration: 0.2)) { dragOffset = 0 }
                                     if dx < 0 { next() } else { previous() }
                                 } else if dy > 65 || value.predictedEndTranslation.height > 180 {
-                                    onDismiss()
+                                    dismissAnimated()
                                 } else {
                                     withAnimation(.spring(response: 0.28, dampingFraction: 0.85)) {
                                         dragOffset = 0
@@ -853,7 +880,7 @@ struct ExpandedLyrics: View {
 
                     HStack(alignment: .center, spacing: 12) {
                         if let song = state.currentSong {
-                            LyricsOptionsMenu(song: song, onClose: onDismiss) {
+                            LyricsOptionsMenu(song: song, onClose: dismissAnimated) {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(song.title)
                                         .font(.system(size: 16, weight: .bold))
@@ -897,7 +924,7 @@ struct ExpandedLyrics: View {
                             }
                             .onEnded { value in
                                 if value.translation.height > 55 || value.predictedEndTranslation.height > 160 {
-                                    onDismiss()
+                                    dismissAnimated()
                                 } else {
                                     withAnimation(.spring(response: 0.28, dampingFraction: 0.85)) {
                                         dragOffset = 0
@@ -915,18 +942,17 @@ struct ExpandedLyrics: View {
                     }
                 }
                 .frame(width: width, height: geo.size.height, alignment: .top)
-                .offset(y: (contentAppeared || reduceMotion ? 0 : 16) + dragOffset * 0.22)
-                .opacity(contentAppeared ? 1.0 : 0.0)
+                .offset(y: (contentAppeared || reduceMotion ? 0 : 12) + dragOffset * 0.18)
+                .opacity(contentOpacity)
             }
             .frame(width: width, height: geo.size.height, alignment: .top)
-            .opacity(1.0 - dismissProgress * 0.85)
         }
         .preferredColorScheme(.dark)
         .onAppear {
             if reduceMotion {
                 contentAppeared = true
             } else {
-                withAnimation(.easeOut(duration: 0.36)) {
+                withAnimation(.easeOut(duration: 0.34).delay(0.14)) {
                     contentAppeared = true
                 }
             }

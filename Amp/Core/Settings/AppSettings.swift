@@ -32,6 +32,8 @@ final class AppSettings {
         var nowPlayingButtons: [NowPlayingActionButton] = NowPlayingActionButton.defaults
         /// Artist IDs starred as favorites from the Artist page.
         var favoriteArtistIds: [Int64] = []
+        /// Album IDs starred as favorites from the Album page.
+        var favoriteAlbumIds: [Int64] = []
 
         init() {}
 
@@ -56,6 +58,7 @@ final class AppSettings {
             let decodedButtons = (try? c.decodeIfPresent([NowPlayingActionButton].self, forKey: .nowPlayingButtons)) ?? NowPlayingActionButton.defaults
             nowPlayingButtons = NowPlayingActionButton.normalized(decodedButtons)
             favoriteArtistIds = (try? c.decodeIfPresent([Int64].self, forKey: .favoriteArtistIds)) ?? []
+            favoriteAlbumIds = (try? c.decodeIfPresent([Int64].self, forKey: .favoriteAlbumIds)) ?? []
         }
     }
 
@@ -160,6 +163,20 @@ final class AppSettings {
                 stored.favoriteArtistIds.remove(at: index)
             } else {
                 stored.favoriteArtistIds.append(artistId)
+            }
+        }
+    }
+
+    func isAlbumFavorite(_ albumId: Int64) -> Bool {
+        stored.favoriteAlbumIds.contains(albumId)
+    }
+
+    func toggleFavoriteAlbum(_ albumId: Int64) {
+        update { stored in
+            if let index = stored.favoriteAlbumIds.firstIndex(of: albumId) {
+                stored.favoriteAlbumIds.remove(at: index)
+            } else {
+                stored.favoriteAlbumIds.append(albumId)
             }
         }
     }

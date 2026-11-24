@@ -70,7 +70,7 @@ struct RootView: View {
                     previous: { player.skipPrevious() },
                     next: { player.skipNext() },
                     onDismiss: {
-                        withAnimation(reduceMotion ? .linear(duration: 0.16) : .easeInOut(duration: 0.38)) {
+                        withAnimation(reduceMotion ? .linear(duration: 0.14) : .easeInOut(duration: 0.34)) {
                             router.showsLyrics = false
                         }
                     }
@@ -79,7 +79,7 @@ struct RootView: View {
                 .zIndex(5)
             }
         }
-        .animation(reduceMotion ? .linear(duration: 0.16) : .easeInOut(duration: 0.42), value: router.showsLyrics)
+        .animation(reduceMotion ? .linear(duration: 0.14) : .easeInOut(duration: 0.34), value: router.showsLyrics)
         .animation(reduceMotion ? nil : .easeInOut(duration: AppNavigationMetrics.duration), value: router.presentedTool)
         .animation(reduceMotion ? .linear(duration: 0.12) : .easeInOut(duration: 0.28), value: router.section)
         .coordinateSpace(name: PlayerArtworkSpace.root)

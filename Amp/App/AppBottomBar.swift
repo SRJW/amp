@@ -90,7 +90,14 @@ struct AppFixedNavigation: View {
                 .allowsHitTesting(!hiddenByLyrics)
                 .accessibilityHidden(hiddenByLyrics)
                 .animation(reduceMotion ? nil : .easeInOut(duration: AppNavigationMetrics.duration), value: router.presentedTool == nil)
-                .animation(reduceMotion ? .linear(duration: 0.16) : .easeInOut(duration: 0.34), value: hiddenByLyrics)
+                .animation(
+                    reduceMotion
+                        ? .linear(duration: 0.14)
+                        : (hiddenByLyrics
+                            ? .easeOut(duration: 0.22)
+                            : .easeOut(duration: 0.30).delay(0.14)),
+                    value: hiddenByLyrics
+                )
             }
         }
     }
