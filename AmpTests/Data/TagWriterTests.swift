@@ -235,4 +235,26 @@ final class TagWriterTests: XCTestCase {
         XCTAssertEqual(stco.uint32BE(16), 100, "Chunks before moov must stay untouched")
         XCTAssertEqual(stco.uint32BE(20), 1250, "Chunks after moov must shift by delta")
     }
+
+    func testEmbeddingLineByLineLyricsRoundTripsInMp3M4aAndFlac() throws {
+        let lrc = LyricsFormatter.lineByLineLRC(from: "[00:05.00]<00:05.00>First <00:05.40>line\n[00:12.50]Second line", offsetMs: 250)
+        XCTAssertEqual(lrc, "[00:05.25]First line\n[00:12.75]Second line")
+        let fixtures: [(String, Data)] = [
+            ("mp3", TagFixtures.mp3(v4: true) + audio),
+            ("m4a", TagFixtures.m4a()),
+            ("flac", TagFixtures.flac() + audio),
+        ]
+        for (ext, data) in fixtures {
+            let url = TagFixtures.write(data, name: "lyrics-embed.\(ext)")
+            try TagWriter.write(TagWriteRequest(lyrics: lrc), to: url)
+            let readBack = TagReader.read(url).lyrics
+            XCTAssertEqual(readBack, lrc, ext)
+            guard case .synced(let lines) = LyricsParser.parse(readBack) else {
+                XCTFail("Expected synced lyrics after embedding in \(ext)")
+                continue
+            }
+            XCTAssertEqual(lines.map(\.text), ["First line", "Second line"], ext)
+            XCTAssertEqual(lines.map(\.timeMs), [5_250, 12_750], ext)
+        }
+    }
 }

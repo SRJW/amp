@@ -118,6 +118,9 @@ final class PlayerController {
         self.database = database
         self.transitions = transitions
         self.settings = settings
+        if settings?.bitPerfectMode == true {
+            engine.setBitPerfect(true)
+        }
         transitions.onChange = { [weak self] in self?.reevaluateTransition() }
         engine.onEntryFinished = { [weak self] id in self?.entryFinished(id) }
         engine.onConfigurationChange = { [weak self] in self?.restartAfterConfigurationChange() }
@@ -127,6 +130,20 @@ final class PlayerController {
         Task {
             // Restoring the queue and browsing the library do not need an audio output device.
             restorePersistedState()
+        }
+    }
+
+    func setBitPerfect(_ enabled: Bool) {
+        let wasPlaying = state.isPlaying
+        let position = currentPositionMs()
+        cancelPendingTransitionCommit()
+        plannedTransition = nil
+        engine.setBitPerfect(enabled)
+        if state.currentSong != nil && engine.isReady {
+            let clamped = state.durationMs > 0 ? min(position, state.durationMs) : position
+            startCurrent(at: clamped, playing: wasPlaying, sameEntryRepeated: true)
+        } else {
+            reevaluateTransition()
         }
     }
 
@@ -717,7 +734,7 @@ final class PlayerController {
 
     /// Re-plans the boundary after the current entry (entry change, seek, queue edit, repeat, loop, settings).
     private func reevaluateTransition() {
-        guard let current = state.currentEntry else {
+        guard !engine.bitPerfectEnabled, let current = state.currentEntry else {
             plannedTransition = nil
             return
         }

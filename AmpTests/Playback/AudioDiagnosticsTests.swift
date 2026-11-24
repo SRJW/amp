@@ -108,4 +108,35 @@ final class AudioDiagnosticsTests: XCTestCase {
         XCTAssertFalse(report.contains("AirPods"))
         XCTAssertFalse(report.contains("Measured sample peak"))
     }
+
+    func testBitPerfectStatusEvaluatesDirectResampledAndWirelessRoutes() {
+        let usb96 = OutputDiagnostics(route: [OutputPort(typeName: "USB audio", name: "DAC", spatialAudio: false)],
+                                      sampleRateHz: 96_000, channels: 2, bufferMs: 5.3, latencyMs: 4.0)
+        XCTAssertEqual(BitPerfectStatus.evaluate(enabled: false, sourceRateHz: 96_000, output: usb96), .off)
+        XCTAssertEqual(BitPerfectStatus.evaluate(enabled: true, sourceRateHz: nil, output: usb96), .idle)
+
+        let direct = BitPerfectStatus.evaluate(enabled: true, sourceRateHz: 96_000, output: usb96)
+        XCTAssertEqual(direct, .active(sampleRateHz: 96_000, port: "USB audio"))
+        XCTAssertEqual(direct.badge, "Direct")
+
+        let speaker48 = OutputDiagnostics(route: [OutputPort(typeName: "Speaker", name: "Speaker", spatialAudio: false)],
+                                          sampleRateHz: 48_000, channels: 2, bufferMs: 10.7, latencyMs: 8.0)
+        let resampled = BitPerfectStatus.evaluate(enabled: true, sourceRateHz: 96_000, output: speaker48)
+        XCTAssertEqual(resampled, .resampled(sourceHz: 96_000, outputHz: 48_000, port: "Speaker"))
+        XCTAssertEqual(resampled.badge, "Resampled")
+
+        let bt = OutputDiagnostics(route: [OutputPort(typeName: "Bluetooth (A2DP)", name: "Headphones", spatialAudio: false)],
+                                   sampleRateHz: 44_100, channels: 2, bufferMs: 10.7, latencyMs: nil)
+        XCTAssertEqual(BitPerfectStatus.evaluate(enabled: true, sourceRateHz: 44_100, output: bt), .lossyRoute(port: "Bluetooth (A2DP)"))
+
+        let airplay = OutputDiagnostics(route: [OutputPort(typeName: "AirPlay", name: "Living Room", spatialAudio: false)],
+                                        sampleRateHz: 44_100, channels: 2, bufferMs: 10.7, latencyMs: nil)
+        XCTAssertEqual(BitPerfectStatus.evaluate(enabled: true, sourceRateHz: 44_100, output: airplay).badge, "Wireless")
+
+        let report = DiagnosticsReport.build(DiagnosticsSnapshot(
+            source: nil, state: "playing", decoderInput: nil, sentToSystem: nil, eq: nil, headroom: nil,
+            peak: nil, output: usb96, transitionFading: false, bitPerfect: direct
+        ))
+        XCTAssertTrue(report.contains("Bit-Perfect mode: Direct:"))
+    }
 }

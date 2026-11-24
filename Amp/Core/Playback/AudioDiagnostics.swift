@@ -66,6 +66,61 @@ func pcmFormatText(_ format: AVAudioFormat?) -> String? {
     return parts.compactMap { $0 }.joined(separator: ", ")
 }
 
+/// Honest assessment of whether the current output path is running bit-perfect/direct.
+enum BitPerfectStatus: Equatable, Sendable {
+    case off
+    case idle
+    case active(sampleRateHz: Int, port: String)
+    case resampled(sourceHz: Int, outputHz: Int, port: String)
+    case lossyRoute(port: String)
+
+    static func evaluate(enabled: Bool, sourceRateHz: Int?, output: OutputDiagnostics?) -> BitPerfectStatus {
+        guard enabled else { return .off }
+        guard let sourceRateHz, sourceRateHz > 0 else { return .idle }
+        let ports = output?.route ?? []
+        let portLabel = ports.map(\.typeName).joined(separator: ", ")
+        let displayPort = portLabel.isEmpty ? "System output" : portLabel
+        let isWirelessLossy = ports.contains { port in
+            port.typeName.hasPrefix("Bluetooth") || port.typeName == "AirPlay"
+        }
+        if isWirelessLossy {
+            return .lossyRoute(port: displayPort)
+        }
+        if let outHz = output?.sampleRateHz, outHz > 0 {
+            if abs(outHz - sourceRateHz) <= 10 {
+                return .active(sampleRateHz: outHz, port: displayPort)
+            }
+            return .resampled(sourceHz: sourceRateHz, outputHz: outHz, port: displayPort)
+        }
+        return .idle
+    }
+
+    var badge: String {
+        switch self {
+        case .off: "Off"
+        case .idle: "Ready"
+        case .active: "Direct"
+        case .resampled: "Resampled"
+        case .lossyRoute: "Wireless"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .off:
+            "Disabled; EQ and transitions are available"
+        case .idle:
+            "Enabled; waiting for a track to start"
+        case .active(let rateHz, let port):
+            "DSP bypassed, unity gain, \(MediaFormats.sampleRateText(rateHz)) matched on \(port)"
+        case .resampled(let sourceHz, let outputHz, let port):
+            "DSP bypassed, but \(port) runs at \(MediaFormats.sampleRateText(outputHz)) instead of \(MediaFormats.sampleRateText(sourceHz))"
+        case .lossyRoute(let port):
+            "DSP bypassed, but \(port) re-encodes audio wirelessly (connect a USB-C / Lightning DAC for direct output)"
+        }
+    }
+}
+
 /// Everything the report can include; any part may be missing.
 struct DiagnosticsSnapshot {
     var source: SourceDiagnostics?
@@ -82,6 +137,7 @@ struct DiagnosticsSnapshot {
     var output: OutputDiagnostics?
     /// True while a transition fades between two tracks; nil when not known.
     var transitionFading: Bool?
+    var bitPerfect: BitPerfectStatus = .off
 }
 
 /// A plain-text summary of the current track's audio path, for the user to copy or share. Built
@@ -121,6 +177,7 @@ enum DiagnosticsReport {
         out.line("Sent to iOS audio", snapshot.sentToSystem ?? unavailable)
 
         out.section("App processing")
+        out.line("Bit-Perfect mode", "\(snapshot.bitPerfect.badge): \(snapshot.bitPerfect.detail)")
         let fade: String = switch snapshot.transitionFading {
         case true?: "fading between two tracks (Transition Studio)"
         case false?: "unity gain (no change)"

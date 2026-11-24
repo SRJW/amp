@@ -79,13 +79,19 @@ struct AudioDetailsView: View {
         }
     }
 
+    private var bitPerfectStatus: BitPerfectStatus {
+        let sourceHz = player.engine.decodedFormat.map { Int($0.sampleRate.rounded()) }
+        return BitPerfectStatus.evaluate(enabled: player.engine.bitPerfectEnabled, sourceRateHz: sourceHz, output: output)
+    }
+
     private func report(_ eq: EqStage, _ headroom: HeadroomEstimate) -> String {
         var diagnostics: SourceDiagnostics?
         if case .ready(let ready) = source { diagnostics = ready }
         return DiagnosticsReport.build(DiagnosticsSnapshot(
             source: diagnostics, state: stateText.lowercased(),
             decoderInput: pcmFormatText(player.engine.decodedFormat), decoderName: decoderName, sentToSystem: pcmFormatText(player.engine.outputFormat),
-            eq: eq, headroom: headroom, peak: peak, output: output, transitionFading: player.engine.isCrossfading
+            eq: eq, headroom: headroom, peak: peak, output: output, transitionFading: player.engine.isCrossfading,
+            bitPerfect: bitPerfectStatus
         ))
     }
 
@@ -144,13 +150,18 @@ struct AudioDetailsView: View {
         let engine = player.engine
         let playing = engine.isRunning && player.state.isPlaying
         let spatial = output?.spatialAudio == true
+        let direct = bitPerfectStatus
         return Section {
             ChainStep(title: "Decoder", state: playing ? "Running" : "Idle", appControlled: true, detail: decoderName)
-            ChainStep(title: "Transition", state: engine.isCrossfading ? "Fading" : "Unity", appControlled: true,
-                      detail: "Changes levels only while a transition set up in the Transition Studio plays")
+            ChainStep(title: "Bit-Perfect", state: direct.badge, appControlled: true, detail: direct.detail)
+            ChainStep(title: "Transition", state: engine.bitPerfectEnabled ? "Bypassed" : (engine.isCrossfading ? "Fading" : "Unity"), appControlled: true,
+                      detail: engine.bitPerfectEnabled ? "Bypassed while Bit-Perfect mode is enabled" : "Changes levels only while a transition set up in the Transition Studio plays")
             if !engine.isReady {
                 ChainStep(title: "Equalizer", state: "Not in use", appControlled: true,
                           detail: "Audio engine starts when playback begins")
+            } else if engine.bitPerfectEnabled {
+                ChainStep(title: "Equalizer", state: "Bypassed", appControlled: true,
+                          detail: "Bypassed while Bit-Perfect mode is enabled")
             } else if engine.hasProcessing {
                 ChainStep(title: "Equalizer", state: eq.status.rawValue, appControlled: true,
                           detail: eq.reason + (eq.status == .active ? "; samples beyond full scale are clipped" : ""))

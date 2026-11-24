@@ -83,9 +83,54 @@ final class AudioEngine {
     /// The PCM format the playing file is decoded to, before the app's processing.
     var decodedFormat: AVAudioFormat? { currentSegment(active)?.file.processingFormat }
     var isRunning: Bool { engine.isRunning }
-    /// Whether the equaliser and transition stages are in the graph (they are unless the audio units failed to load).
-    var hasProcessing: Bool { eqUnit != nil }
+    /// Whether the equaliser and transition stages are in the graph (they are unless bypassed by Bit-Perfect or unavailable).
+    var hasProcessing: Bool { eqUnit != nil && !bitPerfectEnabled }
+    private(set) var bitPerfectEnabled = false
+    private var requestedHardwareRate: Double = 0
     var other: Deck { decks[1 - activeIndex] }
+
+    /// Enables or disables Bit-Perfect / Direct Output mode (bypasses EQ, transition stages, and requests track-native hardware sample rate).
+    func setBitPerfect(_ enabled: Bool) {
+        guard bitPerfectEnabled != enabled else { return }
+        bitPerfectEnabled = enabled
+        if !enabled {
+            requestedHardwareRate = 0
+            try? AVAudioSession.sharedInstance().setPreferredSampleRate(0)
+        }
+        guard isReady else { return }
+        let wasRunning = engine.isRunning
+        if wasRunning { engine.pause() }
+        if enabled, let currentRate = decodedFormat?.sampleRate, currentRate > 0 {
+            applyPreferredHardwareSampleRate(currentRate)
+        }
+        reconnectGraph()
+        if wasRunning { try? engine.start() }
+    }
+
+    private func applyPreferredHardwareSampleRate(_ sampleRate: Double) {
+        guard bitPerfectEnabled, sampleRate > 0 else { return }
+        if abs(requestedHardwareRate - sampleRate) < 1 { return }
+        let session = AVAudioSession.sharedInstance()
+        do {
+            try session.setPreferredSampleRate(sampleRate)
+            requestedHardwareRate = sampleRate
+        } catch {
+            NSLog("amp: setPreferredSampleRate(\(sampleRate)) failed: \(error)")
+        }
+    }
+
+    private func reconnectGraph() {
+        engine.disconnectNodeOutput(mixer)
+        if let eqUnit { engine.disconnectNodeOutput(eqUnit) }
+        for (index, deck) in decks.enumerated() {
+            engine.disconnectNodeOutput(deck.player)
+            if let unit = deck.stageUnit { engine.disconnectNodeOutput(unit) }
+            let format = deck.format ?? AVAudioFormat(standardFormatWithSampleRate: 44_100, channels: 2)!
+            connect(deck, bus: index, format: format)
+        }
+        connectOutput()
+        engine.prepare()
+    }
 
     /// Builds the graph (the custom audio units are made asynchronously).
     func setUp() async {
@@ -121,22 +166,23 @@ final class AudioEngine {
     func rebuildAfterMediaServicesReset() {
         guard isReady else { return }
         stopAll()
-        connectOutput()
-        for (index, deck) in decks.enumerated() {
-            let format = deck.format ?? AVAudioFormat(standardFormatWithSampleRate: 44_100, channels: 2)!
-            connect(deck, bus: index, format: format)
-        }
-        engine.prepare()
+        reconnectGraph()
     }
 
     private func connectOutput() {
-        let outputRate = engine.outputNode.outputFormat(forBus: 0).sampleRate
-        let format = AVAudioFormat(standardFormatWithSampleRate: outputRate > 0 ? outputRate : 48_000, channels: 2)!
-        if let eqUnit {
+        let sessionRate = AVAudioSession.sharedInstance().sampleRate
+        let nodeRate = engine.outputNode.outputFormat(forBus: 0).sampleRate
+        let outputRate = bitPerfectEnabled && sessionRate > 0 ? sessionRate : (nodeRate > 0 ? nodeRate : (sessionRate > 0 ? sessionRate : 48_000))
+        let format = AVAudioFormat(standardFormatWithSampleRate: outputRate, channels: 2)!
+        if let eqUnit, !bitPerfectEnabled {
             engine.connect(mixer, to: eqUnit, format: format)
             engine.connect(eqUnit, to: engine.mainMixerNode, format: format)
         } else {
             engine.connect(mixer, to: engine.mainMixerNode, format: format)
+            if bitPerfectEnabled {
+                mixer.outputVolume = 1.0
+                engine.mainMixerNode.outputVolume = 1.0
+            }
         }
         engine.mainMixerNode.removeTap(onBus: 0)
         let tap = self.tap
@@ -146,11 +192,12 @@ final class AudioEngine {
     }
 
     private func connect(_ deck: Deck, bus: Int, format: AVAudioFormat) {
-        if let unit = deck.stageUnit {
+        if let unit = deck.stageUnit, !bitPerfectEnabled {
             engine.connect(deck.player, to: unit, format: format)
             engine.connect(unit, to: mixer, fromBus: 0, toBus: bus, format: format)
         } else {
             engine.connect(deck.player, to: mixer, fromBus: 0, toBus: bus, format: format)
+            if bitPerfectEnabled { deck.player.volume = 1.0 }
         }
         deck.format = format
     }
@@ -161,7 +208,7 @@ final class AudioEngine {
 
     var volume: Float {
         get { mixer.outputVolume }
-        set { mixer.outputVolume = newValue.clamped(0, 1) }
+        set { mixer.outputVolume = bitPerfectEnabled ? 1.0 : newValue.clamped(0, 1) }
     }
 
     func warmFiles(_ urls: [URL]) async { await filePreloader.warm(urls) }
@@ -178,7 +225,18 @@ final class AudioEngine {
         guard isReady else { throw EngineError.notReady }
         guard let file = try? openFile(url) else { throw EngineError.unreadable(url) }
         previewSchedule = nil
-        if startPlaying, active.player.isPlaying, let outgoing = currentSegment(active), outgoing.entryId != entryId,
+        if bitPerfectEnabled {
+            let trackRate = file.processingFormat.sampleRate
+            let previousOutputRate = engine.outputNode.outputFormat(forBus: 0).sampleRate
+            applyPreferredHardwareSampleRate(trackRate)
+            let updatedSessionRate = AVAudioSession.sharedInstance().sampleRate
+            if updatedSessionRate > 0 && abs(updatedSessionRate - previousOutputRate) > 1 {
+                if engine.isRunning { engine.pause() }
+                connectOutput()
+                engine.prepare()
+            }
+        }
+        if !bitPerfectEnabled, startPlaying, active.player.isPlaying, let outgoing = currentSegment(active), outgoing.entryId != entryId,
            decks.allSatisfy({ $0.stageUnit != nil }) {
             // Prepare the idle deck while the old one is still sounding. A short render-clock
             // handoff avoids stopping audio while a new format/decoder is scheduled.

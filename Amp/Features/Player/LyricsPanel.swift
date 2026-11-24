@@ -10,6 +10,8 @@ struct LyricsPanel: View {
     /// button, smaller lines, on the artwork-coloured card. Nil: the full-screen lyrics, with the
     /// source and the lyrics options, drawn on whatever is behind.
     var onExpand: (() -> Void)?
+    /// Editorial full-screen layout with large typography, smooth active-line highlight, and soft depth blur.
+    var immersive = false
     @Environment(\.palette) private var palette
     @Environment(\.colorScheme) private var scheme
     @State private var artworkPalette = ArtworkPaletteState()
@@ -18,12 +20,13 @@ struct LyricsPanel: View {
     var body: some View {
         let colors = LyricsColors(artworkPalette.palette(for: song.url), scheme: scheme)
         let shape = RoundedRectangle(cornerRadius: Radius.large, style: .continuous)
-        LyricsPanelContent(song: song, onExpand: onExpand)
+        LyricsPanelContent(song: song, onExpand: onExpand, immersive: immersive)
             .environment(\.palette, palette.lyrics(colors))
             .environment(\.lyricsColors, colors)
             .environment(\.lyricsCompact, onExpand != nil)
+            .environment(\.lyricsImmersive, immersive)
             .background { if onExpand != nil { CardSurface(colors: colors, shape: shape) } }
-            .clipShape(shape)
+            .clipShape(RoundedRectangle(cornerRadius: onExpand != nil ? Radius.large : 0, style: .continuous))
             .onReceive(NotificationCenter.default.publisher(for: ArtworkLoader.didChange)) { note in
                 if note.object as? String == song.url.path { artworkRevision += 1 }
             }
@@ -59,11 +62,21 @@ private struct LyricsCompactKey: EnvironmentKey {
     static let defaultValue = false
 }
 
+private struct LyricsImmersiveKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
 extension EnvironmentValues {
     /// Lyrics set for the small card in Now Playing: smaller lines, the current one nearer the top.
     var lyricsCompact: Bool {
         get { self[LyricsCompactKey.self] }
         set { self[LyricsCompactKey.self] = newValue }
+    }
+
+    /// Editorial full-screen lyrics mode with large white-lit active line and soft depth-of-field blur.
+    var lyricsImmersive: Bool {
+        get { self[LyricsImmersiveKey.self] }
+        set { self[LyricsImmersiveKey.self] = newValue }
     }
 }
 
@@ -76,9 +89,82 @@ extension AppPalette {
     }
 }
 
+/// Reusable lyrics options menu button (used both in standard headers and floating in immersive full-screen lyrics).
+struct LyricsOptionsButton: View {
+    let song: Song
+    var floatingStyle = false
+    @Environment(LyricsStore.self) private var store
+    @Environment(\.palette) private var palette
+    @State private var searching = false
+    @State private var timingContext: LyricsTimingContext?
+    @State private var searchText = ""
+
+    var body: some View {
+        let lyrics = store.current?.songId == song.id ? store.current : nil
+        Menu {
+            if store.canEmbed {
+                Button { store.embedLyrics() } label: {
+                    Label(L("Embed lyrics in file"), systemImage: "arrow.down.doc")
+                }
+                .disabled(store.embeddingLyrics)
+            }
+            if store.canDownload {
+                Button { store.downloadLyrics() } label: { Label(L("Download lyrics"), systemImage: "arrow.down.circle") }
+                    .disabled(store.savingLyrics)
+            }
+            if let saved = store.savedLyrics {
+                Button(role: .destructive) { store.removeDownloadedLyrics() } label: {
+                    Label(saved.explicitDownload == true ? L("Remove downloaded lyrics") : L("Remove previously saved lyrics"), systemImage: "trash")
+                }.disabled(store.savingLyrics)
+            }
+            if let lyrics, case .synced? = lyrics.parsed {
+                Button {
+                    timingContext = LyricsTimingContext(song: song, lyrics: lyrics)
+                } label: { Label(L("Adjust timing…"), systemImage: "timer") }
+            }
+            Divider()
+            Button { store.refresh() } label: { Label(L("Refresh online lyrics"), systemImage: "arrow.clockwise") }
+            Button {
+                searchText = "\(song.title) \(song.artist)"
+                searching = true
+            } label: { Label(L("Search online…"), systemImage: "magnifyingglass") }
+            if let lyrics, lyrics.hasFileLyrics, lyrics.origin != .file {
+                Button { store.useFileLyrics() } label: { Label(L("Use the file's lyrics"), systemImage: "doc.text") }
+            }
+        } label: {
+            if floatingStyle {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 36, height: 36)
+                    .background(.ultraThinMaterial, in: Circle())
+                    .environment(\.colorScheme, .dark)
+            } else {
+                Image(systemName: "ellipsis.circle").font(.body.weight(.semibold)).foregroundStyle(palette.onSurface)
+                    .frame(width: 44, height: 32).contentShape(Rectangle())
+            }
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .accessibilityLabel("Lyrics options")
+        .sheet(item: $timingContext) { context in
+            if let lyrics = store.current, LyricsTimingContext(song: song, lyrics: lyrics) == context {
+                LyricsTimingEditor(song: song, lyrics: lyrics, context: context, preferences: store.timingPreferences)
+            }
+        }
+        .sheet(isPresented: $searching, onDismiss: { store.closeSearch() }) {
+            LyricsSearchSheet(searchText: $searchText, onDismiss: { searching = false })
+                .task { if !searchText.isBlank { store.search(searchText) } }
+        }
+        .onChange(of: song.id) { _, _ in timingContext = nil }
+        .onChange(of: store.current?.sourceID) { _, _ in timingContext = nil }
+    }
+}
+
 private struct LyricsPanelContent: View {
     let song: Song
     let onExpand: (() -> Void)?
+    let immersive: Bool
     @Environment(LyricsStore.self) private var store
     @Environment(PlayerController.self) private var player
     @Environment(\.palette) private var palette
@@ -90,7 +176,9 @@ private struct LyricsPanelContent: View {
     var body: some View {
         let lyrics = store.current?.songId == song.id ? store.current : nil
         VStack(spacing: 0) {
-            if let onExpand { cardHeader(lyrics, onExpand) } else {
+            if let onExpand {
+                cardHeader(lyrics, onExpand)
+            } else if !immersive {
                 header(lyrics)
                 if let lyrics, case .synced? = lyrics.parsed {
                     Button("Not synced? Adjust timing") {
@@ -101,8 +189,20 @@ private struct LyricsPanelContent: View {
                     .padding(.horizontal, Spacing.heroGutter).padding(.vertical, Spacing.sm)
                 }
             }
-            if let error = store.downloadError { Text(error).font(.footnote).foregroundStyle(.secondary).padding(.horizontal) }
-            if let notice = lyrics?.syncedServiceNotice {
+            if let notice = store.embedNotice {
+                Label(notice, systemImage: "checkmark.circle.fill")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(immersive ? .white.opacity(0.92) : palette.onSurface)
+                    .padding(.horizontal, 12).padding(.vertical, 6)
+                    .background((immersive ? Color.white.opacity(0.16) : palette.surfaceVariant), in: Capsule())
+                    .padding(.vertical, Spacing.xs)
+            }
+            if let error = store.downloadError {
+                Text(error).font(.footnote)
+                    .foregroundStyle(immersive ? Color.white.opacity(0.8) : .secondary)
+                    .padding(.horizontal)
+            }
+            if !immersive, let notice = lyrics?.syncedServiceNotice {
                 Text(notice).font(.caption).foregroundStyle(palette.onSurface)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, compact ? Spacing.lg : Spacing.heroGutter)
@@ -110,7 +210,9 @@ private struct LyricsPanelContent: View {
             }
             if let lyrics, let parsed = lyrics.parsed {
                 switch parsed {
-                case .synced(let lines): SyncedLyricsView(lyrics: parsed, lines: lines, offsetMs: store.timingPreferences.offset(for: LyricsTimingContext(song: song, lyrics: lyrics)))
+                case .synced(let lines):
+                    SyncedLyricsView(lyrics: parsed, lines: lines,
+                                     offsetMs: store.timingPreferences.offset(for: LyricsTimingContext(song: song, lyrics: lyrics)))
                 case .plain(let lines): plain(lines)
                 }
             } else if let onExpand {
@@ -128,7 +230,8 @@ private struct LyricsPanelContent: View {
         .onChange(of: store.current?.sourceID) { _, _ in timingContext = nil }
         .task(id: song.id) { store.shown(song) }
         .sheet(isPresented: $searching, onDismiss: { store.closeSearch() }) {
-            searchSheet.task { if !searchText.isBlank { searchLyrics(searchText) } }
+            LyricsSearchSheet(searchText: $searchText, onDismiss: { searching = false })
+                .task { if !searchText.isBlank { searchLyrics(searchText) } }
         }
     }
 
@@ -177,30 +280,7 @@ private struct LyricsPanelContent: View {
         HStack {
             Text(origin(lyrics)).font(.caption.weight(.semibold)).foregroundStyle(palette.onSurfaceVariant).lineLimit(1)
             Spacer()
-            Menu {
-                if store.canDownload {
-                    Button { store.downloadLyrics() } label: { Label("Download lyrics", systemImage: "arrow.down.circle") }.disabled(store.savingLyrics)
-                }
-                if let saved = store.savedLyrics {
-                    Button(role: .destructive) { store.removeDownloadedLyrics() } label: {
-                        Label(saved.explicitDownload == true ? "Remove downloaded lyrics" : "Remove previously saved lyrics", systemImage: "trash")
-                    }.disabled(store.savingLyrics)
-                }
-                Button { store.refresh() } label: { Label("Refresh online lyrics", systemImage: "arrow.clockwise") }
-                Button {
-                    searchText = "\(song.title) \(song.artist)"
-                    searching = true
-                } label: { Label("Search online…", systemImage: "magnifyingglass") }
-                if let lyrics, lyrics.hasFileLyrics, lyrics.origin != .file {
-                    Button { store.useFileLyrics() } label: { Label("Use the file's lyrics", systemImage: "doc.text") }
-                }
-            } label: {
-                Image(systemName: "ellipsis.circle").font(.body.weight(.semibold)).foregroundStyle(palette.onSurface)
-                    .frame(width: 44, height: 32).contentShape(Rectangle())
-            }
-            .menuStyle(.button)
-            .buttonStyle(.plain)
-            .accessibilityLabel("Lyrics options")
+            LyricsOptionsButton(song: song, floatingStyle: false)
         }
         .padding(.horizontal, Spacing.heroGutter)
     }
@@ -208,7 +288,7 @@ private struct LyricsPanelContent: View {
     private func origin(_ lyrics: SongLyrics?) -> String {
         guard let lyrics, lyrics.text != nil else { return "Lyrics" }
         switch lyrics.origin {
-        case .file: return lyrics.parsed.map { if case .plain = $0 { "Lyrics · not synced" } else { "Lyrics" } } ?? "Lyrics"
+        case .file: return lyrics.parsed.map { if case .plain = $0 { "Lyrics · not synced" } else { "Lyrics · embedded" } } ?? "Lyrics"
         case .online, .onlineSaved:
             return "From \(lyrics.provider ?? "online") · \(lyrics.timing?.label ?? "")" + (store.currentIsDownloaded ? " · downloaded" : (lyrics.origin == .onlineSaved ? " · cached" : ""))
         }
@@ -216,33 +296,40 @@ private struct LyricsPanelContent: View {
 
     private func plain(_ lines: [String]) -> some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: Spacing.sm) {
+            VStack(alignment: .leading, spacing: immersive ? Spacing.md : Spacing.sm) {
                 ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
-                    Text(line.isEmpty ? " " : line).font(compact ? .headline : .title3.weight(.semibold)).foregroundStyle(palette.onSurface)
+                    Text(line.isEmpty ? " " : line)
+                        .font(compact ? .headline : (immersive ? .system(size: 24, weight: .bold) : .title3.weight(.semibold)))
+                        .foregroundStyle(immersive ? Color.white.opacity(0.92) : palette.onSurface)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, compact ? Spacing.lg : Spacing.heroGutter)
             .padding(.vertical, Spacing.lg)
         }
+        .scrollIndicators(.hidden)
     }
 
     private func status(_ lookup: LyricsLookup) -> some View {
         let info = statusText(lookup)
         return VStack(spacing: Spacing.md) {
             Spacer()
-            if lookup.isSearching { ProgressView() }
-            Text(info.0).font(.body).foregroundStyle(palette.onSurfaceVariant).multilineTextAlignment(.center)
+            if lookup.isSearching { ProgressView().tint(immersive ? .white : nil) }
+            Text(info.0).font(.body)
+                .foregroundStyle(immersive ? Color.white.opacity(0.76) : palette.onSurfaceVariant)
+                .multilineTextAlignment(.center)
             if !lookup.isSearching {
                 HStack(spacing: Spacing.sm) {
-                    if info.1 { Button("Retry") { store.refresh() }.buttonStyle(.bordered) }
-                    Button("Search online…") {
+                    if info.1 { Button(L("Retry")) { store.refresh() }.buttonStyle(.bordered) }
+                    Button(L("Search online…")) {
                         searchText = "\(song.title) \(song.artist)"
                         searching = true
                     }
+                    .foregroundStyle(immersive ? .white : palette.primary)
                 }
                 if let url = LyricsWebSearch.url(for: "\(song.title) \(song.artist)") {
-                    Link("Search the web", destination: url)
+                    Link(L("Search the web"), destination: url)
+                        .foregroundStyle(immersive ? Color.white.opacity(0.8) : palette.primary)
                 }
             }
             Spacer()
@@ -264,29 +351,18 @@ private struct LyricsPanelContent: View {
         }
     }
 
-    @ViewBuilder
-    private func searchResults(_ candidates: [LyricsCandidate]) -> some View {
-        if candidates.isEmpty { Text("No results.").foregroundStyle(.secondary) }
-        ForEach(candidates) { candidate in
-            Button {
-                store.choose(candidate)
-                searching = false
-            } label: {
-                VStack(alignment: .leading) {
-                    Text(candidate.trackName).foregroundStyle(.primary)
-                    Text([candidate.artistName, candidate.provider, candidate.timing.label].joined(separator: " · "))
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-            }
-        }
-    }
-
     private func searchLyrics(_ query: String) {
         SearchHistoryStore.shared.remember(query, in: "lyrics")
         store.search(query)
     }
+}
 
-    private var searchSheet: some View {
+struct LyricsSearchSheet: View {
+    @Binding var searchText: String
+    let onDismiss: () -> Void
+    @Environment(LyricsStore.self) private var store
+
+    var body: some View {
         NavigationStack {
             List {
                 Section {
@@ -326,9 +402,31 @@ private struct LyricsPanelContent: View {
             }
             .navigationTitle("Search lyrics online")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { Button("Close") { searching = false } }
+            .toolbar { Button("Close") { onDismiss() } }
         }
         .presentationDetents([.medium, .large])
+    }
+
+    @ViewBuilder
+    private func searchResults(_ candidates: [LyricsCandidate]) -> some View {
+        if candidates.isEmpty { Text("No results.").foregroundStyle(.secondary) }
+        ForEach(candidates) { candidate in
+            Button {
+                store.choose(candidate)
+                onDismiss()
+            } label: {
+                VStack(alignment: .leading) {
+                    Text(candidate.trackName).foregroundStyle(.primary)
+                    Text([candidate.artistName, candidate.provider, candidate.timing.label].joined(separator: " · "))
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    private func searchLyrics(_ query: String) {
+        SearchHistoryStore.shared.remember(query, in: "lyrics")
+        store.search(query)
     }
 }
 
@@ -340,6 +438,8 @@ struct SyncedLyricsView: View {
     @Environment(PlayerController.self) private var player
     @Environment(\.palette) private var palette
     @Environment(\.lyricsCompact) private var compact
+    @Environment(\.lyricsImmersive) private var immersive
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.playerInMotion) private var playerInMotion
     @Environment(\.visualWorkBudget) private var budget
@@ -347,14 +447,15 @@ struct SyncedLyricsView: View {
 
     var body: some View {
         let wordTimed = lines.contains { !($0.words?.isEmpty ?? true) }
-        let interval = wordTimed && budget.allowsDecorativeMotion ? 0.1 : 0.25
+        let wantsSmoothSweep = (wordTimed || immersive) && budget.allowsDecorativeMotion && !reduceMotion
+        let interval = wantsSmoothSweep ? 0.1 : 0.25
         TimelineView(.animation(minimumInterval: interval,
                                 paused: !player.state.isPlaying || !visible || scenePhase != .active || playerInMotion)) { _ in
             let position = LyricsTimingPreferences.lyricsPosition(playbackMs: player.currentPositionMs(), offsetMs: offsetMs)
             let currentLine = lyrics.lineAt(position)
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: compact ? Spacing.md : Spacing.lg) {
+                    LazyVStack(alignment: .leading, spacing: compact ? Spacing.md : (immersive ? 22 : Spacing.lg)) {
                         ForEach(Array(lines.enumerated()), id: \.offset) { index, line in
                             Button { player.seek(to: LyricsTimingPreferences.playbackPosition(lyricMs: line.timeMs, offsetMs: offsetMs)) } label: {
                                 lineText(line, index: index, current: currentLine, position: position)
@@ -365,11 +466,26 @@ struct SyncedLyricsView: View {
                         }
                     }
                     .padding(.horizontal, compact ? Spacing.lg : Spacing.heroGutter)
-                    .padding(.top, compact ? Spacing.lg : 120)
-                    .padding(.bottom, compact ? 200 : 120)
+                    .padding(.top, compact ? Spacing.lg : (immersive ? 38 : 120))
+                    .padding(.bottom, compact ? 200 : (immersive ? 160 : 120))
+                }
+                .scrollIndicators(.hidden)
+                .mask {
+                    if immersive {
+                        LinearGradient(stops: [
+                            .init(color: .clear, location: 0),
+                            .init(color: .white, location: 0.12),
+                            .init(color: .white, location: 0.86),
+                            .init(color: .clear, location: 1),
+                        ], startPoint: .top, endPoint: .bottom)
+                    } else {
+                        Rectangle()
+                    }
                 }
                 .onChange(of: currentLine) { _, line in
-                    withAnimation(.easeInOut(duration: 0.35)) { proxy.scrollTo(max(line, 0), anchor: anchor) }
+                    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.35)) {
+                        proxy.scrollTo(max(line, 0), anchor: anchor)
+                    }
                 }
                 .onAppear { proxy.scrollTo(max(currentLine, 0), anchor: anchor) }
             }
@@ -379,35 +495,68 @@ struct SyncedLyricsView: View {
         .reportsScrollVisibility { visible = $0 }
     }
 
-    /// In the card the current line sits nearer the top, leaving most of it for what comes next.
-    private var anchor: UnitPoint { compact ? UnitPoint(x: 0.5, y: 0.25) : .center }
+    /// In the card the current line sits nearer the top; in immersive mode it frames one blurred past line above.
+    private var anchor: UnitPoint {
+        if compact { return UnitPoint(x: 0.5, y: 0.25) }
+        return immersive ? UnitPoint(x: 0.5, y: 0.30) : .center
+    }
 
     private func wordColor(_ index: Int, sung: Int) -> Color {
+        if immersive {
+            return index <= sung ? Color.white : Color.white.opacity(0.60)
+        }
         if index < sung { return palette.onSurface }
         return index == sung ? palette.primary : palette.onSurfaceVariant
     }
 
+    private func immersiveLineSweep(_ text: String, index: Int, position: Int64) -> Text {
+        guard !reduceMotion, budget.allowsDecorativeMotion else {
+            return Text(text).foregroundColor(.white)
+        }
+        let tokens = text.split(separator: " ", omittingEmptySubsequences: false)
+        guard tokens.count > 1 else {
+            return Text(text).foregroundColor(.white)
+        }
+        let startMs = lines[index].timeMs
+        let nextMs: Int64 = index + 1 < lines.count ? lines[index + 1].timeMs : (startMs + 4_000)
+        let duration = max(min(nextMs - startMs, 9_000), 1_200)
+        let progress = min(max(Double(position - startMs) / Double(duration), 0), 1)
+        let litCount = min(Int(ceil(progress * Double(tokens.count))), tokens.count)
+        return tokens.enumerated().reduce(Text("")) { acc, pair in
+            let suffix = pair.offset == tokens.count - 1 ? "" : " "
+            let color: Color = pair.offset < litCount ? .white : Color.white.opacity(0.62)
+            return acc + Text(String(pair.element) + suffix).foregroundColor(color)
+        }
+    }
+
     private func lineText(_ line: LyricLine, index: Int, current: Int, position: Int64) -> some View {
         let isCurrent = index == current
-        let base = Text(line.text.isEmpty ? "♪" : line.text)
+        let distance = abs(index - current)
+        let text = line.text.isEmpty ? "♪" : line.text
+        let base = Text(text)
         let styled: Text
         if isCurrent, let words = line.words {
             let sung = lyrics.wordAt(line: index, position)
-            // Sung words in the line colour, the active word in the accent, upcoming words dimmed.
-            styled = words.enumerated().reduce(Text("")) { text, item in
-                text + Text(item.element.text).foregroundColor(wordColor(item.offset, sung: sung))
+            styled = words.enumerated().reduce(Text("")) { acc, item in
+                acc + Text(item.element.text).foregroundColor(wordColor(item.offset, sung: sung))
             }
         } else if isCurrent {
-            styled = base.foregroundColor(palette.onSurface)
+            styled = immersive ? immersiveLineSweep(text, index: index, position: position) : base.foregroundColor(palette.onSurface)
+        } else if immersive {
+            let opacity = max(0.50 - Double(max(distance - 1, 0)) * 0.10, 0.24)
+            styled = base.foregroundColor(Color.white.opacity(opacity))
         } else {
-            // Other lines fade with their distance from the current one (in the card every line
-            // stays readable: only the colour marks the current one).
-            let fade = compact ? 1 : max(1 - Double(abs(index - current)) * 0.15, 0.45)
+            let fade = compact ? 1 : max(1 - Double(distance) * 0.15, 0.45)
             styled = base.foregroundColor(palette.onSurfaceVariant.opacity(fade))
         }
+        let blurRadius: CGFloat = (immersive && !isCurrent && !reduceMotion && budget.allowsDecorativeMotion && distance <= 4)
+            ? min(1.6 + CGFloat(distance - 1) * 0.55, 2.8)
+            : 0
         return styled
-            .font(compact ? .headline : .title2.weight(.bold))
+            .font(compact ? .headline : (immersive ? .system(size: 28, weight: .bold) : .title2.weight(.bold)))
+            .lineSpacing(immersive ? 3 : 0)
+            .blur(radius: blurRadius)
             .scaleEffect(isCurrent || compact ? 1 : 0.96, anchor: .leading)
-            .animation(.easeOut(duration: 0.2), value: isCurrent)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.22), value: isCurrent)
     }
 }

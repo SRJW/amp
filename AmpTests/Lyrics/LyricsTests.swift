@@ -964,3 +964,48 @@ private actor GatedLyricsFallback: OnlineLyricsProvider {
         pending = nil
     }
 }
+
+final class LyricsFormatterAndNetEaseTests: XCTestCase {
+    func testLineByLineLRCFlattensWordSyncAndAppliesOffset() {
+        let wordSynced = "[00:10.00]<00:10.00>Hello <00:10.50>world\n[00:15.25]Second line"
+        XCTAssertEqual(
+            LyricsFormatter.lineByLineLRC(from: wordSynced, offsetMs: 0),
+            "[00:10.00]Hello world\n[00:15.25]Second line"
+        )
+        XCTAssertEqual(
+            LyricsFormatter.lineByLineLRC(from: wordSynced, offsetMs: 500),
+            "[00:10.50]Hello world\n[00:15.75]Second line"
+        )
+        XCTAssertEqual(
+            LyricsFormatter.lineByLineLRC(from: wordSynced, offsetMs: -12_000),
+            "[00:00.00]Hello world\n[00:03.25]Second line"
+        )
+    }
+
+    func testNetEaseProviderFetchesAndNormalizesLineByLineSyncedLyrics() async {
+        let http = FakeHTTP()
+        http.respond = { url in
+            if url.path.contains("/api/search/get") {
+                let json = """
+                {"result":{"songs":[{"id":4242,"name":"Test Song","duration":200000,"artists":[{"name":"Someone"}],"album":{"name":"Album"}}]}}
+                """
+                return (200, [:], Data(json.utf8))
+            }
+            if url.path.contains("/api/song/lyric") {
+                let json = """
+                {"lrc":{"lyric":"[00:12.345]Line one\\n[00:18.500]Line two"}}
+                """
+                return (200, [:], Data(json.utf8))
+            }
+            return (404, [:], Data())
+        }
+        let provider = NetEaseLyricsProvider(http: http)
+        let response = await provider.search(query, freeText: nil)
+        guard case .success(let results) = response else {
+            return XCTFail("Expected success, got \(response)")
+        }
+        XCTAssertEqual(results.count, 1)
+        XCTAssertEqual(results[0].provider, "NetEase")
+        XCTAssertEqual(results[0].syncedLyrics, "[00:12.34]Line one\n[00:18.50]Line two")
+    }
+}

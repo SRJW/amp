@@ -787,58 +787,133 @@ private struct ExpandedLyrics: View {
     let next: () -> Void
     @Environment(PlayerController.self) private var player
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.colorScheme) private var scheme
     @State private var artworkPalette = ArtworkPaletteState()
 
     var body: some View {
         let state = player.state
-        let sampled = artworkPalette.palette(for: state.currentSong?.url).forScheme(scheme)
+        let sampled = artworkPalette.palette(for: state.currentSong?.url).forScheme(.dark)
         let colors = LyricsColors(sampled)
-        VStack(spacing: 0) {
-            HStack(spacing: Spacing.xs) {
-                Button { dismiss() } label: {
-                    Image(systemName: "chevron.down").font(.title3.weight(.semibold)).frame(width: 48, height: 48).contentShape(Rectangle())
+        GeometryReader { geo in
+            let heroHeight = geo.size.height * 0.48
+            ZStack(alignment: .top) {
+                // Atmospheric blurred artwork backdrop melted into the cover's tones.
+                ZStack {
+                    LinearGradient(colors: colors.gradient, startPoint: .top, endPoint: .bottom)
+                    if let song = state.currentSong {
+                        SongArtworkView(url: song.url, maxPixels: 300)
+                            .frame(width: geo.size.width * 1.15, height: geo.size.height * 1.15)
+                            .blur(radius: 58)
+                            .opacity(0.68)
+                    }
+                    LinearGradient(
+                        stops: [
+                            .init(color: Color.black.opacity(0.18), location: 0),
+                            .init(color: Color.black.opacity(0.38), location: 0.45),
+                            .init(color: Color.black.opacity(0.56), location: 1),
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
                 }
-                .accessibilityLabel("Close lyrics")
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(state.currentSong?.title ?? "").font(.headline).foregroundStyle(colors.content).lineLimit(1)
-                    Text(state.currentSong?.artist ?? "").font(.caption).foregroundStyle(colors.secondary).lineLimit(1)
+                .ignoresSafeArea()
+
+                // Full-bleed artwork hero at top, softly dissolving downward into the lyrics zone.
+                if let song = state.currentSong {
+                    SongArtworkView(url: song.url, maxPixels: 1200)
+                        .frame(width: geo.size.width, height: heroHeight + geo.safeAreaInsets.top)
+                        .clipped()
+                        .mask(
+                            LinearGradient(
+                                stops: [
+                                    .init(color: .white, location: 0),
+                                    .init(color: .white, location: 0.66),
+                                    .init(color: .clear, location: 1.0),
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                        .ignoresSafeArea(edges: .top)
+                        .contentShape(Rectangle())
+                        .gesture(
+                            DragGesture(minimumDistance: 24)
+                                .onEnded { value in
+                                    let dx = value.translation.width
+                                    let dy = value.translation.height
+                                    if abs(dx) > abs(dy) && abs(dx) > 48 {
+                                        if dx < 0 { next() } else { previous() }
+                                    } else if dy > 70 {
+                                        dismiss()
+                                    }
+                                }
+                        )
                 }
-                Spacer()
+
+                // Main vertical flow: hero spacer -> seam header (title/artist + play/pause) -> synced lyrics.
+                VStack(spacing: 0) {
+                    Color.clear
+                        .frame(height: max(heroHeight - 76, 120))
+                        .allowsHitTesting(false)
+
+                    HStack(alignment: .center, spacing: Spacing.md) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(state.currentSong?.title ?? "")
+                                .font(.system(size: 17, weight: .bold))
+                                .foregroundStyle(.white)
+                                .shadow(color: .black.opacity(0.35), radius: 6, y: 2)
+                                .lineLimit(1)
+                            Text(state.currentSong?.artist ?? "")
+                                .font(.system(size: 13.5, weight: .medium))
+                                .foregroundStyle(Color.white.opacity(0.82))
+                                .shadow(color: .black.opacity(0.30), radius: 4, y: 1)
+                                .lineLimit(1)
+                        }
+                        Spacer(minLength: Spacing.sm)
+                        Button { player.togglePlayPause() } label: {
+                            Image(systemName: state.isPlaying ? "pause.fill" : "play.fill")
+                                .font(.system(size: 19, weight: .bold))
+                                .contentTransition(.symbolEffect(.replace))
+                                .foregroundStyle(.white)
+                                .shadow(color: .black.opacity(0.35), radius: 6, y: 2)
+                                .frame(width: 44, height: 44)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(state.isPlaying ? "Pause" : "Play")
+                    }
+                    .padding(.horizontal, Spacing.heroGutter)
+                    .padding(.bottom, Spacing.xs)
+
+                    if let song = state.currentSong {
+                        LyricsPanel(song: song, immersive: true)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else {
+                        Spacer()
+                    }
+                }
+
+                // Subtle floating top bar (dismiss + options including Embed in file & Adjust timing).
+                HStack {
+                    Button { dismiss() } label: {
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 36, height: 36)
+                            .background(.ultraThinMaterial, in: Circle())
+                            .environment(\.colorScheme, .dark)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Close lyrics")
+                    Spacer()
+                    if let song = state.currentSong {
+                        LyricsOptionsButton(song: song, floatingStyle: true)
+                    }
+                }
+                .padding(.horizontal, Spacing.lg)
+                .padding(.top, Spacing.sm)
             }
-            .foregroundStyle(colors.content)
-            .padding(.leading, Spacing.xs)
-            .padding(.trailing, Spacing.lg)
-            .padding(.top, Spacing.sm)
-            if let song = state.currentSong {
-                LyricsPanel(song: song).frame(maxHeight: .infinity)
-            } else {
-                Spacer()
-            }
-            HStack(spacing: Spacing.xxl) {
-                Button(action: previous) {
-                    Image(systemName: "backward.fill").font(.title).frame(width: 52, height: 52).contentShape(Rectangle())
-                }
-                .accessibilityLabel("Previous")
-                Button { player.togglePlayPause() } label: {
-                    Image(systemName: state.isPlaying ? "pause.fill" : "play.fill")
-                        .font(.system(size: 26, weight: .bold))
-                        .contentTransition(.symbolEffect(.replace))
-                        .foregroundStyle(Color(argb: sampled.onButtonFill))
-                        .frame(width: 60, height: 60)
-                        .background(Circle().fill(Color(argb: sampled.buttonFill)))
-                }
-                .accessibilityLabel(state.isPlaying ? "Pause" : "Play")
-                Button(action: next) {
-                    Image(systemName: "forward.fill").font(.title).frame(width: 52, height: 52).contentShape(Rectangle())
-                }
-                .accessibilityLabel("Next")
-            }
-            .foregroundStyle(colors.content)
-            .padding(.vertical, Spacing.md)
         }
-        .buttonStyle(.plain)
-        .background(LinearGradient(colors: colors.gradient, startPoint: .top, endPoint: .bottom).ignoresSafeArea())
+        .preferredColorScheme(.dark)
         .task(id: state.currentSong?.url) {
             guard let url = state.currentSong?.url else { return }
             let revision = ArtworkLoader.shared.revision(for: url.path)

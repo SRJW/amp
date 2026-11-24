@@ -26,6 +26,8 @@ final class AppSettings {
         var pauseOnDisconnect = true
         /// Resume automatically from the same position when headphones reconnect after an automatic disconnect pause.
         var resumeOnConnect = false
+        /// Bypass DSP/EQ/crossfades and match hardware sample rate (for wired USB-C/Lightning DACs).
+        var bitPerfectMode = false
         /// The 5 configurable secondary action buttons on Now Playing.
         var nowPlayingButtons: [NowPlayingActionButton] = NowPlayingActionButton.defaults
 
@@ -48,6 +50,7 @@ final class AppSettings {
             continuousPlayback = try c.decodeIfPresent(Bool.self, forKey: .continuousPlayback) ?? false
             pauseOnDisconnect = try c.decodeIfPresent(Bool.self, forKey: .pauseOnDisconnect) ?? true
             resumeOnConnect = try c.decodeIfPresent(Bool.self, forKey: .resumeOnConnect) ?? false
+            bitPerfectMode = try c.decodeIfPresent(Bool.self, forKey: .bitPerfectMode) ?? false
             let decodedButtons = (try? c.decodeIfPresent([NowPlayingActionButton].self, forKey: .nowPlayingButtons)) ?? NowPlayingActionButton.defaults
             nowPlayingButtons = NowPlayingActionButton.normalized(decodedButtons)
         }
@@ -125,6 +128,11 @@ final class AppSettings {
     var resumeOnConnect: Bool {
         get { stored.resumeOnConnect }
         set { update { $0.resumeOnConnect = newValue } }
+    }
+
+    var bitPerfectMode: Bool {
+        get { stored.bitPerfectMode }
+        set { update { $0.bitPerfectMode = newValue } }
     }
 
     var nowPlayingButtons: [NowPlayingActionButton] {

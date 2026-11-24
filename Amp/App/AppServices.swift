@@ -38,7 +38,7 @@ final class AppServices {
         search = SearchStore(library: library)
         sound = SoundStore(kernel: player.engine.eqKernel)
         lyrics = LyricsStore(database: database,
-                             repository: OnlineLyricsRepository(providers: [LrclibProvider(), LyricsOvhProvider()],
+                             repository: OnlineLyricsRepository(providers: [LrclibProvider(), NetEaseLyricsProvider(), LyricsOvhProvider()],
                                  cache: FileOnlineLyricsCache(folder: LibraryPaths.cachesFolder.appending(path: "online-lyrics")),
                                  downloads: FileOnlineLyricsCache(folder: LibraryPaths.supportFolder.appending(path: "lyrics-downloads")),
                                  legacy: FileOnlineLyricsCache()))

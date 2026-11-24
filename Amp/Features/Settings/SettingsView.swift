@@ -1253,7 +1253,18 @@ private enum TransitionStyleOption: String, CaseIterable, Identifiable {
 
 private struct AudioSettingsView: View {
     @Environment(AppSettings.self) private var settings
+    @Environment(PlayerController.self) private var player
     @Environment(\.palette) private var palette
+
+    private var bitPerfectBinding: Binding<Bool> {
+        Binding(
+            get: { settings.bitPerfectMode },
+            set: { enabled in
+                settings.bitPerfectMode = enabled
+                player.setBitPerfect(enabled)
+            }
+        )
+    }
 
     var body: some View {
         @Bindable var settings = settings
@@ -1273,6 +1284,19 @@ private struct AudioSettingsView: View {
                         .accessibilityIdentifier("resumeOnConnectToggle")
                 }
                 Text(L("Supports wired and Bluetooth headphones. Auto-resume continues from the exact position where playback paused on disconnect and will not start if you paused manually."))
+                    .font(.footnote)
+                    .foregroundStyle(palette.onSurfaceVariant)
+                    .padding(.horizontal, Spacing.lg)
+
+                SettingsGroup(L("Direct Output")) {
+                    Toggle(L("Bit-Perfect Mode"), isOn: bitPerfectBinding)
+                        .font(.body.weight(.medium))
+                        .padding(.horizontal, Spacing.lg)
+                        .padding(.vertical, 14)
+                        .accessibilityIdentifier("bitPerfectModeToggle")
+                }
+                .padding(.top, Spacing.md)
+                Text(L("Bypasses the equalizer, transitions, and digital gain, and requests each track's native sample rate from iOS. True bit-perfect playback requires a wired USB-C or Lightning external DAC; Bluetooth and built-in speakers are still resampled by the system."))
                     .font(.footnote)
                     .foregroundStyle(palette.onSurfaceVariant)
                     .padding(.horizontal, Spacing.lg)

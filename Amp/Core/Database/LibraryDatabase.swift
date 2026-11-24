@@ -249,6 +249,10 @@ extension LibraryDatabase {
         try db.query("SELECT lyrics FROM songs WHERE id = ?", [songId]) { $0.optionalString("lyrics") }.first ?? nil
     }
 
+    func updateLyrics(songId: Int64, lyrics: String?) throws {
+        try db.execute("UPDATE songs SET lyrics = ? WHERE id = ?", [lyrics, songId])
+    }
+
     func updateSongTags(songId: Int64, title: String, artist: String, album: String) throws {
         try db.execute("UPDATE songs SET title = ?, artist = ?, album = ? WHERE id = ?", [title, artist, album, songId])
     }

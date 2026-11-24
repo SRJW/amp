@@ -79,12 +79,20 @@ final class LyricsStore {
     let timingPreferences = LyricsTimingPreferences()
     private(set) var savedLyrics: CachedLyrics?
     private(set) var downloadError: String?
+    private(set) var embedNotice: String?
     private(set) var savingLyrics = false
+    private(set) var embeddingLyrics = false
     private var preferredFileSongs: Set<Int64> = []
+    private var fromSidecarLRC = false
     var currentIsDownloaded: Bool {
         savedLyrics?.explicitDownload == true && savedLyrics?.candidate == online?.candidate
     }
     var canDownload: Bool { current?.origin != .file && online?.candidate?.bestText != nil && !currentIsDownloaded }
+    var canEmbed: Bool {
+        guard let song, let current, let text = current.text, !text.isBlank else { return false }
+        let offset = timingPreferences.offset(for: LyricsTimingContext(song: song, lyrics: current))
+        return current.origin != .file || fromSidecarLRC || offset != 0
+    }
 
     private let database: LibraryDatabase
     private let repository: OnlineLyricsRepository
@@ -110,6 +118,19 @@ final class LyricsStore {
         self.repository = repository
     }
 
+    /// Reads embedded DB lyrics, falling back to an adjacent `<track>.lrc` sidecar file if it offers synced lines.
+    private func readLocalLyrics(for song: Song) -> (text: String?, isSidecar: Bool) {
+        let dbLyrics = try? database.lyrics(songId: song.id)
+        let dbTiming = Self.timing(dbLyrics)
+        if dbTiming >= .line { return (dbLyrics, false) }
+        let sidecarURL = song.url.deletingPathExtension().appendingPathExtension("lrc")
+        if let raw = try? String(contentsOf: sidecarURL, encoding: .utf8).nonBlank,
+           Self.timing(raw) > dbTiming {
+            return (raw, true)
+        }
+        return (dbLyrics, false)
+    }
+
     /// The lyrics page shows [song]: read its file lyrics and look online if needed (once per song).
     func shown(_ song: Song) {
         let metadataChanged = self.song?.lyricsTrack != song.lyricsTrack
@@ -117,9 +138,11 @@ final class LyricsStore {
             if metadataChanged { online = nil }
             cancelSearch()
             self.song = song
-            embedded = try? database.lyrics(songId: song.id)
+            let local = readLocalLyrics(for: song)
+            embedded = local.text
+            fromSidecarLRC = local.isSidecar
             manual = .idle
-            savedLyrics = nil; downloadError = nil
+            savedLyrics = nil; downloadError = nil; embedNotice = nil
             Task {
                 let saved = await repository.saved(song.lyricsTrack)
                 guard self.song?.lyricsTrack == song.lyricsTrack else { return }
@@ -146,6 +169,41 @@ final class LyricsStore {
                 let saved = await repository.saved(song.lyricsTrack)
                 if self.song?.lyricsTrack == song.lyricsTrack { savedLyrics = saved }
             } catch { if self.song?.lyricsTrack == song.lyricsTrack { downloadError = "Lyrics could not be saved. Check available storage and retry." } }
+        }
+    }
+
+    /// Writes the active lyrics as clean line-by-line LRC directly into the audio file's tags
+    /// (MP3 USLT, MP4/M4A/ALAC ©lyr, FLAC/Ogg LYRICS) and updates the local database.
+    func embedLyrics() {
+        guard !embeddingLyrics, let song, let current, let rawText = current.text?.nonBlank else { return }
+        let context = LyricsTimingContext(song: song, lyrics: current)
+        let offset = timingPreferences.offset(for: context)
+        let formatted = LyricsFormatter.lineByLineLRC(from: rawText, offsetMs: offset)
+        let targetURL = song.url
+        let songId = song.id
+        let track = song.lyricsTrack
+        embeddingLyrics = true
+        downloadError = nil
+        embedNotice = nil
+        Task {
+            defer { embeddingLyrics = false }
+            do {
+                try await Task.detached(priority: .userInitiated) {
+                    try TagWriter.write(TagWriteRequest(lyrics: formatted), to: targetURL)
+                }.value
+                try? database.updateLyrics(songId: songId, lyrics: formatted)
+                if offset != 0 { try? timingPreferences.save(0, for: context) }
+                guard self.song?.lyricsTrack == track else { return }
+                embedded = formatted
+                fromSidecarLRC = false
+                preferredFileSongs.insert(songId)
+                online = OnlineView(songId: songId, lookup: .idle)
+                embedNotice = L("Lyrics embedded in file")
+                publish()
+            } catch {
+                guard self.song?.lyricsTrack == track else { return }
+                downloadError = error.localizedDescription
+            }
         }
     }
 
