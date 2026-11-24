@@ -940,7 +940,8 @@ private struct ExpandedLyrics: View {
 
                     if let song = state.currentSong {
                         LyricsPanel(song: song, immersive: true)
-                            .frame(width: width, maxHeight: .infinity)
+                            .frame(width: width)
+                            .frame(maxHeight: .infinity)
                     } else {
                         Spacer()
                     }
