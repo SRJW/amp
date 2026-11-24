@@ -364,6 +364,7 @@ struct ArtistDetailView: View {
     @Environment(PlayerController.self) private var player
     @Environment(AppRouter.self) private var router
     @Environment(AppSettings.self) private var settings
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var albums: [Album] = []
     @State private var primary: [Song] = []
     @State private var featured: [Song] = []
@@ -393,6 +394,7 @@ struct ArtistDetailView: View {
         let sampled = artworkPalette.palette(for: source).forScheme(.dark)
         let colors = LyricsColors(sampled)
         let baseTone = colors.gradient.first ?? colors.surface
+        let midTone = colors.surface
         let deepTone = colors.gradient.last ?? colors.surface
         let allSongs = allArtistSongs
         let sections = ArtistPageOrganizer.organize(albums: albums, songs: allSongs, facts: library.browseFacts)
@@ -401,21 +403,22 @@ struct ArtistDetailView: View {
 
         GeometryReader { geo in
             let width = geo.size.width
-            let heroHeight = min(max(width * 1.04, 370), 450)
+            let heroHeight = min(max(width * 1.06, 385), 460)
             ScrollView {
                 if let artist {
                     LazyVStack(alignment: .leading, spacing: 0) {
-                        // Full-bleed artist hero photo smoothly dissolving into the rich artist canvas.
+                        // Full-bleed artist hero photo with Apple Music progressive blur dissolve into the artist tone.
                         ZStack(alignment: .bottom) {
-                            ArtistArtworkView(artist: artist, fontSize: 112, maxPixels: 1200)
+                            // Progressive blur bridge across shoulders/chest for seamless melt into solid canvas.
+                            ArtistArtworkView(artist: artist, fontSize: 112, maxPixels: 600)
                                 .frame(width: width, height: heroHeight)
                                 .clipped()
+                                .blur(radius: 18)
                                 .mask(
                                     LinearGradient(
                                         stops: [
-                                            .init(color: .white, location: 0.00),
-                                            .init(color: .white, location: 0.56),
-                                            .init(color: .white.opacity(0.65), location: 0.76),
+                                            .init(color: .clear, location: 0.44),
+                                            .init(color: .white.opacity(0.92), location: 0.70),
                                             .init(color: .clear, location: 1.00),
                                         ],
                                         startPoint: .top,
@@ -424,40 +427,61 @@ struct ArtistDetailView: View {
                                 )
                                 .accessibilityHidden(true)
 
-                            // Gentle bottom tonal bridge behind the artist name.
+                            // Sharp upper portrait fading smoothly downward over the blurred bridge.
+                            ArtistArtworkView(artist: artist, fontSize: 112, maxPixels: 1200)
+                                .frame(width: width, height: heroHeight)
+                                .clipped()
+                                .mask(
+                                    LinearGradient(
+                                        stops: [
+                                            .init(color: .white, location: 0.00),
+                                            .init(color: .white, location: 0.54),
+                                            .init(color: .white.opacity(0.68), location: 0.70),
+                                            .init(color: .white.opacity(0.18), location: 0.85),
+                                            .init(color: .clear, location: 1.00),
+                                        ],
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    )
+                                )
+                                .accessibilityHidden(true)
+
+                            // Smooth tonal blend into the page canvas right behind the artist's name.
                             LinearGradient(
                                 stops: [
                                     .init(color: .clear, location: 0.00),
-                                    .init(color: baseTone.opacity(0.55), location: 0.65),
-                                    .init(color: baseTone.opacity(0.92), location: 1.00),
+                                    .init(color: baseTone.opacity(0.42), location: 0.45),
+                                    .init(color: baseTone.opacity(0.90), location: 0.85),
+                                    .init(color: baseTone, location: 1.00),
                                 ],
                                 startPoint: .top,
                                 endPoint: .bottom
                             )
-                            .frame(height: 140)
+                            .frame(height: 150)
                             .allowsHitTesting(false)
 
                             Text(artist.name)
-                                .font(.system(size: 35, weight: .bold))
+                                .font(.system(size: 34, weight: .bold))
+                                .tracking(-0.4)
                                 .foregroundStyle(.white)
                                 .multilineTextAlignment(.center)
                                 .lineLimit(2)
-                                .shadow(color: .black.opacity(0.28), radius: 10, y: 2)
+                                .shadow(color: .black.opacity(0.24), radius: 8, y: 2)
                                 .padding(.horizontal, 24)
-                                .padding(.bottom, 10)
+                                .padding(.bottom, 14)
                                 .accessibilityIdentifier("collectionHeroTitle")
                         }
                         .frame(width: width, height: heroHeight)
 
-                        // Centered 3-button action row: Info (i) · Play (white circle) · Star (favorite).
-                        HStack(spacing: 22) {
+                        // Centered 3-button Apple Music action row: Info (i) · Play (white circle) · Star (favorite).
+                        HStack(spacing: 24) {
                             Button { showsInfoSheet = true } label: {
                                 Image(systemName: "info")
                                     .font(.system(size: 19, weight: .semibold))
                                     .foregroundStyle(.white)
-                                    .frame(width: 48, height: 48)
-                                    .background(Circle().fill(Color.white.opacity(0.18)))
-                                    .overlay(Circle().strokeBorder(Color.white.opacity(0.14), lineWidth: 0.75))
+                                    .frame(width: 50, height: 50)
+                                    .background(Circle().fill(Color.white.opacity(0.15)))
+                                    .overlay(Circle().strokeBorder(Color.white.opacity(0.16), lineWidth: 0.75))
                             }
                             .buttonStyle(FloatingControlPressStyle())
                             .accessibilityLabel(L("Artist info"))
@@ -473,9 +497,9 @@ struct ArtistDetailView: View {
                                     .font(.system(size: 26, weight: .bold))
                                     .foregroundStyle(baseTone)
                                     .offset(x: isPlayingArtist ? 0 : 2)
-                                    .frame(width: 66, height: 66)
+                                    .frame(width: 68, height: 68)
                                     .background(Circle().fill(Color.white))
-                                    .shadow(color: .black.opacity(0.22), radius: 12, y: 5)
+                                    .shadow(color: .black.opacity(0.20), radius: 12, y: 5)
                             }
                             .buttonStyle(FloatingControlPressStyle())
                             .disabled(allSongs.isEmpty)
@@ -483,55 +507,57 @@ struct ArtistDetailView: View {
                             .accessibilityLabel(isPlayingArtist ? L("Pause") : L("Play"))
 
                             let isFav = settings.isArtistFavorite(artistId)
-                            Button {
-                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            AppleMusicFavoriteButton(
+                                itemID: artistId,
+                                isFavorite: isFav,
+                                iconSize: 20,
+                                hitSize: 50,
+                                ink: .white,
+                                reduceMotion: reduceMotion,
+                                addLabel: L("Favorite artist"),
+                                removeLabel: L("Remove artist from favorites")
+                            ) {
                                 settings.toggleFavoriteArtist(artistId)
-                            } label: {
-                                Image(systemName: isFav ? "star.fill" : "star")
-                                    .font(.system(size: 19, weight: .semibold))
-                                    .foregroundStyle(.white)
-                                    .frame(width: 48, height: 48)
-                                    .background(Circle().fill(Color.white.opacity(isFav ? 0.30 : 0.18)))
-                                    .overlay(Circle().strokeBorder(Color.white.opacity(0.14), lineWidth: 0.75))
                             }
-                            .buttonStyle(FloatingControlPressStyle())
-                            .accessibilityLabel(isFav ? L("Remove artist from favorites") : L("Favorite artist"))
+                            .background(Circle().fill(Color.white.opacity(isFav ? 0.24 : 0.15)))
+                            .overlay(Circle().strokeBorder(Color.white.opacity(0.16), lineWidth: 0.75))
                         }
                         .frame(maxWidth: .infinity)
-                        .padding(.top, 10)
-                        .padding(.bottom, 22)
+                        .padding(.top, 4)
+                        .padding(.bottom, 24)
 
-                        // Featured / Latest Release translucent card.
+                        // Featured / Latest Release translucent card (matching Apple Music IMG_1683.PNG).
                         if let featuredAlbum = sections.featuredAlbum {
                             Button { router.open(.album(featuredAlbum.id)) } label: {
                                 HStack(spacing: 14) {
-                                    AlbumArtworkView(albumId: featuredAlbum.id, maxPixels: 300)
-                                        .frame(width: 84, height: 84)
-                                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                    AlbumArtworkView(albumId: featuredAlbum.id, maxPixels: 320)
+                                        .frame(width: 94, height: 94)
+                                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                                         .shadow(color: .black.opacity(0.22), radius: 8, y: 3)
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(L("Latest Release"))
-                                            .font(.system(size: 12.5, weight: .medium))
-                                            .foregroundStyle(Color.white.opacity(0.68))
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text(featuredEyebrow(featuredAlbum))
+                                            .font(.system(size: 13, weight: .regular))
+                                            .foregroundStyle(Color.white.opacity(0.72))
                                             .lineLimit(1)
                                         Text(featuredAlbum.title)
                                             .font(.system(size: 16.5, weight: .bold))
                                             .foregroundStyle(.white)
-                                            .lineLimit(1)
-                                        Text(albumDescription(featuredAlbum))
+                                            .lineLimit(2)
+                                            .multilineTextAlignment(.leading)
+                                        Text(featuredSubtitle(featuredAlbum))
                                             .font(.system(size: 13.5, weight: .regular))
-                                            .foregroundStyle(Color.white.opacity(0.76))
+                                            .foregroundStyle(Color.white.opacity(0.74))
                                             .lineLimit(2)
                                             .multilineTextAlignment(.leading)
                                     }
                                     Spacer(minLength: 0)
                                 }
                                 .padding(14)
-                                .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.white.opacity(0.11)))
-                                .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Color.white.opacity(0.14), lineWidth: 0.75))
+                                .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(Color.white.opacity(0.10)))
+                                .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(Color.white.opacity(0.16), lineWidth: 0.75))
                             }
                             .buttonStyle(PressScaleStyle())
-                            .padding(.horizontal, 18)
+                            .padding(.horizontal, 20)
                             .padding(.bottom, 26)
                         }
 
@@ -540,14 +566,14 @@ struct ArtistDetailView: View {
                             Button { showsAllSongsSheet = true } label: {
                                 HStack(spacing: 5) {
                                     Text(L("Top Songs"))
-                                        .font(.system(size: 22, weight: .bold))
+                                        .font(.system(size: 21, weight: .bold))
                                         .foregroundStyle(.white)
                                     Image(systemName: "chevron.right")
-                                        .font(.system(size: 16, weight: .bold))
-                                        .foregroundStyle(Color.white.opacity(0.55))
+                                        .font(.system(size: 15, weight: .bold))
+                                        .foregroundStyle(Color.white.opacity(0.62))
                                     Spacer()
                                 }
-                                .padding(.horizontal, 18)
+                                .padding(.horizontal, 20)
                                 .padding(.bottom, 10)
                                 .contentShape(Rectangle())
                             }
@@ -559,12 +585,12 @@ struct ArtistDetailView: View {
                             }
                         }
 
-                        // Essential Albums (up to 3 flagship records in Apple Music vertical feature rows).
-                        if !sections.essentialAlbums.isEmpty {
+                        // Essential Albums (vertical 96×96 feature cards when the artist has full albums).
+                        if !sections.fullAlbums.isEmpty && !sections.essentialAlbums.isEmpty {
                             Text(L("Essential Albums"))
-                                .font(.system(size: 22, weight: .bold))
+                                .font(.system(size: 21, weight: .bold))
                                 .foregroundStyle(.white)
-                                .padding(.horizontal, 18)
+                                .padding(.horizontal, 20)
                                 .padding(.top, 28)
                                 .padding(.bottom, 14)
 
@@ -584,19 +610,19 @@ struct ArtistDetailView: View {
                                                     .multilineTextAlignment(.leading)
                                                 Text(albumDescription(album))
                                                     .font(.system(size: 13.5, weight: .regular))
-                                                    .foregroundStyle(Color.white.opacity(0.70))
+                                                    .foregroundStyle(Color.white.opacity(0.72))
                                                     .lineLimit(2)
                                                     .multilineTextAlignment(.leading)
                                             }
                                             Spacer(minLength: 4)
                                             Image(systemName: "chevron.right")
                                                 .font(.system(size: 14, weight: .semibold))
-                                                .foregroundStyle(Color.white.opacity(0.45))
+                                                .foregroundStyle(Color.white.opacity(0.48))
                                         }
                                         .contentShape(Rectangle())
                                     }
                                     .buttonStyle(PressScaleStyle())
-                                    .padding(.horizontal, 18)
+                                    .padding(.horizontal, 20)
                                 }
                             }
                         }
@@ -604,7 +630,7 @@ struct ArtistDetailView: View {
                         // Albums horizontal carousel (full albums, or all releases if none are >= 7 tracks).
                         let carouselAlbums = sections.fullAlbums.isEmpty ? albums.sorted(by: { $0.year > $1.year }) : sections.fullAlbums
                         if !carouselAlbums.isEmpty {
-                            artistAlbumCarousel(title: L("Albums"), items: carouselAlbums)
+                            artistAlbumCarousel(title: sections.fullAlbums.isEmpty ? L("Singles & EPs") : L("Albums"), items: carouselAlbums)
                         }
 
                         // Singles & EPs horizontal carousel (shown separately when full albums also exist).
@@ -615,9 +641,9 @@ struct ArtistDetailView: View {
                         // Features & Credited sections (if present).
                         if !featured.isEmpty {
                             Text(L("Features"))
-                                .font(.system(size: 22, weight: .bold))
+                                .font(.system(size: 21, weight: .bold))
                                 .foregroundStyle(.white)
-                                .padding(.horizontal, 18)
+                                .padding(.horizontal, 20)
                                 .padding(.top, 28)
                                 .padding(.bottom, 10)
                             ForEach(Array(featured.prefix(10).enumerated()), id: \.element.id) { index, song in
@@ -628,9 +654,9 @@ struct ArtistDetailView: View {
 
                         if !unverified.isEmpty {
                             Text(L("Credited"))
-                                .font(.system(size: 22, weight: .bold))
+                                .font(.system(size: 21, weight: .bold))
                                 .foregroundStyle(.white)
-                                .padding(.horizontal, 18)
+                                .padding(.horizontal, 20)
                                 .padding(.top, 28)
                                 .padding(.bottom, 10)
                             ForEach(Array(unverified.prefix(10).enumerated()), id: \.element.id) { index, song in
@@ -644,7 +670,7 @@ struct ArtistDetailView: View {
                                 .padding(.top, 24)
                         }
 
-                        Color.clear.frame(height: AppNavigationMetrics.reservedHeight + 24)
+                        Color.clear.frame(height: AppNavigationMetrics.reservedHeight + 28)
                     }
                     .frame(width: width)
                 } else {
@@ -750,15 +776,15 @@ struct ArtistDetailView: View {
         .background {
             ZStack {
                 LinearGradient(
-                    colors: [baseTone, colors.surface, deepTone],
+                    colors: [baseTone, midTone, deepTone],
                     startPoint: .top,
                     endPoint: .bottom
                 )
                 LinearGradient(
                     stops: [
-                        .init(color: Color.black.opacity(0.10), location: 0.0),
-                        .init(color: Color.black.opacity(0.24), location: 0.55),
-                        .init(color: Color.black.opacity(0.34), location: 1.0),
+                        .init(color: Color.black.opacity(0.04), location: 0.0),
+                        .init(color: Color.black.opacity(0.12), location: 0.55),
+                        .init(color: Color.black.opacity(0.20), location: 1.0),
                     ],
                     startPoint: .top,
                     endPoint: .bottom
@@ -776,6 +802,20 @@ struct ArtistDetailView: View {
         if let key = library.artist(artistId)?.artistKey, !key.isEmpty {
             unverified = (try? db.unverifiedSongs(artistKey: key)) ?? []
         }
+    }
+
+    private func featuredEyebrow(_ album: Album) -> String {
+        if (1900...2099).contains(album.year) {
+            return "\(L("Latest Release")) · \(album.year)"
+        }
+        return L("Latest Release")
+    }
+
+    private func featuredSubtitle(_ album: Album) -> String {
+        let albumSongs = (primary + featured).filter { $0.albumId == album.id }
+        let countText = countLabel(max(album.songCount, albumSongs.count), "song")
+        let genres = Array(Set(albumSongs.compactMap { $0.genre?.nonBlank })).sorted().prefix(2).joined(separator: ", ")
+        return genres.isEmpty ? countText : "\(countText) · \(genres)"
     }
 
     private func albumDescription(_ album: Album) -> String {
@@ -801,7 +841,7 @@ struct ArtistDetailView: View {
                 } label: {
                     HStack(spacing: 12) {
                         SongArtworkView(song: song, maxPixels: 160)
-                            .frame(width: 48, height: 48)
+                            .frame(width: 46, height: 46)
                             .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                         VStack(alignment: .leading, spacing: 2) {
                             HStack(spacing: 6) {
@@ -817,8 +857,8 @@ struct ArtistDetailView: View {
                             }
                             if !subtitleParts.isEmpty {
                                 Text(subtitleParts.joined(separator: " · "))
-                                    .font(.system(size: 13, weight: .regular))
-                                    .foregroundStyle(Color.white.opacity(0.66))
+                                    .font(.system(size: 13.5, weight: .regular))
+                                    .foregroundStyle(Color.white.opacity(0.68))
                                     .lineLimit(1)
                             }
                         }
@@ -833,7 +873,7 @@ struct ArtistDetailView: View {
                 } label: {
                     Image(systemName: "ellipsis")
                         .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(Color.white.opacity(0.78))
+                        .foregroundStyle(Color.white.opacity(0.82))
                         .frame(width: 36, height: 44)
                         .contentShape(Rectangle())
                 }
@@ -841,7 +881,7 @@ struct ArtistDetailView: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel(L("Song options"))
             }
-            .padding(.horizontal, 18)
+            .padding(.horizontal, 20)
             .padding(.vertical, 8)
             .contextMenu {
                 SongActionItems(song: song, actions: songActions)
@@ -849,10 +889,10 @@ struct ArtistDetailView: View {
 
             if showsDivider {
                 Rectangle()
-                    .fill(Color.white.opacity(0.12))
+                    .fill(Color.white.opacity(0.14))
                     .frame(height: 0.5)
                     .padding(.leading, 78)
-                    .padding(.trailing, 18)
+                    .padding(.trailing, 20)
             }
         }
     }
@@ -860,9 +900,9 @@ struct ArtistDetailView: View {
     private func artistAlbumCarousel(title: String, items: [Album]) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             Text(title)
-                .font(.system(size: 22, weight: .bold))
+                .font(.system(size: 21, weight: .bold))
                 .foregroundStyle(.white)
-                .padding(.horizontal, 18)
+                .padding(.horizontal, 20)
 
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(alignment: .top, spacing: 14) {
@@ -880,7 +920,7 @@ struct ArtistDetailView: View {
                                 if (1900...2099).contains(album.year) {
                                     Text(String(album.year))
                                         .font(.system(size: 13, weight: .regular))
-                                        .foregroundStyle(Color.white.opacity(0.66))
+                                        .foregroundStyle(Color.white.opacity(0.68))
                                         .lineLimit(1)
                                 }
                             }
@@ -889,7 +929,7 @@ struct ArtistDetailView: View {
                         .buttonStyle(PressScaleStyle())
                     }
                 }
-                .padding(.horizontal, 18)
+                .padding(.horizontal, 20)
             }
         }
         .padding(.top, 28)

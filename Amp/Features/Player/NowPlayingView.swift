@@ -519,8 +519,7 @@ struct NowPlayingView: View {
 
 }
 
-/// Apple Music–style favorite star button: instant optimistic state + single-pass GPU keyframeAnimator
-/// (zero layout mutation, zero Task.sleep jitter, 120 Hz ProMotion fluid).
+/// Now Playing favorite star button delegating to the shared Apple Music 120 Hz star choreography.
 private struct PlayerFavoriteButton: View {
     let songID: Int64
     let isFavorite: Bool
@@ -529,141 +528,16 @@ private struct PlayerFavoriteButton: View {
     let reduceMotion: Bool
     let action: () -> Void
 
-    @State private var optimisticFavorite: Bool?
-    @State private var addPulse = 0
-    @State private var removePulse = 0
-
-    private var displayedFavorite: Bool { optimisticFavorite ?? isFavorite }
-
-    private struct AddAnimValues {
-        var scale: CGFloat = 1.0
-        var rotation: Double = 0.0
-        var burstScale: CGFloat = 0.45
-        var burstOpacity: Double = 0.0
-        var ringScale: CGFloat = 0.55
-        var ringOpacity: Double = 0.0
-    }
-
-    private struct RemoveAnimValues {
-        var scale: CGFloat = 1.0
-    }
-
     var body: some View {
-        let active = displayedFavorite
-        Button {
-            let nextState = !active
-            optimisticFavorite = nextState
-            if nextState {
-                addPulse += 1
-            } else {
-                removePulse += 1
-            }
-            action()
-        } label: {
-            Color.clear
-                .frame(width: 44, height: 44)
-                .overlay {
-                    ZStack {
-                        if !reduceMotion {
-                            burstRing
-                            burstRays
-                        }
-                        starIcon(active: active)
-                    }
-                    .allowsHitTesting(false)
-                }
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(active ? L("Remove from favorites") : L("Add to favorites"))
-        .sensoryFeedback(.success, trigger: addPulse)
-        .sensoryFeedback(.impact(flexibility: .soft, intensity: 0.55), trigger: removePulse)
-        .onChange(of: songID) { _, _ in optimisticFavorite = nil }
-        .onChange(of: isFavorite) { _, actual in
-            if optimisticFavorite == actual { optimisticFavorite = nil }
-        }
-    }
-
-    private var burstRing: some View {
-        Circle()
-            .strokeBorder(ink, lineWidth: 1.8)
-            .frame(width: iconWidth * 1.15, height: iconWidth * 1.15)
-            .keyframeAnimator(initialValue: AddAnimValues(), trigger: addPulse) { view, v in
-                view
-                    .scaleEffect(v.ringScale)
-                    .opacity(v.ringOpacity)
-            } keyframes: { _ in
-                KeyframeTrack(\.ringScale) {
-                    LinearKeyframe(0.55, duration: 0.02)
-                    CubicKeyframe(1.65, duration: 0.36)
-                    LinearKeyframe(0.55, duration: 0.01)
-                }
-                KeyframeTrack(\.ringOpacity) {
-                    LinearKeyframe(0.65, duration: 0.04)
-                    CubicKeyframe(0.0, duration: 0.34)
-                }
-            }
-    }
-
-    private var burstRays: some View {
-        ZStack {
-            ForEach(0..<5, id: \.self) { index in
-                let angle: Double = Double(index) * (.pi * 2.0 / 5.0) - (.pi / 2.0)
-                Capsule()
-                    .fill(ink)
-                    .frame(width: 2.2, height: 5.5)
-                    .offset(y: -iconWidth * 0.82)
-                    .rotationEffect(.radians(angle))
-            }
-        }
-        .keyframeAnimator(initialValue: AddAnimValues(), trigger: addPulse) { view, v in
-            view
-                .scaleEffect(v.burstScale)
-                .opacity(v.burstOpacity)
-        } keyframes: { _ in
-            KeyframeTrack(\.burstScale) {
-                LinearKeyframe(0.52, duration: 0.04)
-                CubicKeyframe(1.38, duration: 0.34)
-                LinearKeyframe(0.52, duration: 0.01)
-            }
-            KeyframeTrack(\.burstOpacity) {
-                LinearKeyframe(0.0, duration: 0.03)
-                LinearKeyframe(0.95, duration: 0.05)
-                CubicKeyframe(0.0, duration: 0.30)
-            }
-        }
-    }
-
-    private func starIcon(active: Bool) -> some View {
-        Image(systemName: active ? "star.fill" : "star")
-            .resizable()
-            .scaledToFit()
-            .frame(width: iconWidth, height: iconWidth)
-            .font(.system(size: 25, weight: .bold))
-            .keyframeAnimator(initialValue: AddAnimValues(), trigger: addPulse) { view, v in
-                view
-                    .scaleEffect(reduceMotion ? 1.0 : v.scale)
-                    .rotationEffect(.degrees(reduceMotion ? 0.0 : v.rotation))
-            } keyframes: { _ in
-                KeyframeTrack(\.scale) {
-                    CubicKeyframe(0.74, duration: 0.06)
-                    SpringKeyframe(1.30, duration: 0.16, spring: .bouncy(duration: 0.20, extraBounce: 0.18))
-                    SpringKeyframe(1.0, duration: 0.18, spring: .smooth(duration: 0.18))
-                }
-                KeyframeTrack(\.rotation) {
-                    CubicKeyframe(-14.0, duration: 0.06)
-                    SpringKeyframe(9.0, duration: 0.15, spring: .bouncy(duration: 0.18))
-                    SpringKeyframe(0.0, duration: 0.18, spring: .smooth(duration: 0.18))
-                }
-            }
-            .keyframeAnimator(initialValue: RemoveAnimValues(), trigger: removePulse) { view, v in
-                view.scaleEffect(reduceMotion ? 1.0 : v.scale)
-            } keyframes: { _ in
-                KeyframeTrack(\.scale) {
-                    CubicKeyframe(0.80, duration: 0.07)
-                    SpringKeyframe(1.0, duration: 0.18, spring: .smooth(duration: 0.18))
-                }
-            }
+        AppleMusicFavoriteButton(
+            itemID: songID,
+            isFavorite: isFavorite,
+            iconSize: iconWidth,
+            hitSize: 44,
+            ink: ink,
+            reduceMotion: reduceMotion,
+            action: action
+        )
     }
 }
 

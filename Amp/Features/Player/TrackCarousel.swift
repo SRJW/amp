@@ -183,6 +183,7 @@ private struct CarouselCard: View, Equatable {
     @Environment(\.playerArtworkInFlight) private var artworkInFlight
     @Environment(\.palette) private var palette
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var artworkPalette = ArtworkPaletteState()
     @State private var artworkRevision = 0
 
@@ -214,15 +215,16 @@ private struct CarouselCard: View, Equatable {
                 }
                 Spacer(minLength: 0)
                 if isCurrent {
-                    Button { actions.toggleFavorite(song) } label: {
-                        Image(systemName: song.isFavorite ? "star.fill" : "star").font(.title3)
-                            .foregroundStyle(song.isFavorite ? palette.primary : colors.content)
-                            .symbolEffect(.bounce, value: song.isFavorite)
-                            .frame(width: 48, height: 48)
-                            .contentShape(Rectangle())
+                    AppleMusicFavoriteButton(
+                        itemID: song.id,
+                        isFavorite: song.isFavorite,
+                        iconSize: 22,
+                        hitSize: 48,
+                        ink: song.isFavorite ? palette.primary : colors.content,
+                        reduceMotion: reduceMotion
+                    ) {
+                        actions.toggleFavorite(song)
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(song.isFavorite ? "Remove from favorites" : "Add to favorites")
                 }
             }
             .modifier(PlayerChromeFade())
