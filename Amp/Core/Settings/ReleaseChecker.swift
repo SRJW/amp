@@ -102,6 +102,15 @@ final class ReleaseChecker {
 
     /// Revalidate with ETag on each app opening, while coalescing launch/scene callbacks.
     func checkOnOpen() async {
+        #if DEBUG
+        // Production UI probes use local fixtures. A newly published release must
+        // not put a network-dependent modal above the gesture being measured.
+        if ProcessInfo.processInfo.arguments.contains(where: { $0.hasPrefix("--amp-interaction-probe=") }) {
+            state = .idle
+            prompt = nil
+            return
+        }
+        #endif
         let now = Date()
         if let openedAt, now.timeIntervalSince(openedAt) < 10 { return }
         openedAt = now
