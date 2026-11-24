@@ -51,8 +51,8 @@ struct NativeEntityGridView<Header: View>: UIViewControllerRepresentable {
 
 @MainActor
 final class NativeEntityGridController<Header: View>: UICollectionViewController, UICollectionViewDelegateFlowLayout, UICollectionViewDataSourcePrefetching {
-    private static let cellID = "NativeEntityTileCell"
-    private static let headerID = "NativeEntityGridHeader"
+    private static var cellID: String { "NativeEntityTileCell" }
+    private static var headerID: String { "NativeEntityGridHeader" }
 
     private let headerHost: UIHostingController<Header>
     private let emptyContainer = UIView()

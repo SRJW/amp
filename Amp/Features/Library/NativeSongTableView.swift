@@ -87,7 +87,7 @@ struct NativeSongTableView<Header: View>: UIViewControllerRepresentable {
 
 @MainActor
 final class NativeSongTableController<Header: View>: UITableViewController, UITableViewDataSourcePrefetching {
-    private static let cellID = "NativeSongCell"
+    private static var cellID: String { "NativeSongCell" }
     private let headerHost: UIHostingController<Header>
     private let emptyContainer = UIView()
     private let emptyIconView = UIImageView()
