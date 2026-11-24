@@ -9,13 +9,15 @@ struct SongArtworkView: View {
     var immersiveHero = false
     @Environment(\.palette) private var palette
     @State private var image: UIImage?
-    @State private var artworkRevision = 0
     @State private var imageRequest = ""
-    private var request: String { "\(url?.path ?? "")|\(maxPixels)|\(artworkRevision)" }
+    private static let fallbacks = [600, 320, 144]
 
     var body: some View {
+        let changeVersion = ArtworkChangeBroker.shared.version
+        let path = url?.path ?? ""
+        let request = "\(path)|\(maxPixels)|\(changeVersion)"
         let displayed = imageRequest == request ? image
-            : url.flatMap { ArtworkLoader.shared.cachedImage(for: $0, maxPixels: maxPixels, fallbackSizes: [1200, 600, 400, 300, 120]) }
+            : url.flatMap { ArtworkLoader.shared.cachedImage(for: $0, maxPixels: maxPixels, fallbackSizes: Self.fallbacks) }
         ZStack {
             if let displayed {
                 if immersiveHero {
@@ -32,9 +34,6 @@ struct SongArtworkView: View {
                     .foregroundStyle(palette.onSurfaceVariant)
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: ArtworkLoader.didChange)) { note in
-            if note.object as? String == url?.path { artworkRevision += 1 }
-        }
         .task(id: request) {
             let token = request
             guard let url else {
@@ -42,13 +41,18 @@ struct SongArtworkView: View {
                 imageRequest = token
                 return
             }
-            image = ArtworkLoader.shared.cachedImage(for: url, maxPixels: maxPixels, fallbackSizes: [1200, 600, 400, 300, 120])
-            imageRequest = token
-            if ArtworkLoader.shared.cachedImage(for: url, maxPixels: maxPixels) == nil {
-                let loaded = await ArtworkLoader.shared.image(for: url, maxPixels: maxPixels)
-                guard !Task.isCancelled else { return }
-                image = loaded
+            if let exact = ArtworkLoader.shared.cachedImage(for: url, maxPixels: maxPixels) {
+                image = exact
+                imageRequest = token
+                return
             }
+            if let fallback = ArtworkLoader.shared.cachedImage(for: url, maxPixels: maxPixels, fallbackSizes: Self.fallbacks) {
+                image = fallback
+            }
+            let loaded = await ArtworkLoader.shared.image(for: url, maxPixels: maxPixels)
+            guard !Task.isCancelled else { return }
+            image = loaded
+            imageRequest = token
         }
     }
 }
@@ -62,7 +66,7 @@ extension SongArtworkView {
 /// An album's cover: its first song's embedded art.
 struct AlbumArtworkView: View {
     let albumId: Int64
-    var maxPixels = 400
+    var maxPixels = 320
     var immersiveHero = false
     @Environment(LibraryStore.self) private var library
 
@@ -74,34 +78,37 @@ struct AlbumArtworkView: View {
 /// A picture file (custom playlist cover, artist photo) or a fallback.
 struct FileImageView<Fallback: View>: View {
     let path: String?
-    var maxPixels = 400
+    var maxPixels = 320
     @ViewBuilder let fallback: () -> Fallback
     @State private var image: UIImage?
     @State private var imageRequest = ""
-    @State private var artworkRevision = 0
-    private var request: String { "\(path ?? "")|\(maxPixels)|\(artworkRevision)" }
 
     var body: some View {
-        let displayed = imageRequest == request ? image : path.flatMap {
-            ArtworkLoader.shared.cachedImage(atPath: LibraryPaths.resolveImage($0), maxPixels: maxPixels)
+        let changeVersion = ArtworkChangeBroker.shared.version
+        let resolvedPath = path.map(LibraryPaths.resolveImage)
+        let request = "\(resolvedPath ?? "")|\(maxPixels)|\(changeVersion)"
+        let displayed = imageRequest == request ? image : resolvedPath.flatMap {
+            ArtworkLoader.shared.cachedImage(atPath: $0, maxPixels: maxPixels)
         }
         ZStack {
             if let displayed { FillImage(image: displayed) } else { fallback() }
         }
-        .onReceive(NotificationCenter.default.publisher(for: ArtworkLoader.didChange)) { note in
-            if let path, note.object as? String == LibraryPaths.resolveImage(path) { artworkRevision += 1 }
-        }
         .task(id: request) {
             let token = request
-            image = path.flatMap { ArtworkLoader.shared.cachedImage(atPath: LibraryPaths.resolveImage($0), maxPixels: maxPixels) }
-            imageRequest = token
-            guard let path else {
+            guard let resolvedPath else {
                 image = nil
+                imageRequest = token
                 return
             }
-            let loaded = await ArtworkLoader.shared.image(atPath: LibraryPaths.resolveImage(path), maxPixels: maxPixels)
+            if let cached = ArtworkLoader.shared.cachedImage(atPath: resolvedPath, maxPixels: maxPixels) {
+                image = cached
+                imageRequest = token
+                return
+            }
+            let loaded = await ArtworkLoader.shared.image(atPath: resolvedPath, maxPixels: maxPixels)
             guard !Task.isCancelled else { return }
             image = loaded
+            imageRequest = token
         }
     }
 }

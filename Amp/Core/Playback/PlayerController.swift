@@ -10,7 +10,14 @@ import UIKit
 @MainActor
 @Observable
 final class PlayerController {
-    private(set) var state = PlaybackState()
+    private(set) var state = PlaybackState() {
+        didSet {
+            let id = state.currentSong?.id
+            if currentSongID != id { currentSongID = id }
+        }
+    }
+    /// Isolated current song identity so song lists only invalidate when the playing track actually changes.
+    private(set) var currentSongID: Int64?
     private(set) var artworkDirection = 1
     /// The playing position, published on its own: it changes four times a second, and only the
     /// views showing progress should redraw for it (a menu open elsewhere would otherwise reset).

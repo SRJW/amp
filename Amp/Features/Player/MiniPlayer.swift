@@ -198,11 +198,14 @@ private struct MiniPlayerProgress: View {
     let durationMs: Int64
     let entryID: UUID?
     @Environment(PlayerController.self) private var player
+    @Environment(AppRouter.self) private var router
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.palette) private var palette
     @State private var preview: Int64?
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 60, paused: !player.state.isPlaying || preview != nil)) { _ in
+        let paused = !player.state.isPlaying || preview != nil || router.showsNowPlaying || scenePhase != .active
+        TimelineView(.animation(minimumInterval: 1.0 / 15, paused: paused)) { _ in
             let position = preview ?? player.displayPositionMs()
             GeometryReader { geometry in
                 let fraction = durationMs > 0 ? min(max(Double(position) / Double(durationMs), 0), 1) : 0

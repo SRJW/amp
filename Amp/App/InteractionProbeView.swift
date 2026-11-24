@@ -9,7 +9,11 @@ struct InteractionProbeView: View {
     @Environment(AppRouter.self) private var router
     @State private var query = ""
     @State private var showsSearch = false
-    @State private var chrome = LibraryChromeState()
+    @State private var chrome: LibraryChromeState = {
+        let state = LibraryChromeState()
+        state.tracksScroll = true
+        return state
+    }()
 
     var body: some View {
         @Bindable var router = router

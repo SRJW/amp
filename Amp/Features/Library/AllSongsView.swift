@@ -70,6 +70,39 @@ struct AllSongsView: View {
         }
     }
 
+    private struct BrowseTaskKey: Equatable {
+        let contentRevision: Int
+        let statsRevision: Int
+        let folderPath: String?
+        let category: LibraryCategory
+        let sort: String
+        let query: String
+        let added: SongAddedPeriod
+        let genre: String
+        let mood: LibraryMood
+        let format: String
+    }
+
+    private var browseTaskKey: BrowseTaskKey {
+        let needsStats = category == .mostPlayed || category == .recentlyPlayed
+            || sort == LibrarySort.recentlyAdded.rawValue
+            || sort == LibrarySort.recentlyPlayed.rawValue
+            || sort == LibrarySort.mostPlayed.rawValue
+            || added != .any
+        return BrowseTaskKey(
+            contentRevision: library.contentRevision,
+            statsRevision: needsStats ? library.statsRevision : 0,
+            folderPath: folderPath,
+            category: category,
+            sort: sort,
+            query: query,
+            added: added,
+            genre: genre,
+            mood: mood,
+            format: format
+        )
+    }
+
     var body: some View {
         PlayerSongReveal(destination: folderPath.map(Route.songFolder) ?? (category == .songs ? .allSongs : .category(category)),
                          songs: results ?? [], alphabetEnabled: true, alphabetKey: alphabetKey) {
@@ -109,7 +142,7 @@ struct AllSongsView: View {
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .onChange(of: router.showsNowPlaying) { _, shown in if shown { dismissSearchKeyboard() } }
-        .task(id: request) {
+        .task(id: browseTaskKey) {
             let snapshot = request
             if !snapshot.query.isEmpty { try? await Task.sleep(for: .milliseconds(120)) }
             guard !Task.isCancelled else { return }
@@ -118,6 +151,8 @@ struct AllSongsView: View {
             }.value
             guard !Task.isCancelled else { return }
             results = updated.0; genres = updated.1; formats = updated.2
+            let initialURLs = updated.0.prefix(20).map { library.listThumbnailURL(for: $0) }
+            ArtworkLoader.shared.prefetch(urls: initialURLs, maxPixels: 144)
         }
         .refreshable { library.scan() }
         .onChange(of: library.songs) { _, songs in selected.formIntersection(Set(songs.map(\.id))) }

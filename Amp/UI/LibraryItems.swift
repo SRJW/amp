@@ -103,10 +103,10 @@ struct TrackRow: View {
     var subtitle: String?
     var showsFileDetails = false
     var showsActions = true
+    var artworkURL: URL? = nil
     let actions: SongActions
     let onTap: () -> Void
     @Environment(\.palette) private var palette
-    @Environment(AppSettings.self) private var settings
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var swipe: CGFloat = 0
 
@@ -242,7 +242,7 @@ struct TrackRow: View {
                 .foregroundStyle(isCurrent ? palette.primary : palette.onSurfaceVariant)
                 .frame(width: 52, height: 52)
         } else {
-            SongArtworkView(song: song, maxPixels: 144)
+            SongArtworkView(url: artworkURL ?? song.url, maxPixels: 144)
                 .frame(width: 52, height: 52)
                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }

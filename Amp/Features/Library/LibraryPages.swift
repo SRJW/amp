@@ -21,8 +21,8 @@ struct LibraryOverviewView: View {
         GridItem(.flexible(), spacing: 14)
     ]
 
-    private var recentAlbumsRequest: AlbumBrowseRequest {
-        AlbumBrowseRequest(albums: library.albums, songs: library.songs, facts: library.browseFacts, lastPlayed: [:], query: "", sort: .recentlyAdded)
+    private var recentAlbumsKey: String {
+        "\(library.contentRevision)|\(library.statsRevision)"
     }
 
     var body: some View {
@@ -99,7 +99,7 @@ struct LibraryOverviewView: View {
                                     VStack(alignment: .leading, spacing: 3) {
                                         Color.clear
                                             .aspectRatio(1, contentMode: .fit)
-                                            .overlay { AlbumArtworkView(albumId: album.id, maxPixels: 500) }
+                                            .overlay { AlbumArtworkView(albumId: album.id, maxPixels: 320) }
                                             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                                             .padding(.bottom, 3)
                                         Text(CollectionDisplayTitle.normalized(album.title))
@@ -123,13 +123,16 @@ struct LibraryOverviewView: View {
             }.padding(.vertical, Spacing.sm)
         }
         .refreshable { library.scan() }
-        .task(id: recentAlbumsRequest) {
-            let snapshot = recentAlbumsRequest
+        .task(id: recentAlbumsKey) {
+            let snapshot = AlbumBrowseRequest(albums: library.albums, songs: library.songs, facts: library.browseFacts,
+                                              lastPlayed: [:], query: "", sort: .recentlyAdded)
+            let albumCovers = library.albumCoverSong
             let sorted = await Task.detached(priority: .userInitiated) {
                 Array(snapshot.results().prefix(24))
             }.value
             guard !Task.isCancelled else { return }
             recentlyAddedAlbums = sorted
+            ArtworkLoader.shared.prefetch(urls: sorted.compactMap { albumCovers[$0.id]?.url }, maxPixels: 320)
         }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -177,15 +180,18 @@ struct SongList: View {
     @Environment(PlayerController.self) private var player
     @Environment(AppRouter.self) private var router
     @Environment(AppSettings.self) private var settings
+    @State private var prefetchThrottle = SongPrefetchThrottle()
 
     var body: some View {
         let songActions = router.songActions(actions, source: source ?? origin.map { PlaybackSource($0) })
-        let currentId = player.state.currentSong?.id
+        let currentId = player.currentSongID
         LazyVStack(spacing: 0) {
             if songs.isEmpty {
                 EmptyState(message: emptyMessage, systemImage: emptyIcon)
             }
-            ForEach(Array(songs.enumerated()), id: \.element.listScrollAnchor) { index, song in
+            ForEach(songs) { song in
+                let thumbURL = showTrackNumbers ? song.url : library.listThumbnailURL(for: song)
+                let trackRank = showTrackNumbers ? songs.firstIndex(where: { $0.id == song.id }).map { $0 + 1 } : nil
                 VStack(spacing: 0) {
                     if let selection {
                         Button {
@@ -195,7 +201,7 @@ struct SongList: View {
                             HStack(spacing: 0) {
                                 Image(systemName: selection.wrappedValue.contains(song.id) ? "checkmark.circle.fill" : "circle")
                                     .frame(width: 44, height: 44)
-                                TrackRow(song: song, isCurrent: song.id == currentId, showsFileDetails: showsFileDetails, showsActions: false, actions: songActions, onTap: {})
+                                TrackRow(song: song, isCurrent: song.id == currentId, showsFileDetails: showsFileDetails, showsActions: false, artworkURL: thumbURL, actions: songActions, onTap: {})
                                     .allowsHitTesting(false).accessibilityHidden(true)
                             }.contentShape(Rectangle())
                         }
@@ -203,15 +209,16 @@ struct SongList: View {
                         .accessibilityLabel(SongRowText.accessibilityLabel(song, includingFileDetails: showsFileDetails))
                         .accessibilityValue(selection.wrappedValue.contains(song.id) ? "Selected" : "Not selected")
                     } else {
-                        TrackRow(song: song, isCurrent: song.id == currentId, showTrackNumber: showTrackNumbers, displayTrackNumber: showTrackNumbers ? index + 1 : nil, showsFileDetails: showsFileDetails, actions: songActions) {
+                        TrackRow(song: song, isCurrent: song.id == currentId, showTrackNumber: showTrackNumbers, displayTrackNumber: trackRank, showsFileDetails: showsFileDetails, artworkURL: thumbURL, actions: songActions) {
                             onPlay?()
                             onPlaySong?(song)
-                            if player.state.currentSong?.id != song.id {
+                            if player.currentSongID != song.id {
                                 if continuousFromSearch && settings.continuousPlayback {
                                     let resolved = ContinuousPlayback.queue(startingAt: song, allSongs: library.songs, facts: library.browseFacts)
                                     actions.play(resolved.songs, startIndex: resolved.startIndex, origin: nil, source: .library)
                                 } else {
-                                    actions.play(songs, startIndex: index, origin: origin, source: source)
+                                    let startIndex = songs.firstIndex(where: { $0.id == song.id }) ?? 0
+                                    actions.play(songs, startIndex: startIndex, origin: origin, source: source)
                                 }
                             } else if !player.state.isPlaying {
                                 player.play()
@@ -222,8 +229,27 @@ struct SongList: View {
                 }
                 .modifier(PlayerRevealedSong(songID: song.id))
                 .id(song.listScrollAnchor)
+                .onAppear {
+                    if !showTrackNumbers {
+                        prefetchThrottle.appearCount &+= 1
+                        if prefetchThrottle.appearCount % 4 == 0 {
+                            prefetchAhead(after: song)
+                        }
+                    }
+                }
             }
         }
         .scrollTargetLayout()
     }
+
+    private func prefetchAhead(after song: Song) {
+        guard let index = songs.firstIndex(where: { $0.id == song.id }), index + 1 < songs.count else { return }
+        let end = min(index + 21, songs.count)
+        let urls = songs[(index + 1)..<end].map { library.listThumbnailURL(for: $0) }
+        ArtworkLoader.shared.prefetch(urls: urls, maxPixels: 144)
+    }
+}
+
+private final class SongPrefetchThrottle {
+    var appearCount = 0
 }

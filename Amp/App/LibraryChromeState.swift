@@ -7,6 +7,8 @@ import UIKit
 @Observable
 final class LibraryChromeState {
     private(set) var fraction: CGFloat = 0
+    /// Production chrome stays fixed; enable scroll tracking only when a listener explicitly observes [fraction].
+    @ObservationIgnored var tracksScroll = false
     static let collapseDistance: CGFloat = 120
 
     func consume(_ delta: CGFloat) {
@@ -73,6 +75,15 @@ private struct LibraryScrollTracking: ViewModifier {
 
     @ViewBuilder
     func body(content: Content) -> some View {
+        if !chrome.tracksScroll {
+            content
+        } else {
+            trackedBody(content)
+        }
+    }
+
+    @ViewBuilder
+    private func trackedBody(_ content: Content) -> some View {
         Group {
             if usesUIKit {
                 content.overlay {
