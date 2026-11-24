@@ -8,7 +8,8 @@ enum PlayerLayoutMetrics {
     static let outerDiameterW: CGFloat = 0.11
     // Together with the diameters, these centres leave about 0.005 W between circles.
     static let transportCentresW: [CGFloat] = [0.192, 0.328, 0.5, 0.672, 0.808]
-    static let transportCentreH: CGFloat = 0.79
+    static let transportCentreH: CGFloat = 0.786
+    static let waveformHeightH: CGFloat = 0.165
     static let triangleWidthInCircle: CGFloat = 0.55
 
     static let secondaryCentresW: [CGFloat] = [0.12, 0.31, 0.5, 0.69, 0.88]

@@ -72,17 +72,22 @@ struct NowPlayingView: View {
                         .frame(width: width - 32).position(x: width / 2, y: height * 0.633)
                     referenceOptions(song, state: state, width: width)
                         .frame(width: width, height: 48).position(x: width / 2, y: height * PlayerLayoutMetrics.secondaryCentreH)
-                    ProgressSection(song: song, screenWidth: width, marksRevision: marksRevision, controlColors: artworkControls) { controls(state, width: width) }
-                        .frame(width: width - 20, height: height * 0.18)
-                        .position(x: width / 2, y: height * PlayerLayoutMetrics.transportCentreH)
+                    let waveformHeight = height * PlayerLayoutMetrics.waveformHeightH
+                    let waveformCentreY = height * PlayerLayoutMetrics.transportCentreH
+                    let waveformBottom = waveformCentreY + waveformHeight / 2
                     let navCentreY = AppNavigationMetrics.centreY(height: height, safeAreaBottom: navigationBottomInset)
+                    let navTop = navCentreY - (settings.playerBackground.navBarCapsule ? AppNavigationMetrics.capsuleHeight / 2 : 16)
+                    let bitrateCentreY = (waveformBottom + navTop) / 2
+                    ProgressSection(song: song, screenWidth: width, marksRevision: marksRevision, controlColors: artworkControls) { controls(state, width: width) }
+                        .frame(width: width - 20, height: waveformHeight)
+                        .position(x: width / 2, y: waveformCentreY)
                     Button { showsAudioDetails = true } label: {
                         Text(audioSummary(song)).font(.system(size: 10.5 * PlayerLayoutMetrics.technicalTextScale, weight: .bold))
                             .foregroundStyle(artworkControls?.accentInk.opacity(0.80) ?? playerInk)
                             .lineLimit(1).minimumScaleFactor(0.75)
                     }
                     .frame(width: width - 24)
-                    .position(x: width / 2, y: settings.playerBackground.navBarCapsule ? min(height * 0.874, navCentreY - 43) : height * 0.895)
+                    .position(x: width / 2, y: bitrateCentreY)
                     if !sharedNavigation {
                         referenceNavigation(width: width)
                             .position(x: width / 2, y: navCentreY)
