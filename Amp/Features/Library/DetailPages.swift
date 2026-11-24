@@ -417,49 +417,10 @@ struct ArtistDetailView: View {
             ScrollView {
                 if let artist {
                     ZStack(alignment: .top) {
-                        // Layer 1: Continuous edge-to-edge portrait dissolving into the unified page canvas.
-                        ZStack(alignment: .top) {
-                            // Soft blurred mist bridge across chest/shoulders so the photo melts seamlessly.
-                            ArtistArtworkView(artist: artist, fontSize: 112, maxPixels: 600)
-                                .frame(width: width, height: heroBackdropHeight)
-                                .clipped()
-                                .blur(radius: 26)
-                                .mask(
-                                    LinearGradient(
-                                        stops: [
-                                            .init(color: .clear, location: 0.34),
-                                            .init(color: .white.opacity(0.88), location: 0.60),
-                                            .init(color: .white.opacity(0.28), location: 0.84),
-                                            .init(color: .clear, location: 1.00),
-                                        ],
-                                        startPoint: .top,
-                                        endPoint: .bottom
-                                    )
-                                )
-                                .accessibilityHidden(true)
-
-                            // Sharp upper portrait fading completely to clear well before the bottom edge.
+                        ArtistScrollPortrait(hasPhoto: artist.artworkPath != nil) {
                             ArtistArtworkView(artist: artist, fontSize: 112, maxPixels: 1200)
-                                .frame(width: width, height: heroBackdropHeight)
-                                .clipped()
-                                .mask(
-                                    LinearGradient(
-                                        stops: [
-                                            .init(color: .white, location: 0.00),
-                                            .init(color: .white, location: 0.42),
-                                            .init(color: .white.opacity(0.72), location: 0.56),
-                                            .init(color: .white.opacity(0.22), location: 0.70),
-                                            .init(color: .clear, location: 0.84),
-                                            .init(color: .clear, location: 1.00),
-                                        ],
-                                        startPoint: .top,
-                                        endPoint: .bottom
-                                    )
-                                )
-                                .accessibilityHidden(true)
                         }
                         .frame(width: width, height: heroBackdropHeight)
-                        .allowsHitTesting(false)
 
                         // Layer 2: Foreground editorial content matching Apple Music (IMG_1683.PNG) vertical rhythm.
                         LazyVStack(alignment: .leading, spacing: 0) {
@@ -491,6 +452,7 @@ struct ArtistDetailView: View {
                                 }
                                 .buttonStyle(FloatingControlPressStyle())
                                 .accessibilityLabel(L("Artist info"))
+                                .accessibilityIdentifier("artistInfo")
 
                                 Button {
                                     if isPlayingArtist {
@@ -511,6 +473,7 @@ struct ArtistDetailView: View {
                                 .disabled(allSongs.isEmpty)
                                 .opacity(allSongs.isEmpty ? 0.45 : 1)
                                 .accessibilityLabel(isPlayingArtist ? L("Pause") : L("Play"))
+                                .accessibilityIdentifier("artistPlayPause")
 
                                 let isFav = settings.isArtistFavorite(artistId)
                                 AppleMusicFavoriteButton(
@@ -684,6 +647,8 @@ struct ArtistDetailView: View {
                         .padding(.top, 120)
                 }
             }
+            .coordinateSpace(name: ArtistScrollPortrait<EmptyView>.coordinateSpace)
+            .accessibilityIdentifier("artistPage")
             .scrollIndicators(.hidden)
         }
         .tracksLibraryScrolling()

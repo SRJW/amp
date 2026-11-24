@@ -266,6 +266,7 @@ jobs:
         - full-player
         - animation-only
         - navigation-alignment-only
+        - artist-motion-only
         - waveforms-only
         - library-only
         - library-editor-only

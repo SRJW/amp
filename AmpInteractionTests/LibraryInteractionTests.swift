@@ -2,6 +2,34 @@ import XCTest
 import UIKit
 
 final class LibraryInteractionTests: XCTestCase {
+    @MainActor func testArtistPortraitScrollReturnsWithoutMovingNavigationOrBlockingActions() {
+        let app = launch("artist")
+        let page = app.scrollViews["artistPage"]
+        let title = app.staticTexts["collectionHeroTitle"]
+        XCTAssertTrue(page.waitForExistence(timeout: 30))
+        XCTAssertTrue(title.waitForExistence(timeout: 10))
+        let baseline = title.frame.midY
+        let navigation = app.buttons["appSection.library"].frame
+        let start = page.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25))
+        start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: 160)))
+        let settled = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            abs(title.frame.midY - baseline) < 2
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [settled], timeout: 10), .completed)
+        page.swipeUp()
+        page.swipeDown()
+        page.swipeDown()
+        XCTAssertTrue(app.buttons["artistInfo"].waitForExistence(timeout: 10))
+        XCTAssertEqual(app.buttons["appSection.library"].frame.midY, navigation.midY, accuracy: 0.5)
+        app.buttons["artistInfo"].tap()
+        XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 10))
+        app.buttons["Done"].tap()
+        XCTAssertTrue(app.buttons["artistPlayPause"].isHittable)
+        let shot = XCTAttachment(screenshot: app.screenshot())
+        shot.name = "Artist portrait after scrolling and rubber-band return"
+        shot.lifetime = .keepAlways; add(shot)
+    }
+
     @MainActor func testGlassContactKeepsButtonActionsAndCancelsVerticalExit() {
         for mode in ["light", "dark"] {
             let app = launch("player-" + mode)

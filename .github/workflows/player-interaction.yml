@@ -15,6 +15,7 @@ run-name: Player verification — ${{ inputs.scope || 'full-player' }} (${{ inpu
         - library-editor-only
         - library-reveal-only
         - navigation-alignment-only
+        - artist-motion-only
       runner:
         description: macOS runner for simulator verification
         type: choice
@@ -138,7 +139,7 @@ jobs:
           fi
         }
         start_glass_recording() {
-          if [ "${{ inputs.scope }}" = 'navigation-alignment-only' ]; then
+          if [ "${{ inputs.scope }}" = 'navigation-alignment-only' ] || [ "${{ inputs.scope }}" = 'artist-motion-only' ]; then
             glass_recording_attempt=$((glass_recording_attempt + 1))
             xcrun simctl io "$UI_SIMULATOR_ID" recordVideo --codec=h264 \
               "build/navigation-glass-$glass_recording_attempt.mov" \
@@ -153,6 +154,11 @@ jobs:
             -only-testing:AmpInteractionTests/LibraryInteractionTests/testLibraryAndPlayerNavigationShareScreenCoordinates
             -only-testing:AmpInteractionTests/LibraryInteractionTests/testGlassContactKeepsButtonActionsAndCancelsVerticalExit
             -only-testing:AmpInteractionTests/LibraryInteractionTests/testNativeMenuSettingsWorksAfterWifiTransferWithoutSwitchingTabs
+          )
+        elif [ "${{ inputs.scope }}" = 'artist-motion-only' ]; then
+          test_filters=(
+            -only-testing:AmpInteractionTests/LibraryInteractionTests/testArtistPortraitScrollReturnsWithoutMovingNavigationOrBlockingActions
+            -only-testing:AmpInteractionTests/LibraryInteractionTests/testLibraryAndPlayerNavigationShareScreenCoordinates
           )
         elif [ "${{ inputs.scope }}" = 'library-reveal-only' ]; then
           test_filters=(
@@ -239,7 +245,7 @@ jobs:
           build/source-file-stamps.json
         key: ${{ steps.setup.outputs.build-cache-key }}
     - name: Verify the actual rendered colour blend
-      if: ${{ !cancelled() && steps.simulator-build.outcome == 'success' && (inputs.scope == 'full-player' || inputs.scope == 'animation-only' || inputs.scope == 'navigation-alignment-only') }}
+      if: ${{ !cancelled() && steps.simulator-build.outcome == 'success' && (inputs.scope == 'full-player' || inputs.scope == 'animation-only' || inputs.scope == 'navigation-alignment-only' || inputs.scope == 'artist-motion-only') }}
       run: |
         if [ "${{ inputs.scope }}" = "animation-only" ]; then
           echo "Animation-only run: UI gesture tests are intentionally not selected."

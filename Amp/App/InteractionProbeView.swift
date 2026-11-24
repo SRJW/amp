@@ -23,8 +23,8 @@ struct InteractionProbeView: View {
             } else if page == "player" || page == "player-reduced-motion" || page == "player-artwork" || page == "player-light" || page == "player-dark" {
                 PlayerInteractionProbe(reduceMotion: page == "player-reduced-motion", withArtwork: page == "player-artwork",
                                        forcedTheme: page == "player-light" ? .light : page == "player-dark" ? .dark : nil)
-            } else if page == "songs" || page == "songs-reveal" {
-                SongsInteractionProbe()
+            } else if page == "songs" || page == "songs-reveal" || page == "artist" {
+                SongsInteractionProbe(showArtist: page == "artist")
             } else if page == "search" {
                 Button("Open search") { router.showsSearch = true }
                     .accessibilityIdentifier("openSearchProbe")
@@ -146,6 +146,7 @@ private struct PlayerInteractionProbe: View {
 }
 /// A real, owned-file library fixture for search persistence, selection and confirmed deletion.
 private struct SongsInteractionProbe: View {
+    var showArtist = false
     @Environment(PlayerController.self) private var player
     @Environment(AppSettings.self) private var settings
     @Environment(AppRouter.self) private var router
@@ -226,7 +227,21 @@ private struct SongsInteractionProbe: View {
                     return
                 }
                 router.select(.library)
-                router.open(.allSongs)
+                if showArtist, let artist = library.artists.first(where: { $0.name == "Fixture artist" }) {
+                    let image = UIGraphicsImageRenderer(size: CGSize(width: 600, height: 700)).image { ctx in
+                        UIColor(red: 0.22, green: 0.30, blue: 0.42, alpha: 1).setFill()
+                        ctx.fill(CGRect(x: 0, y: 0, width: 600, height: 700))
+                        for row in 0..<14 {
+                            UIColor(white: row.isMultiple(of: 2) ? 0.8 : 0.3, alpha: 1).setFill()
+                            ctx.fill(CGRect(x: 180, y: row * 50, width: 240, height: 25))
+                        }
+                    }
+                    let photo = folder.appendingPathComponent("artist-motion.png")
+                    try image.pngData()!.write(to: photo)
+                    try library.database.setArtistArtwork(key: artist.artistKey, path: photo.path, source: "manual")
+                    library.reload()
+                    router.open(.artist(artist.id))
+                } else { router.open(.allSongs) }
                 ready = true
             } catch { failure = error.localizedDescription }
         }

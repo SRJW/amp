@@ -7,6 +7,28 @@ import XCTest
 /// Render the production containers, rather than accepting a mathematically correct frame
 /// while its pixels are clipped, covered by a sibling, or collapsed to a tiny ideal size.
 final class PlayerRenderingTests: XCTestCase {
+    @MainActor func testArtistPullDownExtendsPortraitBehindTopWithoutClippingOrMovingContent() throws {
+        let size = CGSize(width: 200, height: 300)
+        func frame(_ scrollOffset: CGFloat) throws -> Pixels {
+            try pixels(Color.black.overlay(alignment: .top) {
+                ArtistPortraitCanvas(size: size, offset: scrollOffset) { Color.red }
+                    .frame(width: size.width, height: size.height)
+                    .offset(y: scrollOffset)
+            }, size: CGSize(width: 200, height: 500))
+        }
+        let resting = try frame(0)
+        let pulled = try frame(120)
+        let returned = try frame(0)
+        XCTAssertGreaterThan(pulled.color(x: 100, y: 10)[0], 0.8,
+                             "The stretched portrait must stay attached behind the status area")
+        XCTAssertGreaterThan(pulled.color(x: 100, y: 295)[0], resting.color(x: 100, y: 295)[0] + 0.02,
+                             "Pull-down must grow the actual portrait, rather than expose an empty top band")
+        XCTAssertEqual(returned.color(x: 100, y: 100)[0], resting.color(x: 100, y: 100)[0], accuracy: 0.01)
+        let departing = try frame(-90)
+        XCTAssertGreaterThan(departing.color(x: 100, y: 10)[0], 0.8,
+                             "Parallax must not uncover the top edge while scrolling up")
+    }
+
     // Semantic SwiftUI red/blue are platform colours, not unit RGB primaries.
     // Use explicit primaries for assertions about blend weights and coverage.
     private let blendRed = Color(.sRGB, red: 1, green: 0, blue: 0, opacity: 1)
