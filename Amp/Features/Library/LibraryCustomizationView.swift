@@ -39,21 +39,23 @@ struct LibraryCustomizationView: View {
                         order.move(fromOffsets: source, toOffset: destination)
                         storedOrder = order.map(\.rawValue).joined(separator: ",")
                     }
-                } footer: { Text(LibraryCustomizationText.instructions) }
+                } footer: { Text(L(LibraryCustomizationText.instructions)) }
+                .toolSectionAppearance()
             }
+            .modifier(ToolPageAppearance())
             .environment(\.editMode, .constant(.active))
-            .navigationTitle(LibraryCustomizationText.action)
+            .navigationTitle(L(LibraryCustomizationText.action))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Menu {
-                        Button("Restore defaults") {
+                        Button(L("Restore defaults")) {
                             storedOrder = LibraryCustomizationPreferences.defaultOrder
                             hiddenSections = ""
                         }
                     } label: { Image(systemName: "ellipsis") }
                     .accessibilityLabel("Customization options")
                 }
-                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) { Button(L("Done")) { dismiss() } }
             }
         }
     }

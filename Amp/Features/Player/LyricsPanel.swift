@@ -161,6 +161,7 @@ struct LyricsOptionsMenu<LabelContent: View>: View {
 struct LyricsOptionsButton: View {
     let song: Song
     var floatingStyle = false
+    @Environment(AppSettings.self) private var settings
     @Environment(\.palette) private var palette
 
     var body: some View {
@@ -170,7 +171,7 @@ struct LyricsOptionsButton: View {
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(.white)
                     .frame(width: 36, height: 36)
-                    .background(.ultraThinMaterial, in: Circle())
+                    .glassCircle(enabled: settings.glassEnabled, interactive: true)
                     .environment(\.colorScheme, .dark)
             } else {
                 Image(systemName: "ellipsis.circle").font(.body.weight(.semibold)).foregroundStyle(palette.onSurface)
@@ -380,65 +381,88 @@ struct LyricsSearchSheet: View {
     @Binding var searchText: String
     let onDismiss: () -> Void
     @Environment(LyricsStore.self) private var store
+    @Environment(\.palette) private var palette
+    @FocusState private var searchFocused: Bool
 
     var body: some View {
         NavigationStack {
             List {
+                if searchText.isBlank, !SearchHistoryStore.shared.entries("lyrics").isEmpty {
+                    Section {
+                        RecentSearchesView(scope: "lyrics") {
+                            searchText = $0
+                            searchLyrics($0)
+                        }
+                    }.toolSectionAppearance()
+                }
                 Section {
-                    HStack {
-                        TextField("Title and artist", text: $searchText)
-                            .submitLabel(.search)
-                            .onSubmit { searchLyrics(searchText) }
-                        if !searchText.isBlank {
-                            Button {
-                                SearchHistoryStore.shared.remember(searchText, in: "lyrics")
-                                searchText = ""
-                            } label: { Image(systemName: "xmark.circle.fill").frame(width: 44, height: 44) }
-                            .buttonStyle(.plain).accessibilityLabel("Clear lyrics search")
+                    Button {
+                        searchLyrics(searchText)
+                        searchFocused = false
+                    } label: {
+                        Label(L("Search"), systemImage: "magnifyingglass")
+                            .foregroundStyle(searchText.isBlank ? palette.onSurfaceVariant : palette.primary)
+                    }
+                    .disabled(searchText.isBlank)
+                    if let url = LyricsWebSearch.url(for: searchText) {
+                        Link(destination: url) {
+                            Label(L("Search the web"), systemImage: "safari")
+                                .foregroundStyle(palette.primary)
                         }
                     }
-                    Button("Search") { searchLyrics(searchText) }.disabled(searchText.isBlank)
-                }
-                if searchText.isBlank {
-                    Section { RecentSearchesView(scope: "lyrics") { searchText = $0; searchLyrics($0) } }
-                }
-                Section {
-                    if let url = LyricsWebSearch.url(for: searchText) {
-                        Link(destination: url) { Label("Search the web", systemImage: "safari") }
-                    }
                 } footer: {
-                    Text("Opens in your browser.")
-                }
-                switch store.current?.search ?? .idle {
-                case .idle: EmptyView()
-                case .searching: ProgressView()
-                case .error(let message): Text(message).foregroundStyle(.secondary)
-                case .results(let candidates): searchResults(candidates)
-                case .resultsWithNotice(let candidates, let notice):
-                    Text(notice).font(.caption).foregroundStyle(.secondary)
-                    searchResults(candidates)
-                }
+                    Text(L("Opens in your browser."))
+                }.toolSectionAppearance()
+                Section {
+                    switch store.current?.search ?? .idle {
+                    case .idle: EmptyView()
+                    case .searching: ProgressView().frame(maxWidth: .infinity)
+                    case .error(let message): Text(message).foregroundStyle(palette.onSurfaceVariant)
+                    case .results(let candidates): searchResults(candidates)
+                    case .resultsWithNotice(let candidates, let notice):
+                        Text(notice).font(.caption).foregroundStyle(palette.onSurfaceVariant)
+                        searchResults(candidates)
+                    }
+                }.toolSectionAppearance()
             }
-            .navigationTitle("Search lyrics online")
+            .modifier(ToolPageAppearance())
+            .scrollDismissesKeyboard(.interactively)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                GlassSearchField(
+                    text: $searchText,
+                    prompt: L("Title and artist"),
+                    focused: $searchFocused,
+                    close: { searchFocused = false; searchText = "" },
+                    identifier: "lyricsSearchField",
+                    historyScope: "lyrics"
+                )
+                .onSubmit { searchLyrics(searchText) }
+                .padding(.horizontal, Spacing.gutter)
+                .padding(.vertical, Spacing.sm)
+                .background(palette.background.opacity(0.92))
+            }
+            .navigationTitle(L("Search lyrics online"))
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { Button("Close") { onDismiss() } }
+            .toolbar { Button(L("Close")) { onDismiss() } }
         }
         .presentationDetents([.medium, .large])
     }
 
     @ViewBuilder
     private func searchResults(_ candidates: [LyricsCandidate]) -> some View {
-        if candidates.isEmpty { Text("No results.").foregroundStyle(.secondary) }
+        if candidates.isEmpty { Text(L("No results.")).foregroundStyle(palette.onSurfaceVariant) }
         ForEach(candidates) { candidate in
             Button {
                 store.choose(candidate)
                 onDismiss()
             } label: {
-                VStack(alignment: .leading) {
-                    Text(candidate.trackName).foregroundStyle(.primary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(candidate.trackName).foregroundStyle(palette.onSurface)
                     Text([candidate.artistName, candidate.provider, candidate.timing.label].joined(separator: " · "))
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.caption).foregroundStyle(palette.onSurfaceVariant)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
             }
         }
     }

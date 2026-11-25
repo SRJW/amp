@@ -93,21 +93,28 @@ struct WifiTransferView: View {
                 Image(uiImage: qr)
                     .interpolation(.none)
                     .resizable()
-                    .frame(width: 200, height: 200)
-                    .padding(Spacing.sm)
-                    .background(Color.white)
-                    .clipShape(RoundedRectangle(cornerRadius: Radius.medium))
+                    .frame(width: 196, height: 196)
+                    .padding(14)
+                    .background(
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .fill(Color.white)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .strokeBorder(palette.outline.opacity(0.28), lineWidth: 1)
+                    )
+                    .shadow(color: .black.opacity(0.14), radius: 14, y: 6)
                     .accessibilityLabel("QR code for the transfer page")
             }
-            Text("Scan with your computer's camera app, or open:").font(.subheadline)
-            Text(address).font(.title3.weight(.semibold)).textSelection(.enabled)
-            Text("and enter the code").font(.subheadline).foregroundStyle(.secondary)
-            Text(code).font(.system(size: 36, weight: .bold)).kerning(6)
+            Text(L("Scan with your computer's camera app, or open:")).font(.subheadline).foregroundStyle(palette.onSurfaceVariant)
+            Text(address).font(.title3.weight(.semibold)).foregroundStyle(palette.onSurface).textSelection(.enabled)
+            Text(L("and enter the code")).font(.subheadline).foregroundStyle(palette.onSurfaceVariant)
+            Text(code).font(.system(size: 36, weight: .bold).monospacedDigit()).kerning(6).foregroundStyle(palette.primary)
                 .accessibilityLabel("Pairing code \(code.map(String.init).joined(separator: " "))")
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, Spacing.sm)
-        Button(role: .destructive) { transfer.stop() } label: { Label("Stop transfer", systemImage: "stop.circle") }
+        Button(role: .destructive) { transfer.stop() } label: { Label(L("Stop transfer"), systemImage: "stop.circle") }
     }
 
     private func itemRow(_ item: TransferItem) -> some View {

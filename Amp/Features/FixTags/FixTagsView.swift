@@ -362,45 +362,72 @@ struct RepairItemDetail: View {
 private struct AddSongsSheet: View {
     let onAdd: ([Song]) -> Void
     @Environment(LibraryStore.self) private var library
+    @Environment(\.palette) private var palette
     @Environment(\.dismiss) private var dismiss
+    @FocusState private var searchFocused: Bool
     @State private var query = ""
     @State private var selected = Set<Int64>()
 
     var body: some View {
         let shown = filtered
         NavigationStack {
-            List(shown) { song in
-                Button {
-                    SearchHistoryStore.shared.remember(query, in: "add-songs")
-                    if selected.contains(song.id) { selected.remove(song.id) } else { selected.insert(song.id) }
-                } label: {
-                    HStack {
-                        Image(systemName: selected.contains(song.id) ? "checkmark.circle.fill" : "circle")
-                        VStack(alignment: .leading) {
-                            Text(song.title).lineLimit(1)
-                            Text(song.subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            List {
+                if query.trimmed.isEmpty, !SearchHistoryStore.shared.entries("add-songs").isEmpty {
+                    Section {
+                        RecentSearchesView(scope: "add-songs") {
+                            query = $0
+                            searchFocused = true
+                        }
+                    }.toolSectionAppearance()
+                }
+                Section {
+                    if shown.isEmpty {
+                        Text(L("No songs match this search."))
+                            .foregroundStyle(palette.onSurfaceVariant)
+                    } else {
+                        ForEach(shown) { song in
+                            Button {
+                                SearchHistoryStore.shared.remember(query, in: "add-songs")
+                                if selected.contains(song.id) { selected.remove(song.id) } else { selected.insert(song.id) }
+                            } label: {
+                                HStack(spacing: Spacing.md) {
+                                    Image(systemName: selected.contains(song.id) ? "checkmark.circle.fill" : "circle")
+                                        .foregroundStyle(selected.contains(song.id) ? palette.primary : palette.onSurfaceVariant)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(song.title).foregroundStyle(palette.onSurface).lineLimit(1)
+                                        Text(song.subtitle).font(.caption).foregroundStyle(palette.onSurfaceVariant).lineLimit(1)
+                                    }
+                                    Spacer(minLength: 0)
+                                }
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
                         }
                     }
-                }
-                .buttonStyle(.plain)
-            }.modifier(ToolPageAppearance())
-            .searchable(text: $query)
-            .searchSuggestions {
-                if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    ForEach(SearchHistoryStore.shared.entries("add-songs"), id: \.self) { Text($0).searchCompletion($0) }
-                    if !SearchHistoryStore.shared.entries("add-songs").isEmpty {
-                        Button("Clear history") { SearchHistoryStore.shared.clear("add-songs") }
-                    }
-                }
+                }.toolSectionAppearance()
             }
-            .onSubmit(of: .search) { SearchHistoryStore.shared.remember(query, in: "add-songs") }
+            .modifier(ToolPageAppearance())
+            .scrollDismissesKeyboard(.interactively)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                GlassSearchField(
+                    text: $query,
+                    prompt: L("Search songs"),
+                    focused: $searchFocused,
+                    close: { searchFocused = false; query = "" },
+                    identifier: "fixTagsSearchField",
+                    historyScope: "add-songs"
+                )
+                .padding(.horizontal, Spacing.gutter)
+                .padding(.vertical, Spacing.sm)
+                .background(palette.background.opacity(0.92))
+            }
             .onDisappear { SearchHistoryStore.shared.remember(query, in: "add-songs") }
-            .navigationTitle("Add songs")
+            .navigationTitle(L("Add songs"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button(L("Cancel")) { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(selected.isEmpty ? "Add all \(shown.count)" : "Add \(selected.count)") {
+                    Button(selected.isEmpty ? L("Add all %d", shown.count) : L("Add %d", selected.count)) {
                         onAdd(selected.isEmpty ? shown : library.songs.filter { selected.contains($0.id) })
                         dismiss()
                     }

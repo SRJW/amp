@@ -300,6 +300,7 @@ struct AddToPlaylistSheet: View {
     let songs: [Song]
     @Environment(LibraryStore.self) private var library
     @Environment(LibraryActions.self) private var actions
+    @Environment(\.palette) private var palette
     @Environment(\.dismiss) private var dismiss
     @State private var newName = ""
     @State private var creating = false
@@ -307,31 +308,43 @@ struct AddToPlaylistSheet: View {
     var body: some View {
         NavigationStack {
             List {
-                Button { newName = ""; creating = true } label: { Label("New playlist", systemImage: "plus") }
-                ForEach(library.playlists) { playlist in
-                    Button {
-                        actions.add(songs, to: playlist)
-                        dismiss()
-                    } label: {
-                        HStack(spacing: Spacing.md) {
-                            PlaylistCoverView(playlist: playlist)
-                                .frame(width: ArtworkSize.compact, height: ArtworkSize.compact)
-                                .clipShape(RoundedRectangle(cornerRadius: Radius.small, style: .continuous))
-                            VStack(alignment: .leading) {
-                                Text(playlist.name).foregroundStyle(.primary)
-                                Text(countLabel(playlist.songCount, "song")).font(.caption).foregroundStyle(.secondary)
+                Section {
+                    Button { newName = ""; creating = true } label: {
+                        Label(L("New playlist"), systemImage: "plus")
+                            .foregroundStyle(palette.primary)
+                    }
+                }.toolSectionAppearance()
+                if !library.playlists.isEmpty {
+                    Section {
+                        ForEach(library.playlists) { playlist in
+                            Button {
+                                actions.add(songs, to: playlist)
+                                dismiss()
+                            } label: {
+                                HStack(spacing: Spacing.md) {
+                                    PlaylistCoverView(playlist: playlist)
+                                        .frame(width: ArtworkSize.compact, height: ArtworkSize.compact)
+                                        .clipShape(RoundedRectangle(cornerRadius: Radius.small, style: .continuous))
+                                    VStack(alignment: .leading) {
+                                        Text(playlist.name).foregroundStyle(palette.onSurface)
+                                        Text(countLabel(playlist.songCount, "song")).font(.caption).foregroundStyle(palette.onSurfaceVariant)
+                                    }
+                                    Spacer(minLength: 0)
+                                }
+                                .contentShape(Rectangle())
                             }
                         }
-                    }
+                    }.toolSectionAppearance()
                 }
             }
-            .navigationTitle(songs.count == 1 ? "Add \"\(songs[0].title)\"" : "Add \(countLabel(songs.count, "song"))")
+            .modifier(ToolPageAppearance())
+            .navigationTitle(songs.count == 1 ? L("Add \"%@\"", songs[0].title) : L("Add %@", countLabel(songs.count, "song")))
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { Button("Cancel") { dismiss() } }
-            .alert("New playlist", isPresented: $creating) {
-                TextField("Name", text: $newName)
-                Button("Cancel", role: .cancel) { newName = "" }
-                Button("Create") {
+            .toolbar { Button(L("Cancel")) { dismiss() } }
+            .alert(L("New playlist"), isPresented: $creating) {
+                TextField(L("Name"), text: $newName)
+                Button(L("Cancel"), role: .cancel) { newName = "" }
+                Button(L("Create")) {
                     let chosen = newName
                     newName = ""
                     actions.createPlaylist(chosen, songs: songs)
@@ -349,9 +362,9 @@ private struct NewPlaylistAlert: View {
     @State private var name = ""
 
     var body: some View {
-        TextField("Name", text: $name)
-        Button("Cancel", role: .cancel) { name = "" }
-        Button("Create") {
+        TextField(L("Name"), text: $name)
+        Button(L("Cancel"), role: .cancel) { name = "" }
+        Button(L("Create")) {
             let chosen = name
             name = ""
             actions.createPlaylist(chosen)
@@ -362,6 +375,7 @@ private struct NewPlaylistAlert: View {
 /// What the library knows about a song: its tags and its file.
 struct SongDetailsSheet: View {
     let song: Song
+    @Environment(\.palette) private var palette
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -372,43 +386,44 @@ struct SongDetailsSheet: View {
                         SongArtworkView(song: song, maxPixels: 300)
                             .frame(width: 80, height: 80)
                             .clipShape(RoundedRectangle(cornerRadius: Radius.medium, style: .continuous))
-                        VStack(alignment: .leading) {
-                            Text(song.title).font(.headline)
-                            Text(song.artist).foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(song.title).font(.headline).foregroundStyle(palette.onSurface)
+                            Text(song.artist).foregroundStyle(palette.onSurfaceVariant)
                         }
                     }
-                }
-                Section("Tags") {
-                    row("Title", song.title)
-                    row("Artist", song.artist)
-                    row("Album", song.album)
-                    row("Track", song.trackNumber > 0 ? "\(song.trackNumber)" : nil)
-                    row("Disc", song.discNumber > 0 ? "\(song.discNumber)" : nil)
-                    row("Year", song.year > 0 ? "\(song.year)" : nil)
-                    row("Genre", song.genre)
+                }.toolSectionAppearance()
+                Section(L("Tags")) {
+                    row(L("Title"), song.title)
+                    row(L("Artist"), song.artist)
+                    row(L("Album"), song.album)
+                    row(L("Track"), song.trackNumber > 0 ? "\(song.trackNumber)" : nil)
+                    row(L("Disc"), song.discNumber > 0 ? "\(song.discNumber)" : nil)
+                    row(L("Year"), song.year > 0 ? "\(song.year)" : nil)
+                    row(L("Genre"), song.genre)
                     row("BPM", song.bpm.map(String.init))
-                    row("Composer", song.composer)
-                }
-                Section("File") {
-                    row("Duration", formatDuration(song.durationMs))
-                    row("Format", song.codec)
-                    row("Sample rate", song.sampleRate > 0 ? String(format: "%.1f kHz", Double(song.sampleRate) / 1000) : nil)
-                    row("Bit rate", song.bitrate > 0 ? "\(song.bitrate / 1000) kbps" : nil)
-                    row("Channels", song.channels > 0 ? "\(song.channels)" : nil)
-                    row("Size", song.fileSize > 0 ? ByteCountFormatter.string(fromByteCount: song.fileSize, countStyle: .file) : nil)
-                    row("Path", song.path)
-                }
+                    row(L("Composer"), song.composer)
+                }.toolSectionAppearance()
+                Section(L("File")) {
+                    row(L("Duration"), formatDuration(song.durationMs))
+                    row(L("Format"), song.codec)
+                    row(L("Sample rate"), song.sampleRate > 0 ? String(format: "%.1f kHz", Double(song.sampleRate) / 1000) : nil)
+                    row(L("Bit rate"), song.bitrate > 0 ? "\(song.bitrate / 1000) kbps" : nil)
+                    row(L("Channels"), song.channels > 0 ? "\(song.channels)" : nil)
+                    row(L("Size"), song.fileSize > 0 ? ByteCountFormatter.string(fromByteCount: song.fileSize, countStyle: .file) : nil)
+                    row(L("Path"), song.path)
+                }.toolSectionAppearance()
             }
-            .navigationTitle("Music information")
+            .modifier(ToolPageAppearance())
+            .navigationTitle(L("Music information"))
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { Button("Done") { dismiss() } }
+            .toolbar { Button(L("Done")) { dismiss() } }
         }
     }
 
     @ViewBuilder
     private func row(_ label: String, _ value: String?) -> some View {
         if let value, !value.isBlank {
-            LabeledContent(label) { Text(value).multilineTextAlignment(.trailing).textSelection(.enabled) }
+            LabeledContent(label) { Text(value).foregroundStyle(palette.onSurfaceVariant).multilineTextAlignment(.trailing).textSelection(.enabled) }
         }
     }
 }

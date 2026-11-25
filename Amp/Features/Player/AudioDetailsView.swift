@@ -37,10 +37,10 @@ struct AudioDetailsView: View {
                 analysisSection(eq, headroom).toolSectionAppearance()
             }
             .modifier(ToolPageAppearance())
-            .navigationTitle("Audio details")
+            .navigationTitle(L("Audio details"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button(L("Done")) { dismiss() } }
                 ToolbarItemGroup(placement: .primaryAction) {
                     Button {
                         UIPasteboard.general.string = report(eq, headroom)

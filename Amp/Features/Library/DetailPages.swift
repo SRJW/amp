@@ -396,6 +396,8 @@ struct ArtistDetailView: View {
     @Environment(PlayerController.self) private var player
     @Environment(AppRouter.self) private var router
     @Environment(AppSettings.self) private var settings
+    @Environment(\.palette) private var palette
+    @Environment(\.colorScheme) private var themeScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var albums: [Album] = []
     @State private var primary: [Song] = []
@@ -726,7 +728,7 @@ struct ArtistDetailView: View {
                 .accessibilityLabel("Artist options")
             }
         }
-        .sheet(item: $artworkTarget) { ArtworkPickerSheet(target: $0) }
+        .sheet(item: $artworkTarget) { ArtworkPickerSheet(target: $0).preferredColorScheme(themeScheme) }
         .sheet(isPresented: $showsInfoSheet) {
             if let artist = library.artist(artistId) {
                 ArtistInfoSheet(
@@ -748,6 +750,8 @@ struct ArtistDetailView: View {
                         router.open(.radio(.artist(artistId)))
                     }
                 )
+                .environment(\.palette, palette.tinted(for: baseTone, scheme: themeScheme))
+                .preferredColorScheme(themeScheme)
             }
         }
         .sheet(isPresented: $showsAllSongsSheet) {
@@ -758,6 +762,8 @@ struct ArtistDetailView: View {
                     artistId: artistId,
                     songActions: songActions
                 )
+                .environment(\.palette, palette.tinted(for: baseTone, scheme: themeScheme))
+                .preferredColorScheme(themeScheme)
             }
         }
         .task(id: library.songs) { load() }
@@ -931,6 +937,7 @@ private struct ArtistInfoSheet: View {
     let onFindPhoto: () -> Void
     let onFixTags: () -> Void
     let onBrowseRadio: () -> Void
+    @Environment(\.palette) private var palette
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -944,14 +951,14 @@ private struct ArtistInfoSheet: View {
                             .frame(width: 68, height: 68)
                             .clipShape(Circle())
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(artist.name).font(.title3.weight(.bold))
+                            Text(artist.name).font(.title3.weight(.bold)).foregroundStyle(palette.onSurface)
                             Text(collectionFacts(songs: songs))
                                 .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(palette.onSurfaceVariant)
                         }
                     }
                     .padding(.vertical, 4)
-                }
+                }.toolSectionAppearance()
                 Section(L("Library summary")) {
                     LabeledContent(L("Songs"), value: "\(songs.count)")
                     LabeledContent(L("Albums"), value: "\(albums.count)")
@@ -959,15 +966,16 @@ private struct ArtistInfoSheet: View {
                     if !genres.isEmpty {
                         LabeledContent(L("Genres"), value: genres.prefix(4).joined(separator: ", "))
                     }
-                }
+                }.toolSectionAppearance()
                 Section {
-                    Button(action: onFindPhoto) { Label(L("Find a photo"), systemImage: "person.crop.square") }
-                    Button(action: onFixTags) { Label(L("Fix tags online"), systemImage: "wand.and.stars") }
+                    Button(action: onFindPhoto) { Label(L("Find a photo"), systemImage: "person.crop.square").foregroundStyle(palette.primary) }
+                    Button(action: onFixTags) { Label(L("Fix tags online"), systemImage: "wand.and.stars").foregroundStyle(palette.primary) }
                     if radioAvailable {
-                        Button(action: onBrowseRadio) { Label(L("Browse radio"), systemImage: "dot.radiowaves.left.and.right") }
+                        Button(action: onBrowseRadio) { Label(L("Browse radio"), systemImage: "dot.radiowaves.left.and.right").foregroundStyle(palette.primary) }
                     }
-                }
+                }.toolSectionAppearance()
             }
+            .modifier(ToolPageAppearance())
             .navigationTitle(L("Artist info"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -987,6 +995,7 @@ private struct ArtistAllSongsSheet: View {
     let songActions: SongActions
     @Environment(LibraryActions.self) private var actions
     @Environment(AppRouter.self) private var router
+    @Environment(\.palette) private var palette
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -999,25 +1008,35 @@ private struct ArtistAllSongsSheet: View {
                             dismiss()
                             router.openPlayer()
                         } label: {
-                            Label(L("Play"), systemImage: "play.fill").frame(maxWidth: .infinity)
+                            Label(L("Play"), systemImage: "play.fill")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(palette.onPrimary)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 44)
+                                .background(Capsule().fill(palette.primary))
                         }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.plain)
                         Button {
                             actions.playShuffled(songs, source: .artist(artistId))
                             dismiss()
                             router.openPlayer()
                         } label: {
-                            Label(L("Shuffle"), systemImage: "shuffle").frame(maxWidth: .infinity)
+                            Label(L("Shuffle"), systemImage: "shuffle")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(palette.onSurface)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 44)
+                                .background(Capsule().fill(palette.surfaceVariant))
                         }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.plain)
                     }
-                    .controlSize(.large)
                     .padding(.horizontal, Spacing.lg)
                     .padding(.vertical, Spacing.md)
 
                     SongList(songs: songs, source: .artist(artistId))
                 }
             }
+            .modifier(ToolPageAppearance())
             .navigationTitle(artistName)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

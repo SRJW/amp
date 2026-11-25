@@ -167,10 +167,27 @@ struct NowPlayingView: View {
         }
         .animation(.easeInOut(duration: 0.2), value: actions.message)
         .routerSheets(active: true)
-        .sheet(isPresented: $showsQueue) { QueueSheet().preferredColorScheme(themeScheme) }
-        .sheet(isPresented: $showsMarks, onDismiss: { marksRevision += 1 }) { MarksSheet().preferredColorScheme(themeScheme) }
-        .sheet(isPresented: $showsAudioDetails) { AudioDetailsView().preferredColorScheme(themeScheme) }
+        .sheet(isPresented: $showsQueue) {
+            QueueSheet()
+                .environment(\.palette, nowPlayingSheetPalette)
+                .preferredColorScheme(themeScheme)
+        }
+        .sheet(isPresented: $showsMarks, onDismiss: { marksRevision += 1 }) {
+            MarksSheet()
+                .environment(\.palette, nowPlayingSheetPalette)
+                .preferredColorScheme(themeScheme)
+        }
+        .sheet(isPresented: $showsAudioDetails) {
+            AudioDetailsView()
+                .environment(\.palette, nowPlayingSheetPalette)
+                .preferredColorScheme(themeScheme)
+        }
         .fullScreenCover(isPresented: $showsVisualizer) { VisualizerView().preferredColorScheme(themeScheme) }
+    }
+
+    private var nowPlayingSheetPalette: AppPalette {
+        guard playerArtworkPresent, settings.customTheme == nil else { return palette }
+        return palette.tinted(for: Color(argb: artworkDominant), scheme: themeScheme)
     }
 
     private func artworkInteraction(width: CGFloat) -> some View {

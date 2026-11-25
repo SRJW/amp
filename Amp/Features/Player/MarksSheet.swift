@@ -18,58 +18,58 @@ struct MarksSheet: View {
             List {
                 Section {
                     HStack(spacing: Spacing.sm) {
-                        Button(loop?.startMs.map { "A · \(formatDuration($0))" } ?? "Set A") { report(player.setLoopStart()) }
-                        Button(loop?.endMs.map { "B · \(formatDuration($0))" } ?? "Set B") { report(player.setLoopEnd()) }
+                        Button(loop?.startMs.map { "A · \(formatDuration($0))" } ?? L("Set A")) { report(player.setLoopStart()) }
+                        Button(loop?.endMs.map { "B · \(formatDuration($0))" } ?? L("Set B")) { report(player.setLoopEnd()) }
                     }
                     .buttonStyle(.bordered)
-                    Toggle("Loop", isOn: Binding(get: { loop?.enabled == true }, set: { report(player.setLoopEnabled($0)) }))
+                    Toggle(L("Loop"), isOn: Binding(get: { loop?.enabled == true }, set: { report(player.setLoopEnabled($0)) }))
                         .disabled(loop?.isComplete != true)
-                    Button("Clear", role: .destructive) { player.clearLoop() }
+                    Button(L("Clear"), role: .destructive) { player.clearLoop() }
                         .disabled(loop == nil)
                 } header: {
-                    Text("A–B loop")
+                    Text(L("A–B loop"))
                 } footer: {
-                    Text("Set A and B while listening. Looping jumps back to A each time playback reaches B.")
+                    Text(L("Set A and B while listening. Looping jumps back to A each time playback reaches B."))
                 }.toolSectionAppearance()
                 Section {
                     Button {
                         addBookmark()
                     } label: {
-                        Label("Add at \(formatDuration(player.clock.positionMs))", systemImage: "bookmark")
+                        Label(L("Add at %@", formatDuration(player.clock.positionMs)), systemImage: "bookmark")
                     }
                     .disabled(song == nil)
                     if bookmarks.isEmpty {
-                        Text(song == nil ? "Nothing is playing." : "No bookmarks for this track yet.").foregroundStyle(.secondary)
+                        Text(song == nil ? L("Nothing is playing.") : L("No bookmarks for this track yet.")).foregroundStyle(palette.onSurfaceVariant)
                     }
                     ForEach(bookmarks) { bookmark in
                         Button { if bookmark.songId == player.state.currentSong?.id { player.seek(to: bookmark.positionMs) } } label: {
                             HStack {
                                 Text(formatDuration(bookmark.positionMs)).monospacedDigit().foregroundStyle(palette.primary)
-                                Text(bookmark.label.isBlank ? "Bookmark" : bookmark.label).foregroundStyle(palette.onSurface)
+                                Text(bookmark.label.isBlank ? L("Bookmark") : bookmark.label).foregroundStyle(palette.onSurface)
                                 Spacer()
                             }
                         }
                         .accessibilityHint("Plays from \(formatDuration(bookmark.positionMs))")
                         .swipeActions {
-                            Button(role: .destructive) { delete(bookmark) } label: { Label("Delete", systemImage: "trash") }
+                            Button(role: .destructive) { delete(bookmark) } label: { Label(L("Delete"), systemImage: "trash") }
                             Button {
                                 name = bookmark.label
                                 renaming = bookmark
-                            } label: { Label("Rename", systemImage: "pencil") }
+                            } label: { Label(L("Rename"), systemImage: "pencil") }
                         }
                     }
                 } header: {
-                    Text("Bookmarks")
+                    Text(L("Bookmarks"))
                 }.toolSectionAppearance()
             }
             .modifier(ToolPageAppearance())
-            .navigationTitle("Bookmarks & A–B loop")
+            .navigationTitle(L("Bookmarks & A–B loop"))
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { Button("Done") { dismiss() } }
-            .alert("Name bookmark", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
-                TextField("Name", text: $name)
-                Button("Cancel", role: .cancel) {}
-                Button("Save") {
+            .toolbar { Button(L("Done")) { dismiss() } }
+            .alert(L("Name bookmark"), isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
+                TextField(L("Name"), text: $name)
+                Button(L("Cancel"), role: .cancel) {}
+                Button(L("Save")) {
                     if let bookmark = renaming { try? library.database.renameBookmark(id: bookmark.id, label: name.trimmed) }
                     load()
                 }
