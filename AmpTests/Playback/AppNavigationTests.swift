@@ -34,4 +34,15 @@ final class AppNavigationTests: XCTestCase {
         router.activate(.library)
         XCTAssertTrue(router.paths[.library]?.isEmpty == true)
     }
+
+    @MainActor func testReselectingSearchFromArtistOrAlbumReturnsToSearchRoot() {
+        let router = AppRouter()
+        router.activate(.search)
+        router.open(.artist(9))
+        router.open(.album(14))
+        XCTAssertEqual(router.paths[.search]?.count, 2)
+        router.activate(.search)
+        XCTAssertEqual(router.section, .search)
+        XCTAssertTrue(router.paths[.search]?.isEmpty == true)
+    }
 }

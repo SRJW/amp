@@ -129,13 +129,17 @@ final class AppRouter {
     }
 
     func activate(_ target: LibrarySection) {
+        let reselectingVisibleSection = section == target && presentedTool == nil && !showsNowPlaying
         songReveal = nil
         highlightedSongID = nil
         presentedTool = nil
         showsLyrics = false
         showsNowPlaying = false
-        if target == .library { select(target) }
-        else { section = target }
+        if target == .library || reselectingVisibleSection {
+            select(target)
+        } else {
+            section = target
+        }
     }
 
     func openPlayer() {

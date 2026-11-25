@@ -180,6 +180,9 @@ struct SearchView: View {
         .toolbar(.hidden, for: .navigationBar)
         .onAppear { focused = router.section == .search && !router.showsNowPlaying }
         .onChange(of: router.section) { _, section in focused = section == .search && !router.showsNowPlaying }
+        .onChange(of: router.scrollToTopRequests[.search]) { _, _ in
+            if router.section == .search && !router.showsNowPlaying { focused = true }
+        }
         .onChange(of: router.showsNowPlaying) { _, shown in if shown { dismissKeyboard() } }
         .onChange(of: search.type) { _, _ in search.selected.removeAll() }
         .task(id: library.songs) { await search.run() }
