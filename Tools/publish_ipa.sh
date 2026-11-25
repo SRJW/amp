@@ -36,12 +36,9 @@ else
   retry_gh gh api --method POST "repos/$GH_REPO/git/refs" -f ref="refs/tags/$tag" -f sha="$IPA_SOURCE_SHA" >/dev/null
 fi
 
-# Check published release by tag first, then recent releases (including drafts) without paginating 100+ old releases.
-release_id=$(gh api "repos/$GH_REPO/releases/tags/$tag" --jq '.id' 2>/dev/null || true)
-if [ -z "$release_id" ]; then
-  release_id=$(retry_gh gh api "repos/$GH_REPO/releases?per_page=30" \
-    --jq ".[] | select(.tag_name == \"$tag\") | .id")
-fi
+# Check recent releases (including drafts) without paginating 100+ old releases.
+release_id=$(retry_gh gh api "repos/$GH_REPO/releases?per_page=30" \
+  --jq ".[] | select(.tag_name == \"$tag\") | .id")
 if [ -z "$release_id" ]; then
   python3 - "$temporary/release.json" <<'PY'
 import json, os, sys
