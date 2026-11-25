@@ -32,6 +32,7 @@ final class SearchStore {
     private(set) var songs: [Song] = []
     private(set) var albums: [Album] = []
     private(set) var artists: [Artist] = []
+    private(set) var topCategory: SearchTopCategory = .songs
     var type: SearchType = .all
     var selecting = false
     var selected = Set<Int64>()
@@ -41,30 +42,83 @@ final class SearchStore {
     private let library: LibraryStore
     @ObservationIgnored private var pending: Task<Void, Never>?
     @ObservationIgnored private var generation: UInt64 = 0
+    @ObservationIgnored private var cachedIndex: LibrarySearchIndex?
 
     init(library: LibraryStore) { self.library = library }
 
     private func schedule() {
         pending?.cancel()
+        if query.trimmed.isEmpty {
+            generation &+= 1
+            songs = []
+            albums = []
+            artists = []
+            extras = LibrarySearchExtras()
+            topCategory = .songs
+            return
+        }
         pending = Task {
-            try? await Task.sleep(for: .milliseconds(150))
+            try? await Task.sleep(for: .milliseconds(30))
             if !Task.isCancelled { await run() }
         }
+    }
+
+    func warmIndex() async {
+        let revision = library.contentRevision
+        if cachedIndex?.revision == revision { return }
+        let songs = library.songs, albums = library.albums, artists = library.artists
+        let albumArtists = library.albumArtists, playlists = library.playlists
+        let built = await Task.detached(priority: .userInitiated) {
+            LibrarySearchIndex(
+                revision: revision,
+                songs: songs,
+                albums: albums,
+                artists: artists,
+                albumArtists: albumArtists,
+                playlists: playlists
+            )
+        }.value
+        guard !Task.isCancelled, library.contentRevision == revision else { return }
+        cachedIndex = built
     }
 
     func run() async {
         generation &+= 1
         let request = generation
         let text = query.trimmed
+        guard !text.isEmpty else {
+            songs = []; albums = []; artists = []; extras = LibrarySearchExtras(); topCategory = .songs
+            return
+        }
+        let revision = library.contentRevision
+        let existingIndex = cachedIndex?.revision == revision ? cachedIndex : nil
         let songs = library.songs, albums = library.albums, artists = library.artists
         let albumArtists = library.albumArtists, playlists = library.playlists
         let result = await Task.detached(priority: .userInitiated) {
-            (LibrarySearch.results(text, songs: songs, albums: albums, artists: artists),
-             LibrarySearchExtras.matching(text, songs: songs, albumArtists: albumArtists, playlists: playlists))
+            let index = existingIndex ?? LibrarySearchIndex(
+                revision: revision,
+                songs: songs,
+                albums: albums,
+                artists: artists,
+                albumArtists: albumArtists,
+                playlists: playlists
+            )
+            let prepared = PreparedSearchQuery(text)
+            return (
+                index,
+                LibrarySearch.results(prepared, index: index),
+                LibrarySearchExtras.matching(prepared, index: index)
+            )
         }.value
         guard !Task.isCancelled, request == generation, text == query.trimmed else { return }
-        self.songs = result.0.songs; self.albums = result.0.albums; self.artists = result.0.artists
-        extras = result.1
+        if result.0.revision == library.contentRevision {
+            cachedIndex = result.0
+        }
+        self.songs = result.1.songs
+        self.albums = result.1.albums
+        self.artists = result.1.artists
+        self.topCategory = result.1.topCategory
+        extras = result.2
     }
 
     func remember(_ item: RecentSearchItem) {
@@ -158,15 +212,42 @@ struct SearchView: View {
                         .padding(.horizontal, Spacing.gutter)
                     if !search.recents.isEmpty || SearchHistoryStore.shared.entries("library").isEmpty { recents }
                 } else {
-                    if !search.selecting { entityResults }
-                    if search.selecting || search.type == .all || search.type == .songs {
-                        SongList(songs: tracks, emptyMessage: L("No songs match this search."), emptyIcon: "magnifyingglass",
-                                 selection: search.selecting ? $search.selected : nil, showsFileDetails: true,
+                    let songsFirst = !search.selecting && search.type == .all && search.topCategory == .songs && !tracks.isEmpty
+                    if songsFirst {
+                        let previewLimit = 6
+                        let showsPreview = hasEntityResults && tracks.count > previewLimit
+                        let visibleTracks = showsPreview ? Array(tracks.prefix(previewLimit)) : tracks
+                        if hasEntityResults {
+                            HStack {
+                                Text(L("Songs")).font(.title3.weight(.bold))
+                                Spacer()
+                                if showsPreview {
+                                    Button(L("See all")) {
+                                        dismissKeyboard()
+                                        search.type = .songs
+                                    }
+                                    .font(.subheadline.weight(.medium))
+                                }
+                            }
+                            .padding(.horizontal, Spacing.gutter)
+                        }
+                        SongList(songs: visibleTracks, emptyMessage: L("No songs match this search."), emptyIcon: "magnifyingglass",
+                                 selection: nil, showsFileDetails: true,
                                  continuousFromSearch: true,
                                  onPlay: { dismissKeyboard(); rememberQuery() },
                                  onPlaySong: { dismissKeyboard(); search.remember(.song($0)) })
-                    } else if tracks.isEmpty && !hasEntityResults {
-                        EmptyState(message: L("No results for this filter."), systemImage: "magnifyingglass")
+                        entityResults
+                    } else {
+                        if !search.selecting { entityResults }
+                        if search.selecting || search.type == .all || search.type == .songs {
+                            SongList(songs: tracks, emptyMessage: L("No songs match this search."), emptyIcon: "magnifyingglass",
+                                     selection: search.selecting ? $search.selected : nil, showsFileDetails: true,
+                                     continuousFromSearch: true,
+                                     onPlay: { dismissKeyboard(); rememberQuery() },
+                                     onPlaySong: { dismissKeyboard(); search.remember(.song($0)) })
+                        } else if tracks.isEmpty && !hasEntityResults {
+                            EmptyState(message: L("No results for this filter."), systemImage: "magnifyingglass")
+                        }
                     }
                 }
             }.padding(.vertical, Spacing.md)
@@ -185,8 +266,10 @@ struct SearchView: View {
         }
         .onChange(of: router.showsNowPlaying) { _, shown in if shown { dismissKeyboard() } }
         .onChange(of: search.type) { _, _ in search.selected.removeAll() }
-        .task(id: library.songs) { await search.run() }
-        .task(id: library.playlists) { await search.run() }
+        .task(id: library.contentRevision) {
+            await search.warmIndex()
+            if !search.query.trimmed.isEmpty { await search.run() }
+        }
         .task(id: playlistIDs) {
             guard !playlistIDs.isEmpty else { playlistMatchSongIDs = []; return }
             let database = library.database

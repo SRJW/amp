@@ -70,4 +70,70 @@ final class LibrarySearchTests: XCTestCase {
         XCTAssertTrue(SearchNormalizer.matches("$ome $exy $ongs 4 U", "some sexy"))
         XCTAssertTrue(find("!!!").songs.isEmpty)
     }
+
+    func testPrefixQueryNeverDropsInnerbloomBehindCompetingArtistsAlbumsOrExactSongs() {
+        let testArtists = [
+            Artist(id: 10, name: "Inner City", songCount: 1, albumCount: 1),
+            Artist(id: 11, name: "RÜFÜS DU SOL", songCount: 1, albumCount: 1)
+        ]
+        let testAlbums = [
+            Album(id: 10, title: "Inner World", artist: "Inner City", artistId: 10, songCount: 1, year: 2019),
+            Album(id: 11, title: "Bloom", artist: "RÜFÜS DU SOL", artistId: 11, songCount: 1, year: 2016)
+        ]
+        let testSongs = [
+            Song(id: 10, title: "Inner", artist: "Inner City", album: "Inner World", artistId: 10, albumId: 10, durationMs: 200_000, path: "10.mp3"),
+            Song(id: 11, title: "Innerbloom", artist: "RÜFÜS DU SOL", album: "Bloom", artistId: 11, albumId: 11, durationMs: 578_000, path: "11.mp3"),
+            Song(id: 12, title: "A Winner", artist: "Inner City", album: "Inner World", artistId: 10, albumId: 10, durationMs: 180_000, path: "12.mp3")
+        ]
+
+        let result = LibrarySearch.results("inner", songs: testSongs, albums: testAlbums, artists: testArtists)
+        XCTAssertEqual(result.songs.prefix(2).map(\.id), [10, 11], "Both exact 'Inner' and prefix 'Innerbloom' must appear immediately for 'inner'")
+        XCTAssertEqual(result.artists.map(\.id), [10])
+        XCTAssertTrue(result.albums.map(\.id).contains(10))
+        XCTAssertTrue(result.albums.map(\.id).contains(11))
+        XCTAssertEqual(result.topCategory, .songs)
+
+        // Even with a single competing artist/album prefix match and no exact song, Innerbloom is #1
+        let withoutExact = LibrarySearch.results("inner", songs: [testSongs[1], testSongs[2]], albums: testAlbums, artists: testArtists)
+        XCTAssertEqual(withoutExact.songs.first?.id, 11)
+        XCTAssertEqual(withoutExact.topCategory, .songs)
+    }
+
+    func testPrefixTyposCrossFieldQueriesAndAcronyms() {
+        let testArtists = [
+            Artist(id: 11, name: "RÜFÜS DU SOL", songCount: 1, albumCount: 1),
+            Artist(id: 12, name: "Other", songCount: 1, albumCount: 1)
+        ]
+        let testAlbums = [
+            Album(id: 11, title: "Bloom", artist: "RÜFÜS DU SOL", artistId: 11, songCount: 1, year: 2016),
+            Album(id: 12, title: "Fire", artist: "Other", artistId: 12, songCount: 1, year: 2020)
+        ]
+        let testSongs = [
+            Song(id: 11, title: "Innerbloom", artist: "RÜFÜS DU SOL", album: "Bloom", artistId: 11, albumId: 11, durationMs: 578_000, path: "11.mp3"),
+            Song(id: 12, title: "Hellfire", artist: "Other", album: "Fire", artistId: 12, albumId: 12, durationMs: 200_000, path: "12.mp3")
+        ]
+
+        // Prefix typos while typing ("inerb", "innner") find Innerbloom
+        XCTAssertEqual(LibrarySearch.results("inerb", songs: testSongs, albums: testAlbums, artists: testArtists).songs.first?.id, 11)
+        XCTAssertEqual(LibrarySearch.results("innner", songs: testSongs, albums: testAlbums, artists: testArtists).songs.first?.id, 11)
+        // Guard against false trailing-letter prefix matches ("hello" must not match "Hellfire")
+        XCTAssertFalse(SearchNormalizer.matches("Hellfire", "hello"))
+
+        // Multi-word cross-field search ("rufus inner", "bloom rufus")
+        XCTAssertEqual(LibrarySearch.results("rufus inner", songs: testSongs, albums: testAlbums, artists: testArtists).songs.first?.id, 11)
+        XCTAssertEqual(LibrarySearch.results("bloom rufus", songs: testSongs, albums: testAlbums, artists: testArtists).songs.first?.id, 11)
+
+        // Acronym / initials matching ("omdb" -> "Over My Dead Body")
+        XCTAssertEqual(find("omdb").songs.first?.id, 4)
+    }
+
+    func testSongBrowseRequestRanksPrefixMatchesAboveAlphabeticallyEarlierSubstrings() {
+        let tracks = [
+            Song(id: 1, title: "A Winner", artist: "Alpha", album: "Album", albumId: 1, durationMs: 180_000, path: "1.mp3"),
+            Song(id: 2, title: "Innerbloom", artist: "RÜFÜS DU SOL", album: "Bloom", albumId: 2, durationMs: 578_000, path: "2.mp3"),
+            Song(id: 3, title: "Dinner Time", artist: "Beta", album: "Album", albumId: 3, durationMs: 180_000, path: "3.mp3")
+        ]
+        let results = SongBrowseRequest(songs: tracks, facts: [:], query: "inner", sort: .title).results()
+        XCTAssertEqual(results.first?.id, 2, "Prefix match 'Innerbloom' should rank ahead of substring matches like 'A Winner'")
+    }
 }

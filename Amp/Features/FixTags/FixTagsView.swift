@@ -411,11 +411,18 @@ private struct AddSongsSheet: View {
     }
 
     private var filtered: [Song] {
-        let words = query.lowercased().split(separator: " ").map(String.init)
-        guard !words.isEmpty else { return library.songs }
-        return library.songs.filter { song in
-            let text = "\(song.title) \(song.artist) \(song.album)".lowercased()
-            return words.allSatisfy { text.contains($0) }
-        }
+        let search = SectionSearch(query)
+        guard !search.isEmpty else { return library.songs }
+        return library.songs
+            .compactMap { song -> (Song, Int)? in
+                let s = search.score(primary: song.title, secondary: [song.artist, song.album])
+                return s > 0 ? (song, s) : nil
+            }
+            .sorted { a, b in
+                if a.1 != b.1 { return a.1 > b.1 }
+                if a.0.title.count != b.0.title.count { return a.0.title.count < b.0.title.count }
+                return a.0.id < b.0.id
+            }
+            .map(\.0)
     }
 }

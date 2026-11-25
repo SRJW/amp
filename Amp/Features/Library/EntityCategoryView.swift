@@ -173,7 +173,7 @@ struct EntityCategoryView: View {
         let sortRaw = self.sort
         let query = self.query
         let selecting = self.selecting
-        if !query.isEmpty { try? await Task.sleep(for: .milliseconds(90)) }
+        if !query.isEmpty { try? await Task.sleep(for: .milliseconds(30)) }
         guard !Task.isCancelled else { return }
 
         let allAlbums = library.albums
@@ -188,10 +188,30 @@ struct EntityCategoryView: View {
 
         let computed = await Task.detached(priority: .userInitiated) { () -> ([NativeEntityItem], [String: Int], [String], [Song], [String: String]) in
             let match = SectionSearch(query)
+            let isSearching = !match.isEmpty
             var gridItems: [NativeEntityItem] = []
             var gridAnchors: [String: Int] = [:]
             var folders: [String] = []
             var songs: [Song] = []
+
+            func rankedByName<T>(_ items: [T], name: (T) -> String) -> [T] {
+                if isSearching {
+                    return items
+                        .compactMap { item -> (T, Int, String)? in
+                            let label = name(item)
+                            let s = match.score(primary: label)
+                            return s > 0 ? (item, s, label) : nil
+                        }
+                        .sorted { a, b in
+                            if a.1 != b.1 { return a.1 > b.1 }
+                            if a.2.count != b.2.count { return a.2.count < b.2.count }
+                            return a.2.localizedStandardCompare(b.2) == .orderedAscending
+                        }
+                        .map(\.0)
+                }
+                let sorted = items.sorted { name($0).localizedStandardCompare(name($1)) == .orderedAscending }
+                return sortRaw == LibrarySort.titleDescending.rawValue ? Array(sorted.reversed()) : sorted
+            }
 
             switch category {
             case .albums:
@@ -211,12 +231,11 @@ struct EntityCategoryView: View {
                         placeholderSymbol: "square.stack"
                     )
                 }
-                gridAnchors = SongAlphabet.indexAnchors(albums) {
+                gridAnchors = isSearching ? [:] : SongAlphabet.indexAnchors(albums) {
                     sortRaw == LibrarySort.artist.rawValue ? $0.artist : $0.title
                 }
             case .artists:
-                let sorted = allArtists.filter { match.matches([$0.name]) }.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
-                let artists = sortRaw == LibrarySort.titleDescending.rawValue ? Array(sorted.reversed()) : sorted
+                let artists = rankedByName(allArtists, name: \.name)
                 let ids = Set(artists.map(\.id))
                 songs = allSongs.filter { ids.contains($0.artistId) }
                 gridItems = artists.map { artist in
@@ -232,10 +251,9 @@ struct EntityCategoryView: View {
                         placeholderSymbol: "person"
                     )
                 }
-                gridAnchors = SongAlphabet.indexAnchors(artists, title: \.name)
+                gridAnchors = isSearching ? [:] : SongAlphabet.indexAnchors(artists, title: \.name)
             case .albumArtists:
-                let sorted = allArtists.filter { match.matches([$0.name]) }.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
-                let artists = sortRaw == LibrarySort.titleDescending.rawValue ? Array(sorted.reversed()) : sorted
+                let artists = rankedByName(allArtists, name: \.name)
                 let ids = artists.reduce(into: Set<Int64>()) { $0.formUnion(albumArtistAlbums[$1.id] ?? []) }
                 songs = allSongs.filter { ids.contains($0.albumId) }
                 gridItems = artists.map { artist in
@@ -251,10 +269,9 @@ struct EntityCategoryView: View {
                         placeholderSymbol: "person"
                     )
                 }
-                gridAnchors = SongAlphabet.indexAnchors(artists, title: \.name)
+                gridAnchors = isSearching ? [:] : SongAlphabet.indexAnchors(artists, title: \.name)
             case .playlists:
-                let sorted = allPlaylists.filter { match.matches([$0.name]) }.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
-                let playlists = sortRaw == LibrarySort.titleDescending.rawValue ? Array(sorted.reversed()) : sorted
+                let playlists = rankedByName(allPlaylists, name: \.name)
                 let ids = Set(playlists.flatMap { (try? database.playlistEntries($0.id))?.map(\.song.id) ?? [] })
                 songs = allSongs.filter { ids.contains($0.id) }
                 gridItems = playlists.map { playlist in
@@ -269,20 +286,35 @@ struct EntityCategoryView: View {
                         placeholderSymbol: "music.note.list"
                     )
                 }
-                gridAnchors = SongAlphabet.indexAnchors(playlists, title: \.name)
+                gridAnchors = isSearching ? [:] : SongAlphabet.indexAnchors(playlists, title: \.name)
             case .folders:
-                let sorted = Set(allSongs.map { ($0.path as NSString).deletingLastPathComponent }).filter { match.matches([$0]) }.sorted {
-                    $0.localizedStandardCompare($1) == .orderedAscending
+                let uniqueFolders = Array(Set(allSongs.map { ($0.path as NSString).deletingLastPathComponent }))
+                if isSearching {
+                    folders = uniqueFolders
+                        .compactMap { folder -> (String, Int)? in
+                            let leaf = (folder as NSString).lastPathComponent
+                            let s = match.score(primary: leaf.isEmpty ? folder : leaf, secondary: leaf.isEmpty ? [] : [folder])
+                            return s > 0 ? (folder, s) : nil
+                        }
+                        .sorted { a, b in
+                            if a.1 != b.1 { return a.1 > b.1 }
+                            return a.0.localizedStandardCompare(b.0) == .orderedAscending
+                        }
+                        .map(\.0)
+                } else {
+                    let sorted = uniqueFolders.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+                    folders = sortRaw == LibrarySort.titleDescending.rawValue ? Array(sorted.reversed()) : sorted
                 }
-                folders = sortRaw == LibrarySort.titleDescending.rawValue ? Array(sorted.reversed()) : sorted
                 let paths = Set(folders)
                 songs = allSongs.filter { paths.contains(($0.path as NSString).deletingLastPathComponent) }
             default:
-                songs = allSongs.filter { match.matches([$0.title, $0.artist, $0.album]) }
+                songs = SongBrowseRequest(songs: allSongs, facts: facts, query: query, sort: .title).results()
             }
 
             let anchors: [String: String]
-            if selecting {
+            if isSearching {
+                anchors = [:]
+            } else if selecting {
                 anchors = SongAlphabet.anchors(songs, id: \.listScrollAnchor, title: \.title)
             } else if category == .folders {
                 anchors = SongAlphabet.anchors(folders, id: { "amp-entity-folder-\($0)" }) { folder in

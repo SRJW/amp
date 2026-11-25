@@ -96,12 +96,16 @@ struct AlbumBrowseRequest: Hashable, Sendable {
             albumFacts[song.albumId] = aggregate
         }
         let search = SectionSearch(query)
-        return albums.filter { search.matches([$0.title, $0.artist]) }.map { album in
+        let isSearching = !search.isEmpty
+        return albums.compactMap { album -> BrowseEntry<Album>? in
+            let relevance = isSearching ? search.score(primary: album.title, secondary: [album.artist]) : 0
+            guard !isSearching || relevance > 0 else { return nil }
             let fact = albumFacts[album.id, default: LibraryBrowseFact()]
             return BrowseEntry(value: album, id: album.id, title: album.title, artist: album.artist,
                                album: album.title, year: album.year, added: fact.addedAt,
-                               played: max(fact.lastPlayedAt, lastPlayed[album.id, default: 0]), plays: fact.plays)
-        }.sorted { BrowseEntry.precedes($0, $1, sort: sort) }.map(\.value)
+                               played: max(fact.lastPlayedAt, lastPlayed[album.id, default: 0]), plays: fact.plays,
+                               relevance: relevance)
+        }.sorted { BrowseEntry.precedes($0, $1, sort: sort, prioritizeRelevance: isSearching) }.map(\.value)
     }
 }
 
@@ -118,17 +122,21 @@ struct SongBrowseRequest: Hashable, Sendable {
 
     func results() -> [Song] {
         let search = SectionSearch(query)
-        return songs.filter { song in
+        let isSearching = !search.isEmpty
+        return songs.compactMap { song -> BrowseEntry<Song>? in
             let genres = Genres.parse(song.genre)
             let matchesGenre = genre.isEmpty || (genre == LibraryBrowse.untaggedGenre ? genres.isEmpty : genres.contains { SectionSearch.key($0) == genre })
+            guard matchesGenre else { return nil }
             let matchesFormat = format.isEmpty
                 || (format == LibraryBrowse.losslessFormat ? song.isLossless : LibraryBrowse.formatKey(for: song) == format)
-            return matchesGenre && matchesFormat && mood.matches(song) && search.matches([song.title, song.artist, song.album, song.genre ?? ""])
-        }.map { song in
+            guard matchesFormat && mood.matches(song) else { return nil }
+            let relevance = isSearching ? search.score(primary: song.title, secondary: [song.artist, song.album, song.genre ?? ""]) : 0
+            guard !isSearching || relevance > 0 else { return nil }
             let fact = facts[song.id] ?? LibraryBrowseFact(addedAt: song.dateModified)
             return BrowseEntry(value: song, id: song.id, title: song.title, artist: song.artist, album: song.album,
-                               year: song.year, added: fact.addedAt, played: fact.lastPlayedAt, plays: fact.plays)
-        }.sorted { BrowseEntry.precedes($0, $1, sort: sort) }.map(\.value)
+                               year: song.year, added: fact.addedAt, played: fact.lastPlayedAt, plays: fact.plays,
+                               relevance: relevance)
+        }.sorted { BrowseEntry.precedes($0, $1, sort: sort, prioritizeRelevance: isSearching) }.map(\.value)
     }
 }
 
@@ -163,9 +171,13 @@ enum LibraryBrowse {
 }
 
 /// Keep every script, including combining marks. ASCII-only normalization loses Hindi/Arabic titles.
-struct SectionSearch {
-    private let tokens: [String]
-    init(_ query: String) { tokens = Self.key(query).split(whereSeparator: \.isWhitespace).map(String.init) }
+struct SectionSearch: Sendable {
+    private let prepared: PreparedSearchQuery
+    var isEmpty: Bool { prepared.isEmpty }
+
+    init(_ query: String) {
+        self.prepared = PreparedSearchQuery(query)
+    }
 
     static func key(_ text: String) -> String {
         text.folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: .current)
@@ -173,9 +185,24 @@ struct SectionSearch {
     }
 
     func matches(_ fields: [String]) -> Bool {
-        guard !tokens.isEmpty else { return true }
-        let haystack = fields.map(Self.key).joined(separator: "\n")
-        return SearchNormalizer.matches(haystack, tokens.joined(separator: " "))
+        guard !prepared.isEmpty else { return true }
+        return score(fields) > 0
+    }
+
+    func score(_ fields: [String]) -> Int {
+        guard !prepared.isEmpty else { return 0 }
+        guard let first = fields.first else { return 0 }
+        return score(primary: first, secondary: Array(fields.dropFirst()))
+    }
+
+    func score(primary: String, secondary: [String] = []) -> Int {
+        guard !prepared.isEmpty else { return 0 }
+        let primaryText = NormalizedSearchText(primary)
+        if secondary.isEmpty {
+            return SearchNormalizer.score(primaryText, prepared)
+        }
+        let secondaryTexts = secondary.compactMap { $0.isEmpty ? nil : NormalizedSearchText($0) }
+        return SearchNormalizer.multiFieldScore(primary: primaryText, secondary: secondaryTexts, query: prepared)
     }
 }
 
@@ -189,14 +216,21 @@ private struct BrowseEntry<Value> {
     let added: Int64
     let played: Int64
     let plays: Int
+    let relevance: Int
 
-    init(value: Value, id: Int64, title: String, artist: String, album: String, year: Int, added: Int64, played: Int64, plays: Int) {
+    init(value: Value, id: Int64, title: String, artist: String, album: String, year: Int,
+         added: Int64, played: Int64, plays: Int, relevance: Int = 0) {
         self.value = value; self.id = id
         self.title = SectionSearch.key(title); self.artist = SectionSearch.key(artist); self.album = SectionSearch.key(album)
         self.year = year; self.added = added; self.played = played; self.plays = plays
+        self.relevance = relevance
     }
 
-    static func precedes(_ a: Self, _ b: Self, sort: LibrarySort) -> Bool {
+    static func precedes(_ a: Self, _ b: Self, sort: LibrarySort, prioritizeRelevance: Bool = false) -> Bool {
+        if prioritizeRelevance {
+            if a.relevance != b.relevance { return a.relevance > b.relevance }
+            if a.title.count != b.title.count { return a.title.count < b.title.count }
+        }
         switch sort {
         case .recentlyAdded: if a.added != b.added { return a.added > b.added }
         case .recentlyPlayed: if a.played != b.played { return a.played > b.played }

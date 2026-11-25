@@ -217,7 +217,7 @@ struct AllSongsView: View {
             let albumCovers = library.albumCoverSong
             let albumsMap = Dictionary(library.albums.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
             let canCacheAllSongs = folderPath == nil && category == .songs && !hasFilters && snapshot.query.trimmed.isEmpty
-            if !snapshot.query.isEmpty { try? await Task.sleep(for: .milliseconds(120)) }
+            if !snapshot.query.isEmpty { try? await Task.sleep(for: .milliseconds(30)) }
             guard !Task.isCancelled else { return }
             let updated = await Task.detached(priority: .userInitiated) { () -> ([Song], [NativeSongRow], [String: Int]) in
                 let sorted = snapshot.results()
@@ -226,10 +226,14 @@ struct AllSongsView: View {
                     return NativeSongRow.build(song: song, thumbnailURL: thumb)
                 }
                 let anchors: [String: Int]
-                switch sortMode {
-                case .artist: anchors = SongAlphabet.indexAnchors(sorted, title: \.artist)
-                case .album: anchors = SongAlphabet.indexAnchors(sorted, title: \.album)
-                default: anchors = SongAlphabet.indexAnchors(sorted, title: \.title)
+                if !snapshot.query.trimmed.isEmpty {
+                    anchors = [:]
+                } else {
+                    switch sortMode {
+                    case .artist: anchors = SongAlphabet.indexAnchors(sorted, title: \.artist)
+                    case .album: anchors = SongAlphabet.indexAnchors(sorted, title: \.album)
+                    default: anchors = SongAlphabet.indexAnchors(sorted, title: \.title)
+                    }
                 }
                 return (sorted, builtRows, anchors)
             }.value
