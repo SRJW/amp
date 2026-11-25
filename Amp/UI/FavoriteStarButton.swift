@@ -1,4 +1,21 @@
 import SwiftUI
+import UIKit
+
+@MainActor
+private enum FavoriteHaptics {
+    private static let addGenerator = UINotificationFeedbackGenerator()
+    private static let removeGenerator = UIImpactFeedbackGenerator(style: .light)
+
+    static func playAdd() {
+        addGenerator.prepare()
+        addGenerator.notificationOccurred(.success)
+    }
+
+    static func playRemove() {
+        removeGenerator.prepare()
+        removeGenerator.impactOccurred(intensity: 0.8)
+    }
+}
 
 /// Apple Music–exact favorite star glyph derived frame-by-frame from iOS 26 Now Playing:
 /// - Add favorite: instant outline -> filled swap with a pure centered elastic bounce
@@ -64,8 +81,10 @@ struct AppleMusicFavoriteButton: View {
             optimisticFavorite = nextState
             if nextState {
                 addPulse += 1
+                FavoriteHaptics.playAdd()
             } else {
                 removePulse += 1
+                FavoriteHaptics.playRemove()
             }
             action()
         } label: {
@@ -85,8 +104,6 @@ struct AppleMusicFavoriteButton: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(active ? (removeLabel ?? L("Remove from favorites")) : (addLabel ?? L("Add to favorites")))
-        .sensoryFeedback(.impact(flexibility: .soft, intensity: 0.65), trigger: addPulse)
-        .sensoryFeedback(.impact(flexibility: .soft, intensity: 0.40), trigger: removePulse)
         .onChange(of: itemID) { _, _ in optimisticFavorite = nil }
         .onChange(of: isFavorite) { _, actual in
             if optimisticFavorite == actual { optimisticFavorite = nil }
