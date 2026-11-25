@@ -37,25 +37,27 @@ struct AppBottomBar: View {
     @Environment(\.palette) private var palette
 
     var body: some View {
-        VStack(spacing: AppNavigationMetrics.stripSpacing) {
-            Group {
-                if let song = player.state.currentSong {
-                    MiniPlayer(song: song) { router.openPlayer() }
-                } else {
-                    Label(L(AppNavigationMetrics.emptyTitle), systemImage: "music.note")
-                        .foregroundStyle(palette.onSurfaceVariant)
-                        .frame(maxWidth: .infinity, minHeight: AppNavigationMetrics.stripHeight)
+        GlassGroup(spacing: AppNavigationMetrics.stripSpacing, enabled: settings.glassEnabled) {
+            VStack(spacing: AppNavigationMetrics.stripSpacing) {
+                Group {
+                    if let song = player.state.currentSong {
+                        MiniPlayer(song: song) { router.openPlayer() }
+                    } else {
+                        Label(L(AppNavigationMetrics.emptyTitle), systemImage: "music.note")
+                            .foregroundStyle(palette.onSurfaceVariant)
+                            .frame(maxWidth: .infinity, minHeight: AppNavigationMetrics.stripHeight)
+                    }
                 }
-            }
-            .frame(height: AppNavigationMetrics.stripHeight)
-            .modifier(FloatingControlGlass(enabled: settings.glassEnabled, cornerRadius: MiniPlayerMetrics.cornerRadius))
-            if !keyboardVisible {
-                let drop = safeAreaBottom - AppNavigationMetrics.effectiveBottomInset(safeAreaBottom)
-                let rowHeight = showsButtons ? AppNavigationMetrics.buttonsHeight : max(AppNavigationMetrics.buttonsHeight - drop, 0)
-                GeometryReader { geometry in
-                    if showsButtons { AppNavigationButtons(width: geometry.size.width) }
+                .frame(height: AppNavigationMetrics.stripHeight)
+                .modifier(FloatingControlGlass(enabled: settings.glassEnabled, cornerRadius: MiniPlayerMetrics.cornerRadius))
+                if !keyboardVisible {
+                    let drop = safeAreaBottom - AppNavigationMetrics.effectiveBottomInset(safeAreaBottom)
+                    let rowHeight = showsButtons ? AppNavigationMetrics.buttonsHeight : max(AppNavigationMetrics.buttonsHeight - drop, 0)
+                    GeometryReader { geometry in
+                        if showsButtons { AppNavigationButtons(width: geometry.size.width) }
+                    }
+                    .frame(height: rowHeight)
                 }
-                .frame(height: rowHeight)
             }
         }
         .padding(.horizontal, AppNavigationMetrics.horizontalInset).padding(.bottom, AppNavigationMetrics.bottomPadding)
@@ -270,8 +272,7 @@ private struct AppNavigationBarContent: View, Animatable {
         let liftAnimation: Animation? = environment.accessibilityReduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.82)
 
         ZStack {
-            // Layer 1 (Back): One unified 60 pt Liquid Glass bar and resting pill shared identically
-            // between Library and Now Playing (no secondary 54 pt capsule or double-rim swap).
+            // Layer 1 (Back): Outer 60 pt Liquid Glass capsule track (like iOS 26/27 UISegmentedControl track).
             ZStack {
                 Color.clear
                     .frame(width: width, height: AppNavigationMetrics.buttonsHeight)
@@ -284,34 +285,24 @@ private struct AppNavigationBarContent: View, Animatable {
                         .frame(width: width, height: AppNavigationMetrics.capsuleHeight)
                         .opacity(blend)
                 }
-                Capsule().fill(selectionFallbackFill)
-                    .overlay {
-                        if glassEnabled && !environment.accessibilityReduceTransparency {
-                            Capsule().strokeBorder(
-                                LinearGradient(
-                                    colors: [Color.white.opacity(environment.colorScheme == .dark ? 0.16 : 0.42), .clear],
-                                    startPoint: .top,
-                                    endPoint: .bottom
-                                ),
-                                lineWidth: 0.6
-                            )
-                        }
-                    }
-                    .frame(width: lensWidth, height: lensHeight)
-                    .position(x: lensX, y: 24)
-                    .opacity(barOpacity * (contact == nil || !usesFloatingLens ? 1 : 0))
-                    .animation(liftAnimation, value: contact != nil)
+                if !usesFloatingLens {
+                    Capsule().fill(selectionFallbackFill)
+                        .frame(width: lensWidth, height: lensHeight)
+                        .position(x: lensX, y: 24)
+                        .opacity(barOpacity)
+                }
             }
             .allowsHitTesting(false)
             .accessibilityHidden(true)
 
-            // Layer 2 (Middle): Gliding Liquid Glass lens sits above the outer bar and below the icons,
-            // refracting the bar and scrolling artwork cleanly without blurring or distorting the glyphs.
+            // Layer 2 (Middle): Always-live iOS 26/27 Liquid Glass thumb pill (matches the native
+            // `.pickerStyle(.segmented)` glass thumb in Control Color: luminous specular pill at rest,
+            // expanding into a clear refractive lens as you slide across tabs).
             raisedLens
                 .frame(width: lensWidth * lensScaleX, height: lensHeight * lensScaleY)
                 .animation(environment.accessibilityReduceMotion ? nil : .interactiveSpring(response: 0.16, dampingFraction: 0.86), value: contact?.speed)
                 .position(x: lensX, y: 24)
-                .opacity(barOpacity * (contact == nil ? 0 : 1))
+                .opacity(barOpacity)
                 .animation(liftAnimation, value: contact != nil)
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
@@ -354,11 +345,11 @@ private struct AppNavigationBarContent: View, Animatable {
     private var lensHeight: CGFloat { AppNavigationMetrics.capsuleHeight - AppNavigationMetrics.selectionInset * 2 }
     private var lensScaleX: CGFloat {
         guard let contact, !environment.accessibilityReduceMotion else { return 1 }
-        return 1.28 + contact.speed * 0.09
+        return 1.24 + contact.speed * 0.08
     }
     private var lensScaleY: CGFloat {
         guard let contact, !environment.accessibilityReduceMotion else { return 1 }
-        return 1.19 - contact.speed * 0.05
+        return 1.15 - contact.speed * 0.04
     }
     private func libraryColor(at index: Int) -> Color {
         let focus = contact?.focus(at: index) ?? (selectedIndex == index ? 1 : 0)
@@ -374,10 +365,15 @@ private struct AppNavigationBarContent: View, Animatable {
     }
     @ViewBuilder private var raisedLens: some View {
         if #available(iOS 26.0, *), usesFloatingLens {
+            let isDragging = contact != nil
             Capsule()
-                .fill(Color.white.opacity(environment.colorScheme == .dark ? 0.04 : 0.10))
-                .glassEffect(.clear, in: .capsule)
-                .shadow(color: Color.black.opacity(environment.colorScheme == .dark ? 0.28 : 0.10), radius: 10, y: 2)
+                .fill(Color.white.opacity(environment.colorScheme == .dark ? (isDragging ? 0.05 : 0.11) : (isDragging ? 0.22 : 0.62)))
+                .glassEffect(isDragging ? .clear : .regular, in: .capsule)
+                .shadow(
+                    color: Color.black.opacity(environment.colorScheme == .dark ? (isDragging ? 0.30 : 0.22) : (isDragging ? 0.12 : 0.08)),
+                    radius: isDragging ? 10 : 6,
+                    y: 2
+                )
         } else { Color.clear }
     }
 

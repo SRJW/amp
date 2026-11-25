@@ -2,21 +2,21 @@ import SwiftUI
 
 /// Constants shared by the compact player's gestures and progress hit target.
 enum MiniPlayerMetrics {
-    static let artworkVerticalInset: CGFloat = 16
+    static let artworkVerticalInset: CGFloat = 14
     static let height: CGFloat = ArtworkSize.miniPlayer + artworkVerticalInset * 2
     static let horizontalInset: CGFloat = 14
-    static let columnSpacing: CGFloat = 10
-    static let cornerRadius: CGFloat = 32
-    static let artworkCornerRadius: CGFloat = 12
-    static let titleSize: CGFloat = 16
-    static let subtitleSize: CGFloat = 13
+    static let columnSpacing: CGFloat = 11
+    static let cornerRadius: CGFloat = 34
+    static let artworkCornerRadius: CGFloat = 14
+    static let titleSize: CGFloat = 15.5
+    static let subtitleSize: CGFloat = 12.5
     static let textSpacing: CGFloat = 2
-    static let textHeight: CGFloat = 44
+    static let textHeight: CGFloat = 42
     static let progressHeight: CGFloat = ArtworkSize.miniPlayer - textHeight
     static let progressLineHeight: CGFloat = 4
     static let progressThumbSize: CGFloat = 10
-    static let playSize: CGFloat = 24
-    static let buttonWidth: CGFloat = 44
+    static let playSize: CGFloat = 20
+    static let buttonWidth: CGFloat = 46
     static let swipeThreshold: CGFloat = 48
     static let dragDistance: CGFloat = 12
     static let transitionDuration = 0.45
@@ -35,7 +35,9 @@ struct MiniPlayer: View {
     let onOpen: () -> Void
     @Environment(PlayerController.self) private var player
     @Environment(AppRouter.self) private var router
+    @Environment(AppSettings.self) private var settings
     @Environment(\.palette) private var palette
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @GestureState private var translation = CGSize.zero
     @State private var frames = ArtworkSlideQueue<MiniPlayerFrame>()
@@ -59,6 +61,7 @@ struct MiniPlayer: View {
                 }
                     .frame(width: ArtworkSize.miniPlayer, height: ArtworkSize.miniPlayer)
                     .clipShape(RoundedRectangle(cornerRadius: MiniPlayerMetrics.artworkCornerRadius, style: .continuous))
+                    .shadow(color: .black.opacity(colorScheme == .dark ? 0.28 : 0.12), radius: 6, y: 2)
                     .playerArtworkFrame(expanded: false)
                     .modifier(MiniArtworkVisibility(enabled: router.presentedTool == nil))
             }
@@ -84,8 +87,20 @@ struct MiniPlayer: View {
             .frame(maxWidth: .infinity)
             Button { player.togglePlayPause() } label: {
                 Image(systemName: state.isPlaying ? "pause.fill" : "play.fill")
-                    .font(.system(size: MiniPlayerMetrics.playSize, weight: .semibold))
+                    .font(.system(size: MiniPlayerMetrics.playSize, weight: .bold))
                     .contentTransition(.symbolEffect(.replace))
+                    .frame(width: 42, height: 42)
+                    .background {
+                        if #available(iOS 26.0, *), settings.glassEnabled {
+                            Circle()
+                                .fill(Color.white.opacity(colorScheme == .dark ? 0.10 : 0.55))
+                                .glassEffect(.regular.interactive(), in: .circle)
+                                .shadow(color: .black.opacity(colorScheme == .dark ? 0.24 : 0.08), radius: 6, y: 2)
+                        } else {
+                            Circle()
+                                .fill(colorScheme == .dark ? Color.white.opacity(0.14) : Color.black.opacity(0.07))
+                        }
+                    }
                     .frame(width: MiniPlayerMetrics.buttonWidth, height: ArtworkSize.miniPlayer)
                     .contentShape(Rectangle())
             }

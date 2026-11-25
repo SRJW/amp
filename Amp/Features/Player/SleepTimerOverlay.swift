@@ -102,20 +102,21 @@ struct SleepTimerOverlay: View {
     }
 
     private var floatingCapsule: some View {
-        VStack(spacing: 14) {
-            headerRow
-            sliderTrack
-            presetsAndOptionRow
+        GlassGroup(spacing: 8, enabled: settings.glassEnabled) {
+            VStack(spacing: 14) {
+                headerRow
+                sliderTrack
+                presetsAndOptionRow
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 16)
+            .glassSurface(
+                cornerRadius: 32,
+                enabled: settings.glassEnabled,
+                interactive: true
+            )
+            .shadow(color: .black.opacity(colorScheme == .dark ? 0.30 : 0.12), radius: 22, y: 10)
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 16)
-        .glassSurface(
-            cornerRadius: 30,
-            enabled: settings.glassEnabled,
-            interactive: true,
-            tint: dominantColor?.opacity(0.22)
-        )
-        .shadow(color: .black.opacity(colorScheme == .dark ? 0.32 : 0.14), radius: 24, y: 10)
     }
 
     // MARK: - Top Row (Icon + Title + Live Value / Countdown)
@@ -126,7 +127,7 @@ struct SleepTimerOverlay: View {
             HStack(alignment: .center, spacing: 10) {
                 Image(systemName: isActive ? "moon.zzz.fill" : "moon.zzz")
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(isActive ? activeFill : secondaryInk)
+                    .foregroundStyle(isActive ? primaryInk : secondaryInk)
                     .contentTransition(.symbolEffect(.replace))
 
                 Text(L("Sleep timer"))
@@ -143,7 +144,7 @@ struct SleepTimerOverlay: View {
                 Spacer(minLength: 6)
 
                 Text(readoutLabel)
-                    .font(.system(size: 16, weight: .bold, design: .rounded).monospacedDigit())
+                    .font(.system(size: 15.5, weight: .bold, design: .rounded).monospacedDigit())
                     .foregroundStyle(isActive ? primaryInk : secondaryInk)
                     .contentTransition(.numericText())
                     .animation(.snappy(duration: 0.16), value: selectedMinutes)
@@ -152,26 +153,36 @@ struct SleepTimerOverlay: View {
         }
     }
 
-    // MARK: - Native iOS 27 Control Center–style Capsule Slider
+    // MARK: - Native iOS 27 Control Center / Segmented-style Capsule Slider
 
     private var sliderTrack: some View {
         GeometryReader { geo in
             let width = max(geo.size.width, 1)
             let fraction = CGFloat(selectedMinutes) / CGFloat(Self.maxMinutes)
-            let fillWidth = selectedMinutes > 0 ? max(fraction * width, 16) : 0
+            let fillWidth = selectedMinutes > 0 ? max(fraction * width, 24) : 0
             let stepCount = Self.maxMinutes / Self.stepMinutes
 
             ZStack(alignment: .leading) {
-                // Recessed capsule track
+                // Recessed capsule track (like UISegmentedControl groove)
                 Capsule()
                     .fill(subtleFill)
                     .frame(height: 36)
 
-                // Smooth fluid fill
+                // Raised Liquid Glass thumb fill (matches the selected thumb in Control Color)
                 if selectedMinutes > 0 {
-                    Capsule()
-                        .fill(activeFill.opacity(colorScheme == .dark ? 0.88 : 0.82))
-                        .frame(width: fillWidth, height: 36)
+                    Group {
+                        if #available(iOS 26.0, *), settings.glassEnabled {
+                            Capsule()
+                                .fill(Color.white.opacity(colorScheme == .dark ? 0.18 : 0.72))
+                                .glassEffect(.regular, in: .capsule)
+                                .shadow(color: .black.opacity(colorScheme == .dark ? 0.25 : 0.08), radius: 5, y: 1)
+                        } else {
+                            Capsule()
+                                .fill(activeFill.opacity(colorScheme == .dark ? 0.88 : 0.82))
+                        }
+                    }
+                    .frame(width: fillWidth, height: 32)
+                    .padding(.leading, 2)
                 }
 
                 // Subtle internal micro-ticks every 15m / 30m
@@ -180,13 +191,8 @@ struct SleepTimerOverlay: View {
                         let mins = index * Self.stepMinutes
                         let isMajor = mins % 30 == 0
                         let isQuarter = mins % 15 == 0
-                        let isInside = mins <= selectedMinutes && selectedMinutes > 0
                         Capsule()
-                            .fill(
-                                isInside
-                                    ? activeChipInk.opacity(isMajor ? 0.50 : 0.22)
-                                    : primaryInk.opacity(isMajor ? 0.30 : (isQuarter ? 0.18 : 0.09))
-                            )
+                            .fill(primaryInk.opacity(isMajor ? 0.32 : (isQuarter ? 0.18 : 0.09)))
                             .frame(
                                 width: isMajor ? 1.6 : 1.1,
                                 height: isMajor ? 14 : (isQuarter ? 10 : 6)
@@ -220,7 +226,7 @@ struct SleepTimerOverlay: View {
         .frame(height: 36)
     }
 
-    // MARK: - Quick Chips + Compact "Finish Last Song" Pill
+    // MARK: - Segmented Liquid Glass Quick Chips + "End of track" Pill
 
     private var presetsAndOptionRow: some View {
         HStack(spacing: 6) {
@@ -245,7 +251,8 @@ struct SleepTimerOverlay: View {
 
             Spacer(minLength: 2)
 
-            // Compact iOS pill toggle: Finish last song (or End of song when timer is 0)
+            // Compact iOS segmented-glass toggle pill: End of track
+            let endActive = selectedMinutes == 0 ? isEndOfSongOnly : finishLastSong
             Button {
                 SleepTimerHaptics.tap()
                 if selectedMinutes == 0 {
@@ -256,25 +263,23 @@ struct SleepTimerOverlay: View {
                 }
                 applyLive()
             } label: {
-                let active = selectedMinutes == 0 ? isEndOfSongOnly : finishLastSong
                 HStack(spacing: 4) {
-                    Image(systemName: active ? "checkmark.circle.fill" : "music.note")
+                    Image(systemName: endActive ? "checkmark.circle.fill" : "music.note")
                         .font(.system(size: 11.5, weight: .semibold))
                     Text(L("End of track"))
                         .font(.system(size: 12, weight: .semibold))
                         .lineLimit(1)
                 }
-                .foregroundStyle(active ? activeChipInk : primaryInk.opacity(0.78))
+                .foregroundStyle(endActive ? primaryInk : secondaryInk)
                 .padding(.horizontal, 10)
                 .frame(height: 30)
-                .background(
-                    Capsule()
-                        .fill(active ? activeFill : subtleFill)
-                )
+                .background {
+                    glassThumbBackground(isSelected: endActive)
+                }
             }
             .buttonStyle(.plain)
             .accessibilityLabel(L("Play last song to end"))
-            .accessibilityValue((selectedMinutes == 0 ? isEndOfSongOnly : finishLastSong) ? L("On") : L("Off"))
+            .accessibilityValue(endActive ? L("On") : L("Off"))
         }
     }
 
@@ -282,15 +287,32 @@ struct SleepTimerOverlay: View {
         Button(action: action) {
             Text(title)
                 .font(.system(size: 12, weight: .semibold, design: .rounded).monospacedDigit())
-                .foregroundStyle(isSelected ? activeChipInk : primaryInk.opacity(0.78))
+                .foregroundStyle(isSelected ? primaryInk : secondaryInk)
                 .padding(.horizontal, 10)
                 .frame(height: 30)
-                .background(
-                    Capsule()
-                        .fill(isSelected ? activeFill : subtleFill)
-                )
+                .background {
+                    glassThumbBackground(isSelected: isSelected)
+                }
         }
         .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private func glassThumbBackground(isSelected: Bool) -> some View {
+        if isSelected {
+            if #available(iOS 26.0, *), settings.glassEnabled {
+                Capsule()
+                    .fill(Color.white.opacity(colorScheme == .dark ? 0.16 : 0.72))
+                    .glassEffect(.regular.interactive(), in: .capsule)
+                    .shadow(color: .black.opacity(colorScheme == .dark ? 0.24 : 0.08), radius: 5, y: 1)
+            } else {
+                Capsule()
+                    .fill(colorScheme == .dark ? Color.white.opacity(0.20) : Color.black.opacity(0.10))
+            }
+        } else {
+            Capsule()
+                .fill(subtleFill)
+        }
     }
 
     // MARK: - Live State Sync

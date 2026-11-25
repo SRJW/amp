@@ -30,9 +30,7 @@ struct FloatingControlGlass: ViewModifier {
     }
 
     @ViewBuilder private func surface<Control: View>(_ control: Control, interactive: Bool) -> some View {
-        if let cornerRadius {
-            // Restore the earlier mini-player silhouette, keeping native contact
-            // response on the live control rather than a detached background.
+        if let cornerRadius, cornerRadius < 30 {
             control.glassSurface(cornerRadius: cornerRadius, enabled: enabled, interactive: interactive)
         } else {
             control.glassCapsule(enabled: enabled, interactive: interactive)
