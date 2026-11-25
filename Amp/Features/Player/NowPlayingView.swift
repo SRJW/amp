@@ -255,45 +255,79 @@ struct NowPlayingView: View {
     private func menu(width: CGFloat) -> some View {
         let current = player.state.currentSong
         let song = current.flatMap { c in library.songs.first(where: { $0.id == c.id }) ?? c }
+        let pinned = Set(settings.nowPlayingButtons)
+        let showQueue = !pinned.contains(.queue)
+        let showLyrics = !pinned.contains(.lyrics)
+        let showAddToPlaylist = !pinned.contains(.addToPlaylist)
+        let canOpenArtist = song.map { $0.artistId != 0 && library.artist($0.artistId) != nil } ?? false
+        let canOpenAlbum = song.map { $0.albumId != 0 && library.album($0.albumId) != nil } ?? false
+        let showGoToArtist = canOpenArtist && !pinned.contains(.goToArtist)
+        let showGoToAlbum = canOpenAlbum && !pinned.contains(.goToAlbum)
+        let showBookmarks = !pinned.contains(.bookmarks)
+        let showVisualizer = !pinned.contains(.visualizer)
+        let showMusicInfo = !pinned.contains(.musicInfo)
         return Menu {
-            Button { showsQueue = true } label: { Label(L("Queue"), systemImage: "list.bullet") }
-            Button { openLyrics() } label: { Label(L("Lyrics"), systemImage: "quote.bubble") }
-            Button { if let song { router.songsForPlaylist = [song] } } label: { Label(L("Add to playlist"), systemImage: "music.note.list") }
-            if let song, song.albumId != 0, library.album(song.albumId) != nil {
-                Button {
-                    close()
-                    router.select(.library)
-                    router.open(.album(song.albumId))
-                } label: {
-                    Text(L("Go to album"))
-                    if !song.album.isBlank { Text(song.album) }
-                    Image(systemName: "square.stack")
+            if showQueue || showLyrics {
+                Section {
+                    if showQueue {
+                        Button { showsQueue = true } label: { Label(L("Queue"), systemImage: "list.bullet") }
+                    }
+                    if showLyrics {
+                        Button { openLyrics() } label: { Label(L("Lyrics"), systemImage: "quote.bubble") }
+                    }
                 }
             }
-            if let song, song.artistId != 0, library.artist(song.artistId) != nil {
-                Button {
-                    close()
-                    router.select(.library)
-                    router.open(.artist(song.artistId))
-                } label: {
-                    Text(L("Go to artist"))
-                    if !song.artist.isBlank { Text(song.artist) }
-                    Image(systemName: "person")
+            if showAddToPlaylist || showGoToArtist || showGoToAlbum {
+                Section {
+                    if showAddToPlaylist {
+                        Button { if let song { router.songsForPlaylist = [song] } } label: { Label(L("Add to playlist"), systemImage: "music.note.list") }
+                    }
+                    if showGoToArtist, let song {
+                        Button {
+                            close()
+                            router.select(.library)
+                            router.open(.artist(song.artistId))
+                        } label: {
+                            Text(L("Go to artist"))
+                            if !song.artist.isBlank { Text(song.artist) }
+                            Image(systemName: "person")
+                        }
+                    }
+                    if showGoToAlbum, let song {
+                        Button {
+                            close()
+                            router.select(.library)
+                            router.open(.album(song.albumId))
+                        } label: {
+                            Text(L("Go to album"))
+                            if !song.album.isBlank { Text(song.album) }
+                            Image(systemName: "square.stack")
+                        }
+                    }
                 }
             }
-            Button { showsVisualizer = true } label: { Label(L("Visualizer"), systemImage: "waveform") }
-            Button { showsMarks = true } label: {
-                Label(player.state.abLoop?.enabled == true ? L("Bookmarks & A–B loop (on)") : L("Bookmarks & A–B loop"), systemImage: "bookmark.square")
+            if showBookmarks || showVisualizer || showMusicInfo {
+                Section {
+                    if showBookmarks {
+                        Button { showsMarks = true } label: {
+                            Label(player.state.abLoop?.enabled == true ? L("Bookmarks & A–B loop (on)") : L("Bookmarks & A–B loop"), systemImage: "bookmark.square")
+                        }
+                    }
+                    if showVisualizer {
+                        Button { showsVisualizer = true } label: { Label(L("Visualizer"), systemImage: "waveform") }
+                    }
+                    if showMusicInfo {
+                        Button { router.songForDetails = song } label: { Label(L("Music information"), systemImage: "info.circle") }
+                    }
+                }
             }
-            Button { router.songForDetails = song } label: { Label(L("Music information"), systemImage: "info.circle") }
-            Divider()
             if let song {
-                Button(role: .destructive) { actions.songPendingDeletion = song } label: {
-                    Label(L("Delete from device"), systemImage: "trash")
+                Section {
+                    Button(role: .destructive) { actions.songPendingDeletion = song } label: {
+                        Label(L("Delete from device"), systemImage: "trash")
+                    }
                 }
             }
-            Button { close() } label: { Label(L("Close player"), systemImage: "chevron.down") }
-                .accessibilityIdentifier("closeNowPlaying")
         } label: {
             Image(systemName: PlayerButtonConstants.optionsSymbol)
                 .resizable().scaledToFit()
