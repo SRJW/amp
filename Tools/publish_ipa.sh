@@ -14,16 +14,34 @@ asset_name="amp-${tag}.ipa"
 temporary=$(mktemp -d)
 trap 'rm -rf "$temporary"' EXIT
 
+retry_gh() {
+  local attempt=1
+  local out=""
+  while [ "$attempt" -le 3 ]; do
+    if out=$("$@" 2>&1); then
+      printf '%s' "$out"
+      return 0
+    fi
+    echo "publish_ipa: attempt $attempt failed for $*: $out" >&2
+    attempt=$((attempt + 1))
+    sleep 3
+  done
+  return 1
+}
+
 # A republish job uses the original build's version and SHA, not its own run number.
 if gh api "repos/$GH_REPO/git/ref/tags/$tag" >/dev/null 2>&1; then
-  test "$(gh api "repos/$GH_REPO/commits/$tag" --jq '.sha')" = "$IPA_SOURCE_SHA"
+  test "$(retry_gh gh api "repos/$GH_REPO/commits/$tag" --jq '.sha')" = "$IPA_SOURCE_SHA"
 else
-  gh api --method POST "repos/$GH_REPO/git/refs" -f ref="refs/tags/$tag" -f sha="$IPA_SOURCE_SHA" >/dev/null
+  retry_gh gh api --method POST "repos/$GH_REPO/git/refs" -f ref="refs/tags/$tag" -f sha="$IPA_SOURCE_SHA" >/dev/null
 fi
 
-# Drafts are included in the release list, even when lookup by tag returns 404.
-release_id=$(gh api --paginate "repos/$GH_REPO/releases?per_page=100" \
-  --jq ".[] | select(.tag_name == \"$tag\") | .id")
+# Check published release by tag first, then recent releases (including drafts) without paginating 100+ old releases.
+release_id=$(gh api "repos/$GH_REPO/releases/tags/$tag" --jq '.id' 2>/dev/null || true)
+if [ -z "$release_id" ]; then
+  release_id=$(retry_gh gh api "repos/$GH_REPO/releases?per_page=30" \
+    --jq ".[] | select(.tag_name == \"$tag\") | .id")
+fi
 if [ -z "$release_id" ]; then
   python3 - "$temporary/release.json" <<'PY'
 import json, os, sys
@@ -41,7 +59,7 @@ with open(sys.argv[1], 'w') as output:
                    name='amp v1.1.' + number, body=body,
                    draft=True, prerelease=True), output)
 PY
-  release_id=$(gh api --method POST "repos/$GH_REPO/releases" --input "$temporary/release.json" --jq '.id')
+  release_id=$(retry_gh gh api --method POST "repos/$GH_REPO/releases" --input "$temporary/release.json" --jq '.id')
 fi
 [[ "$release_id" =~ ^[0-9]+$ ]]
 
