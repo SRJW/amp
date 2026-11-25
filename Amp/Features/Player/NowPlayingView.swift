@@ -156,7 +156,10 @@ struct NowPlayingView: View {
         .overlay(alignment: .bottom) { toast }
         .overlay {
             if showsSleepTimer {
-                SleepTimerOverlay {
+                SleepTimerOverlay(
+                    dominantColor: Color(argb: artworkDominant),
+                    controlColors: artworkControls
+                ) {
                     showsSleepTimer = false
                 }
                 .zIndex(20)

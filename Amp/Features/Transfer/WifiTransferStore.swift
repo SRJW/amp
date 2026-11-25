@@ -22,8 +22,10 @@ enum TransferServerState: Equatable {
 @Observable
 final class WifiTransferStore {
     private static let watchdogInterval: Duration = .seconds(15)
-    /// One rescan after a batch of files, not one per file.
-    private static let quietPeriod: Duration = .seconds(4)
+    /// Short coalesce window after uploads settle so newly transferred songs appear right away.
+    private static let quietPeriod: Duration = .milliseconds(500)
+    /// During large multi-file batches, surface newly saved tracks periodically without waiting for the entire batch.
+    private static let liveBatchScanIntervalMs: Int64 = 2_500
 
     private(set) var state: TransferServerState = .stopped(nil)
     private(set) var items: [TransferItem] = []
@@ -39,6 +41,7 @@ final class WifiTransferStore {
     @ObservationIgnored private var sink: FolderUploadSink?
     @ObservationIgnored private var watchdog: Task<Void, Never>?
     @ObservationIgnored private var refresh: Task<Void, Never>?
+    @ObservationIgnored private var lastLiveScanMs: Int64 = 0
     @ObservationIgnored private let activity = ActivityClock()
 
     init(library: LibraryStore, addressProvider: @escaping () -> String? = wifiAddress,
@@ -144,6 +147,11 @@ final class WifiTransferStore {
     }
 
     private func fileSaved() {
+        let now = Self.now()
+        if now - lastLiveScanMs >= Self.liveBatchScanIntervalMs, !library.isScanning {
+            lastLiveScanMs = now
+            library.scan()
+        }
         refresh?.cancel()
         let activity = activity
         refresh = Task {
@@ -151,6 +159,7 @@ final class WifiTransferStore {
             while !Task.isCancelled, activity.uploading > 0 { try? await Task.sleep(for: Self.quietPeriod) }
             if Task.isCancelled { return }
             refresh = nil
+            lastLiveScanMs = Self.now()
             library.scan()
         }
     }

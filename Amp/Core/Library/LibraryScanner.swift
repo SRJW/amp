@@ -48,14 +48,18 @@ final class LibraryScanner: @unchecked Sendable {
         IdentityHash.of("file:\(path)")
     }
 
-    func scan(progress: (ScanProgress) -> Void = { _ in }) throws -> WriteSummary {
+    func scan(forceRewrite: Bool = false, progress: (ScanProgress) -> Void = { _ in }) throws -> WriteSummary {
         let files = Self.audioFiles(in: folder)
         progress(ScanProgress(scanned: 0, total: files.count))
         let stored = try storedSongs()
         var scanned: [ScannedSong] = []
         scanned.reserveCapacity(files.count)
+        var changedIds = Set<Int64>()
+        var seenIds = Set<Int64>()
+        seenIds.reserveCapacity(files.count)
         for (index, file) in files.enumerated() {
             let id = Self.songId(forPath: file.path)
+            seenIds.insert(id)
             if let existing = stored[id], existing.song.dateModified == file.modified, existing.song.fileSize == file.size,
                existing.song.path == file.path,
                existing.song.codec != nil, existing.song.codec != "AAC/ALAC" {
@@ -64,13 +68,20 @@ final class LibraryScanner: @unchecked Sendable {
                 var fresh = Self.read(file, id: id)
                 fresh.song.isFavorite = stored[id]?.song.isFavorite ?? false
                 scanned.append(fresh)
+                changedIds.insert(id)
             }
             if index % 25 == 0 || index == files.count - 1 {
                 progress(ScanProgress(scanned: index + 1, total: files.count, currentTitle: scanned.last?.song.title))
             }
         }
+        let previousIds = Set(stored.keys)
+        let hasRemovals = !previousIds.isSubset(of: seenIds)
+        if !forceRewrite && changedIds.isEmpty && !hasRemovals {
+            progress(ScanProgress(scanned: files.count, total: files.count, isComplete: true))
+            return WriteSummary(upserted: 0, removed: 0, albums: 0)
+        }
         let model = LibraryModelBuilder.build(scanned.map(\.raw), aliases: try database.aliases())
-        let summary = try write(model: model, scanned: scanned, previousIds: Set(stored.keys))
+        let summary = try write(model: model, scanned: scanned, stored: stored, changedIds: changedIds, forceRewrite: forceRewrite)
         progress(ScanProgress(scanned: files.count, total: files.count, isComplete: true))
         return summary
     }
@@ -79,7 +90,7 @@ final class LibraryScanner: @unchecked Sendable {
     static func audioFiles(in folder: URL) -> [FoundFile] {
         let keys: [URLResourceKey] = [.isRegularFileKey, .fileSizeKey, .contentModificationDateKey]
         guard let enumerator = FileManager.default.enumerator(at: folder, includingPropertiesForKeys: keys,
-                                                              options: [.skipsHiddenFiles, .skipsPackageDescendants])
+                                                             options: [.skipsHiddenFiles, .skipsPackageDescendants])
         else { return [] }
         var found: [FoundFile] = []
         for case let url as URL in enumerator where audioExtensions.contains(url.pathExtension.lowercased()) {
@@ -147,9 +158,11 @@ final class LibraryScanner: @unchecked Sendable {
     }
 
     /// Writes one scan atomically: derived tables are replaced; favorites, playlists, statistics,
-    /// bookmarks, artwork and aliases are kept.
-    private func write(model: LibraryModel, scanned: [ScannedSong], previousIds: Set<Int64>) throws -> WriteSummary {
+    /// bookmarks, artwork and aliases are kept. Unchanged song rows are skipped for fast incremental imports.
+    private func write(model: LibraryModel, scanned: [ScannedSong], stored: [Int64: ScannedSong],
+                       changedIds: Set<Int64>, forceRewrite: Bool) throws -> WriteSummary {
         let db = database.db
+        let previousIds = Set(stored.keys)
         let scannedIds = Set(scanned.map(\.song.id))
         let removed = Array(previousIds.subtracting(scannedIds))
         let songById = Dictionary(scanned.map { ($0.song.id, $0) }, uniquingKeysWith: { first, _ in first })
@@ -163,10 +176,27 @@ final class LibraryScanner: @unchecked Sendable {
             }
             let importedAt = LibraryDatabase.now()
             for item in scanned {
-                var current = item
-                current.song.isFavorite = liveFavorites.contains(item.song.id)
-                try db.execute("INSERT OR IGNORE INTO library_imports (song_id, added_at) VALUES (?, ?)", [current.song.id, importedAt])
-                try insert(current, assignment: model.songs[current.song.id], into: db)
+                let id = item.song.id
+                let assignment = model.songs[id]
+                let newArtistId = assignment?.primaryArtistId ?? 0
+                let newAlbumId = assignment?.albumId ?? 0
+                let isNew = !previousIds.contains(id)
+                if isNew {
+                    try db.execute("INSERT OR IGNORE INTO library_imports (song_id, added_at) VALUES (?, ?)", [id, importedAt])
+                }
+                let needsRowWrite: Bool
+                if forceRewrite || isNew || changedIds.contains(id) {
+                    needsRowWrite = true
+                } else if let existing = stored[id]?.song {
+                    needsRowWrite = existing.artistId != newArtistId || existing.albumId != newAlbumId
+                } else {
+                    needsRowWrite = true
+                }
+                if needsRowWrite {
+                    var current = item
+                    current.song.isFavorite = liveFavorites.contains(id)
+                    try insert(current, assignment: assignment, into: db)
+                }
             }
             for table in ["song_artist_cross_ref", "albums", "artists", "album_artist_cross_ref", "unverified_credit_segment"] {
                 try db.execute("DELETE FROM \(table)")

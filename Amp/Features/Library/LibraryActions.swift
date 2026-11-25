@@ -55,7 +55,7 @@ final class LibraryActions {
         } catch {
             show("File deleted. Refreshing the library: \(error.localizedDescription)")
         }
-        AppServices.shared.library.scan()
+        AppServices.shared.library.scan(force: true)
     }
 
     /// Called only after the Songs screen confirms its captured selection.
@@ -71,7 +71,7 @@ final class LibraryActions {
                 try database.db.transaction { for song in removed { try database.deleteSong(song) } }
             } catch { refreshNeeded = true }
         }
-        if !removed.isEmpty { AppServices.shared.library.scan() }
+        if !removed.isEmpty { AppServices.shared.library.scan(force: true) }
         var message = "Deleted \(countLabel(removed.count, "song")) from device."
         if !result.failed.isEmpty { message += " \(result.failed.count) files could not be deleted and remain selected." }
         if refreshNeeded { message += " Refreshing the library." }

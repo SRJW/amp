@@ -16,6 +16,7 @@ final class LibraryStore {
     private(set) var albumLastPlayed: [Int64: Int64] = [:]
     private(set) var favorites: [Song] = []
     private(set) var recentAlbums: [Album] = []
+    private(set) var recentlyAddedAlbums: [Album] = []
     private(set) var recentPlaylists: [Playlist] = []
     private(set) var featuredAlbums: [Album] = []
     /// Each album's cover comes from its first song's embedded art.
@@ -48,7 +49,9 @@ final class LibraryStore {
     @ObservationIgnored private var artistsById: [Int64: Artist] = [:]
     @ObservationIgnored private var playlistsById: [Int64: Playlist] = [:]
     @ObservationIgnored private var observer: NSObjectProtocol?
+    @ObservationIgnored private var folderWatcher: MusicFolderWatcher?
     @ObservationIgnored private var rescanRequested = false
+    @ObservationIgnored private var forcedRescanRequested = false
     @ObservationIgnored private var pendingReload: Task<Void, Never>?
     @ObservationIgnored private var pendingNeedsCatalog = false
     @ObservationIgnored private var reloadGeneration: UInt64 = 0
@@ -57,6 +60,8 @@ final class LibraryStore {
 
     /// The Recently Played shelves' length.
     static let recentShelfLimit = 12
+    /// The Library home screen's Recently Added album grid length.
+    static let recentlyAddedAlbumLimit = 24
 
     private static let catalogTables: Set<String> = ["songs", "albums", "artists", "playlists", "playlist_song_cross_ref", "artist_artwork", "library_imports"]
     private static let allWatchedTables: Set<String> = catalogTables.union(["recently_played", "listening_stats"])
@@ -80,6 +85,22 @@ final class LibraryStore {
 
     func storeCachedEntityGrid(_ cached: CachedEntityGrid, category: LibraryCategory, sortRaw: String) {
         entityGridCache["\(category.rawValue)|\(sortRaw)"] = cached
+    }
+
+    /// Starts kernel-level folder monitoring so files added via Files, AirDrop, or Finder appear live.
+    func startWatchingMusicFolder() {
+        if folderWatcher == nil {
+            folderWatcher = MusicFolderWatcher { [weak self] in
+                Task { @MainActor [weak self] in
+                    self?.scan()
+                }
+            }
+        }
+        folderWatcher?.start()
+    }
+
+    func stopWatchingMusicFolder() {
+        folderWatcher?.stop()
     }
 
     /// Deduplicates list thumbnails by album cover when a track belongs to a non-compilation album,
@@ -128,6 +149,7 @@ final class LibraryStore {
         let browseFacts: [Int64: LibraryBrowseFact]
         let albumLastPlayed: [Int64: Int64]
         let recentAlbums: [Album]
+        let recentlyAddedAlbums: [Album]
         let recentPlaylists: [Playlist]
         let featuredAlbums: [Album]
     }
@@ -153,6 +175,33 @@ final class LibraryStore {
         return CachedAllSongs(sortRaw: sort.rawValue, songs: sorted, rows: rows, anchors: anchors)
     }
 
+    private nonisolated static func computeRecentlyAddedAlbums(
+        albums: [Album],
+        songs: [Song],
+        facts: [Int64: LibraryBrowseFact]
+    ) -> [Album] {
+        guard !albums.isEmpty else { return [] }
+        var latestByAlbum: [Int64: Int64] = [:]
+        latestByAlbum.reserveCapacity(albums.count)
+        for song in songs {
+            let added = facts[song.id]?.addedAt ?? song.dateModified
+            if let existing = latestByAlbum[song.albumId] {
+                if added > existing { latestByAlbum[song.albumId] = added }
+            } else {
+                latestByAlbum[song.albumId] = added
+            }
+        }
+        let sorted = albums.sorted { a, b in
+            let aa = latestByAlbum[a.id] ?? 0
+            let ab = latestByAlbum[b.id] ?? 0
+            if aa != ab { return aa > ab }
+            let cmp = a.title.localizedStandardCompare(b.title)
+            if cmp != .orderedSame { return cmp == .orderedAscending }
+            return a.id < b.id
+        }
+        return Array(sorted.prefix(Self.recentlyAddedAlbumLimit))
+    }
+
     private nonisolated static func readCatalog(from database: LibraryDatabase) throws -> CatalogSnapshot {
         let songs = try database.allSongs()
         let albums = try database.allAlbums()
@@ -176,10 +225,11 @@ final class LibraryStore {
         )
     }
 
-    private nonisolated static func readStats(from database: LibraryDatabase, albums: [Album]) throws -> StatsSnapshot {
+    private nonisolated static func readStats(from database: LibraryDatabase, albums: [Album], songs: [Song]) throws -> StatsSnapshot {
         let browseFacts = try database.libraryBrowseFacts()
         let albumLastPlayed = try database.albumPlaybackTimes()
         let recentAlbums = try database.recentAlbums(limit: Self.recentShelfLimit)
+        let recentlyAddedAlbums = computeRecentlyAddedAlbums(albums: albums, songs: songs, facts: browseFacts)
         let recentPlaylists = try database.recentPlaylists(limit: Self.recentShelfLimit)
         let epochDay = Int64(floor(Date().timeIntervalSince1970 / 86_400))
         let tracks = try database.trackFacts()
@@ -188,11 +238,13 @@ final class LibraryStore {
                                                    exclude: Set(recentAlbums.map(\.id)), epochDay: epochDay)
         return StatsSnapshot(
             browseFacts: browseFacts, albumLastPlayed: albumLastPlayed,
-            recentAlbums: recentAlbums, recentPlaylists: recentPlaylists, featuredAlbums: featuredAlbums
+            recentAlbums: recentAlbums, recentlyAddedAlbums: recentlyAddedAlbums,
+            recentPlaylists: recentPlaylists, featuredAlbums: featuredAlbums
         )
     }
 
-    private func apply(catalog: CatalogSnapshot?, stats: StatsSnapshot, precomputed: CachedAllSongs? = nil) {
+    private func apply(catalog: CatalogSnapshot?, stats: StatsSnapshot, precomputed: CachedAllSongs? = nil,
+                       precomputedRecent: CachedAllSongs? = nil) {
         var catalogDidChange = false
         if let catalog {
             albumsById = catalog.albumsById
@@ -212,9 +264,15 @@ final class LibraryStore {
             }
         }
         var statsDidChange = false
+        var recentAddedChanged = false
         if browseFacts != stats.browseFacts { browseFacts = stats.browseFacts; statsDidChange = true }
         if albumLastPlayed != stats.albumLastPlayed { albumLastPlayed = stats.albumLastPlayed; statsDidChange = true }
         if recentAlbums != stats.recentAlbums { recentAlbums = stats.recentAlbums; statsDidChange = true }
+        if recentlyAddedAlbums != stats.recentlyAddedAlbums {
+            recentlyAddedAlbums = stats.recentlyAddedAlbums
+            statsDidChange = true
+            recentAddedChanged = true
+        }
         if recentPlaylists != stats.recentPlaylists { recentPlaylists = stats.recentPlaylists; statsDidChange = true }
         if featuredAlbums != stats.featuredAlbums { featuredAlbums = stats.featuredAlbums; statsDidChange = true }
         if statsDidChange {
@@ -231,6 +289,15 @@ final class LibraryStore {
         } else if catalogDidChange {
             precomputedAllSongs = nil
         }
+        if let precomputedRecent {
+            allSongsCache[precomputedRecent.sortRaw] = precomputedRecent
+        }
+        if recentAddedChanged || catalogDidChange {
+            let coverURLs = recentlyAddedAlbums.compactMap { albumCoverSong[$0.id]?.url }
+            if !coverURLs.isEmpty {
+                ArtworkLoader.shared.prefetch(urls: coverURLs, maxPixels: 320)
+            }
+        }
     }
 
     /// Synchronous reload (used at launch and by deterministic unit tests).
@@ -241,10 +308,9 @@ final class LibraryStore {
         reloadGeneration &+= 1
         do {
             let catalog = try Self.readCatalog(from: database)
-            let stats = try Self.readStats(from: database, albums: catalog.albums)
+            let stats = try Self.readStats(from: database, albums: catalog.albums, songs: catalog.songs)
             apply(catalog: catalog, stats: stats)
-            // Warm the active All Songs sort off the main thread immediately after launch so
-            // opening All Songs is 0 ms instant with zero spinner.
+            // Warm the active All Songs sort and Recently Added off the main thread immediately after launch.
             let activeSort = ContinuousPlayback.currentSort()
             let songs = catalog.songs
             let facts = stats.browseFacts
@@ -253,10 +319,14 @@ final class LibraryStore {
             let expectedRev = contentRevision
             Task.detached(priority: .userInitiated) { [weak self] in
                 let warmed = Self.buildCachedAllSongs(songs: songs, facts: facts, albumsById: albumsMap, albumCoverSong: covers, sort: activeSort)
+                let warmedRecent = activeSort == .recentlyAdded
+                    ? warmed
+                    : Self.buildCachedAllSongs(songs: songs, facts: facts, albumsById: albumsMap, albumCoverSong: covers, sort: .recentlyAdded)
                 await MainActor.run {
                     guard let self, self.contentRevision == expectedRev else { return }
                     self.precomputedAllSongs = warmed
                     self.allSongsCache[warmed.sortRaw] = warmed
+                    self.allSongsCache[warmedRecent.sortRaw] = warmedRecent
                 }
             }
         } catch {
@@ -273,55 +343,69 @@ final class LibraryStore {
         let generation = reloadGeneration
         let database = self.database
         let cachedAlbums = self.albums
+        let cachedSongs = self.songs
         pendingReload = Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(60))
+            try? await Task.sleep(for: .milliseconds(25))
             guard !Task.isCancelled, let self, self.reloadGeneration == generation else { return }
             let needsCatalog = self.pendingNeedsCatalog
             self.pendingNeedsCatalog = false
             let activeSort = ContinuousPlayback.currentSort()
             do {
-                let result: (CatalogSnapshot?, StatsSnapshot, CachedAllSongs?) = try await Task.detached(priority: .userInitiated) {
+                let result: (CatalogSnapshot?, StatsSnapshot, CachedAllSongs?, CachedAllSongs?) = try await Task.detached(priority: .userInitiated) {
                     if needsCatalog {
                         let catalog = try Self.readCatalog(from: database)
-                        let stats = try Self.readStats(from: database, albums: catalog.albums)
+                        let stats = try Self.readStats(from: database, albums: catalog.albums, songs: catalog.songs)
                         let warmed = Self.buildCachedAllSongs(
                             songs: catalog.songs, facts: stats.browseFacts,
                             albumsById: catalog.albumsById, albumCoverSong: catalog.albumCoverSong, sort: activeSort
                         )
-                        return (catalog, stats, warmed)
+                        let warmedRecent = activeSort == .recentlyAdded
+                            ? warmed
+                            : Self.buildCachedAllSongs(
+                                songs: catalog.songs, facts: stats.browseFacts,
+                                albumsById: catalog.albumsById, albumCoverSong: catalog.albumCoverSong, sort: .recentlyAdded
+                            )
+                        return (catalog, stats, warmed, warmedRecent)
                     } else {
-                        let stats = try Self.readStats(from: database, albums: cachedAlbums)
-                        return (nil, stats, nil)
+                        let stats = try Self.readStats(from: database, albums: cachedAlbums, songs: cachedSongs)
+                        return (nil, stats, nil, nil)
                     }
                 }.value
                 guard !Task.isCancelled, self.reloadGeneration == generation else { return }
-                self.apply(catalog: result.0, stats: result.1, precomputed: result.2)
+                self.pendingReload = nil
+                self.apply(catalog: result.0, stats: result.1, precomputed: result.2, precomputedRecent: result.3)
             } catch {
                 guard !Task.isCancelled, self.reloadGeneration == generation else { return }
+                self.pendingReload = nil
                 self.report("Couldn't read the library: \(error)")
             }
         }
     }
 
     /// Rescans the music folder. A request during a scan runs once more after it, so a change is never missed.
-    func scan() {
+    func scan(force: Bool = false) {
         guard scanProgress == nil else {
             rescanRequested = true
+            if force { forcedRescanRequested = true }
             return
         }
         scanProgress = ScanProgress()
         let scanner = LibraryScanner(database: database)
         let store = self
-        Task.detached(priority: .utility) {
+        Task.detached(priority: .userInitiated) {
+            var didChange = force
             do {
-                _ = try scanner.scan { progress in
+                let summary = try scanner.scan(forceRewrite: force) { progress in
                     Task { @MainActor in store.updateProgress(progress) }
+                }
+                if summary.upserted > 0 || summary.removed > 0 {
+                    didChange = true
                 }
             } catch {
                 let message = "The library scan failed: \(error)"
                 await store.report(message)
             }
-            await store.scanFinished()
+            await store.scanFinished(didChange: didChange)
         }
     }
 
@@ -329,12 +413,18 @@ final class LibraryStore {
         if scanProgress != nil { scanProgress = progress }
     }
 
-    private func scanFinished() {
+    private func scanFinished(didChange: Bool) {
         scanProgress = nil
-        scheduleReload(catalogChanged: true)
+        // SQLiteDatabase.didChange already schedules a reload when the scan writes; avoid cancelling
+        // and restarting an in-flight reload, and skip reloading altogether on fast no-op scans.
+        if didChange && pendingReload == nil {
+            scheduleReload(catalogChanged: true)
+        }
         if rescanRequested {
+            let nextForce = forcedRescanRequested
             rescanRequested = false
-            scan()
+            forcedRescanRequested = false
+            scan(force: nextForce)
         }
     }
 

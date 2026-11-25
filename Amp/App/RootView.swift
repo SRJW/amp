@@ -130,10 +130,19 @@ struct RootView: View {
             AppUpdatePrompt(release: release, checker: releases)
                 .preferredColorScheme(themeScheme)
         }
-        .onAppear { library.scan(); Task { await releases.checkOnOpen() } }
+        .onAppear {
+            library.startWatchingMusicFolder()
+            library.scan()
+            Task { await releases.checkOnOpen() }
+        }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { library.scan(); Task { await releases.checkOnOpen() } }
+            if phase == .active {
+                library.startWatchingMusicFolder()
+                library.scan()
+                Task { await releases.checkOnOpen() }
+            }
             if phase == .background {
+                library.stopWatchingMusicFolder()
                 transfer.stop(.backgrounded)
                 player.persistNow()
                 sound.persistNow()

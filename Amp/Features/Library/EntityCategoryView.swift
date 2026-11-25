@@ -82,7 +82,7 @@ struct EntityCategoryView: View {
                             default: break
                             }
                         },
-                        onRefresh: { library.scan() }
+                        onRefresh: { library.scan(force: true) }
                     ) {
                         VStack(alignment: .leading, spacing: Spacing.md) {
                             headerSection(tracks: tracks)
@@ -135,7 +135,7 @@ struct EntityCategoryView: View {
                     }
                 }
                 .scrollDismissesKeyboard(.interactively)
-                .refreshable { library.scan() }
+                .refreshable { library.scan(force: true) }
             }
         }
         .navigationTitle("").navigationBarTitleDisplayMode(.inline)

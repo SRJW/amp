@@ -14,19 +14,15 @@ struct LibraryOverviewView: View {
     @AppStorage(LibraryCustomizationPreferences.orderKey) private var storedOrder = LibraryCustomizationPreferences.defaultOrder
     @AppStorage(LibraryCustomizationPreferences.hiddenKey) private var hiddenSections = ""
     @State private var showsOrder = false
-    @State private var recentlyAddedAlbums: [Album] = []
 
     private let recentColumns = [
         GridItem(.flexible(), spacing: 14),
         GridItem(.flexible(), spacing: 14)
     ]
 
-    private var recentAlbumsKey: String {
-        "\(library.contentRevision)|\(library.statsRevision)"
-    }
-
     var body: some View {
         let visibleCategories = LibraryCategory.visible(order: storedOrder, hidden: hiddenSections)
+        let recentlyAddedAlbums = library.recentlyAddedAlbums
         LibraryRootScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 if case .available(let release) = releases.state {
@@ -122,18 +118,7 @@ struct LibraryOverviewView: View {
                 }
             }.padding(.vertical, Spacing.sm)
         }
-        .refreshable { library.scan() }
-        .task(id: recentAlbumsKey) {
-            let snapshot = AlbumBrowseRequest(albums: library.albums, songs: library.songs, facts: library.browseFacts,
-                                              lastPlayed: [:], query: "", sort: .recentlyAdded)
-            let albumCovers = library.albumCoverSong
-            let sorted = await Task.detached(priority: .userInitiated) {
-                Array(snapshot.results().prefix(24))
-            }.value
-            guard !Task.isCancelled else { return }
-            recentlyAddedAlbums = sorted
-            ArtworkLoader.shared.prefetch(urls: sorted.compactMap { albumCovers[$0.id]?.url }, maxPixels: 320)
-        }
+        .refreshable { library.scan(force: true) }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {

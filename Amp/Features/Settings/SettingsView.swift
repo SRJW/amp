@@ -1067,7 +1067,7 @@ private struct LibrarySettingsView: View {
                     .padding([.horizontal, .bottom], Spacing.lg)
             }
             SettingsGroup(L("Scan")) {
-                Button { library.scan() } label: {
+                Button { library.scan(force: true) } label: {
                     HStack(spacing: Spacing.lg) {
                         SettingsIcon(symbol: "arrow.clockwise")
                         VStack(alignment: .leading, spacing: Spacing.xs) {

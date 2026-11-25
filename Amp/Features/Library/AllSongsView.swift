@@ -112,7 +112,7 @@ struct AllSongsView: View {
     }
 
     private var precomputedMatch: LibraryStore.CachedAllSongs? {
-        guard folderPath == nil, category == .songs, !hasFilters, query.trimmed.isEmpty else { return nil }
+        guard folderPath == nil, (category == .songs || category == .recentlyAdded), !hasFilters, query.trimmed.isEmpty else { return nil }
         let sortMode = LibrarySort(rawValue: sort) ?? .title
         return library.cachedAllSongs(for: sortMode)
     }
@@ -163,7 +163,7 @@ struct AllSongsView: View {
                     if selected.contains(song.id) { selected.remove(song.id) }
                     else { selected.insert(song.id) }
                 },
-                onRefresh: { library.scan() }
+                onRefresh: { library.scan(force: true) }
             ) {
                 VStack(alignment: .leading, spacing: Spacing.md) {
                     header
@@ -216,7 +216,7 @@ struct AllSongsView: View {
             let snapshot = request
             let albumCovers = library.albumCoverSong
             let albumsMap = Dictionary(library.albums.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-            let canCacheAllSongs = folderPath == nil && category == .songs && !hasFilters && snapshot.query.trimmed.isEmpty
+            let canCacheAllSongs = folderPath == nil && (category == .songs || category == .recentlyAdded) && !hasFilters && snapshot.query.trimmed.isEmpty
             if !snapshot.query.isEmpty { try? await Task.sleep(for: .milliseconds(30)) }
             guard !Task.isCancelled else { return }
             let updated = await Task.detached(priority: .userInitiated) { () -> ([Song], [NativeSongRow], [String: Int]) in
