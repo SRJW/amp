@@ -289,9 +289,14 @@ enum SearchNormalizer {
         let wChars = Array(word)
         let anchored = nChars[0] == wChars[0] || (wChars.count >= 2 && nChars[0] == wChars[1] && nChars[1] == wChars[0])
         guard anchored else { return false }
-        let sameLenPrefix = String(wChars.prefix(nCount))
-        if editDistance(needle, sameLenPrefix, limit: 1) <= 1 { return true }
-        if wCount >= nCount + 1 {
+        let sameLenEndMatches = nCount >= 6
+            || nChars[nCount - 1] == wChars[nCount - 1]
+            || (nChars[nCount - 1] == wChars[nCount - 2] && nChars[nCount - 2] == wChars[nCount - 1])
+        if sameLenEndMatches {
+            let sameLenPrefix = String(wChars.prefix(nCount))
+            if editDistance(needle, sameLenPrefix, limit: 1) <= 1 { return true }
+        }
+        if wCount >= nCount + 1, nChars[nCount - 1] == wChars[nCount] {
             let extendedPrefix = String(wChars.prefix(nCount + 1))
             if editDistance(needle, extendedPrefix, limit: 1) <= 1 { return true }
         }
