@@ -138,10 +138,10 @@ enum PlayerBackdropPalette {
             )
         }
         let buttonSat = min(effSat * (isFrosted ? 0.52 : 0.70), isFrosted ? 0.46 : 0.62)
-        let buttonBright: CGFloat = style == .deepChromatic ? 0.20 : (isFrosted ? 0.17 : 0.19)
+        let buttonBright: CGFloat = isFrosted ? 0.17 : 0.19
         let iconSat = min(effSat * (isFrosted ? 0.16 : 0.22), isFrosted ? 0.14 : 0.20)
         let capSat = min(effSat * (isFrosted ? 0.48 : 0.66), isFrosted ? 0.44 : 0.60)
-        let capBright: CGFloat = style == .deepChromatic ? 0.14 : (isFrosted ? 0.14 : 0.16)
+        let capBright: CGFloat = isFrosted ? 0.14 : 0.15
         let capAlpha: CGFloat = isFrosted ? 0.78 : 0.86
         return ControlColors(
             buttonFill: Color(uiColor: UIColor(hue: hue, saturation: buttonSat, brightness: buttonBright, alpha: 1)),
@@ -195,34 +195,24 @@ struct PlayerFullBleedBackground<Artwork: View>: View, Animatable {
             LinearGradient(colors: [base, base, base.opacity(0.18)],
                            startPoint: .top, endPoint: .bottom)
                 .background(Color(red: 0.10, green: 0.045, blue: 0.035))
-        case .deepChromatic:
-            let stops = PlayerBackdropPalette.deepStops(for: color)
-            LinearGradient(
-                stops: [
-                    .init(color: stops.top, location: 0.0),
-                    .init(color: stops.top, location: 0.34),
-                    .init(color: stops.mid, location: 0.60),
-                    .init(color: stops.bottom, location: 1.0)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
         case .frostedArtwork:
-            Color(uiColor: muted(color)).opacity(0.75)
+            Color(uiColor: muted(color)).opacity(0.70)
                 .background(Color(red: 0.08, green: 0.07, blue: 0.08))
         }
     }
 
     var body: some View {
         GeometryReader { geometry in
-            let isDeep = appearance.gradientStyle == .deepChromatic
             let isFrosted = appearance.gradientStyle == .frostedArtwork
             let effectiveFadeStart = appearance.fadeStart.clamped(0, 0.96)
             let fadeSpan = 1 - effectiveFadeStart
             let coverHeight = artworkHeightFraction.map { geometry.size.height * $0 }
                 ?? PlayerArtworkComposition.artworkHeight(in: geometry.size)
+            let width = geometry.size.width
+            let height = geometry.size.height
+
             ZStack(alignment: .top) {
-                ZStack {
+                ZStack(alignment: .top) {
                     backdropLayer(for: dominant)
                     if let secondaryDominant {
                         let phase = min(max(blend, 0), 1)
@@ -237,55 +227,109 @@ struct PlayerFullBleedBackground<Artwork: View>: View, Animatable {
                                 ], startPoint: .top, endPoint: .bottom)
                             }
                     }
+
                     if isFrosted {
-                        let frostedBlur = max(appearance.blur * 1.45, 0)
-                        let frostedOpacity = 0.72 + appearance.details * 0.28
+                        // STYLE 2 (image_2.png — Apple Music progressive variable-blur mirrored artwork):
+                        // 1. Deep lower canvas: vertically mirrored cover (`scaleEffect(y: -1)`) placed across
+                        //    the lower half so the bottom edge of the photo (e.g. white dress + green grass)
+                        //    continues downward behind Play/Pause and the bottom bar with heavy gaussian blur.
+                        let baseBlur = max(appearance.blur, 18)
+                        let deepBlur = max(baseBlur * 2.4, 58)
+                        let midBlur = max(baseBlur * 0.95, 22)
+                        let frostedOpacity = 0.86 + appearance.details * 0.14
+
                         artwork()
-                            .frame(width: geometry.size.width, height: geometry.size.height)
-                            .scaleEffect(1.18)
-                            .blur(radius: frostedBlur, opaque: true)
-                            .saturation(1.16)
+                            .frame(width: width, height: height * 0.72)
+                            .scaleEffect(x: 1.14, y: -1.16, anchor: .center)
+                            .offset(y: height * 0.34)
+                            .frame(width: width, height: height, alignment: .top)
+                            .blur(radius: deepBlur, opaque: true)
+                            .saturation(1.12)
                             .opacity(frostedOpacity)
                             .clipped()
+
+                        // 2. Mid-transition variable blur bridge (y = 38% -> 76%): medium blur (`~22 pt`)
+                        //    that bridges the sharp upper photo into the deep frosted lower field so there is
+                        //    zero hard seam at the title/buttons level.
+                        artwork()
+                            .frame(width: width, height: coverHeight * 1.16)
+                            .scaleEffect(x: 1.05, y: 1.08, anchor: .top)
+                            .blur(radius: midBlur, opaque: false)
+                            .frame(width: width, height: height, alignment: .top)
+                            .mask {
+                                LinearGradient(
+                                    stops: [
+                                        .init(color: .clear, location: 0.0),
+                                        .init(color: .clear, location: max(effectiveFadeStart * 0.45, 0.28)),
+                                        .init(color: .white.opacity(0.92), location: 0.54),
+                                        .init(color: .white.opacity(0.75), location: 0.67),
+                                        .init(color: .clear, location: 0.82)
+                                    ],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                            }
+
+                        // Subtle atmospheric readability scrim over the lower controls
                         LinearGradient(
                             stops: [
                                 .init(color: .clear, location: 0.0),
-                                .init(color: .black.opacity(0.14), location: 0.45),
-                                .init(color: .black.opacity(0.28), location: 0.78),
-                                .init(color: .black.opacity(0.36), location: 1.0)
+                                .init(color: .clear, location: 0.44),
+                                .init(color: .black.opacity(0.12), location: 0.65),
+                                .init(color: .black.opacity(0.22), location: 1.0)
                             ],
                             startPoint: .top,
                             endPoint: .bottom
                         )
-                    } else if appearance.details > 0 {
-                        artwork()
-                            .frame(width: geometry.size.width, height: geometry.size.height)
-                            .clipped()
-                            .blur(radius: appearance.blur)
-                            .opacity(appearance.details * 0.45)
+                    } else {
+                        // STYLE 1 (image.png — Color-sampled matte backdrop with soft lower-cover halo):
+                        // When `details == 0` (the default), project a soft, localized blurred halo of the
+                        // cover's bottom edge just into the title/subtitle zone (`50% -> 69%`) while keeping
+                        // the exact solid color-sampled matte field around the transport controls and bottom bar.
+                        if appearance.details > 0 {
+                            artwork()
+                                .frame(width: width, height: height)
+                                .clipped()
+                                .blur(radius: appearance.blur)
+                                .opacity(appearance.details * 0.45)
+                        } else {
+                            let seamBlur = max(appearance.blur * 0.85, 18)
+                            artwork()
+                                .frame(width: width, height: coverHeight)
+                                .scaleEffect(x: 1.02, y: 1.14, anchor: .top)
+                                .blur(radius: seamBlur)
+                                .frame(width: width, height: height, alignment: .top)
+                                .mask {
+                                    LinearGradient(
+                                        stops: [
+                                            .init(color: .clear, location: 0.0),
+                                            .init(color: .clear, location: max(effectiveFadeStart * 0.58, 0.38)),
+                                            .init(color: .white.opacity(0.34), location: 0.53),
+                                            .init(color: .clear, location: 0.595)
+                                        ],
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    )
+                                }
+                        }
                     }
+
                     LinearGradient(colors: [.clear, Color(argb: appearance.gradientColor)], startPoint: .top, endPoint: .bottom)
                         .opacity(appearance.gradient)
                     Color.black.opacity(1 - appearance.intensity)
                 }.saturation(appearance.saturation)
+
                 artwork()
-                    .frame(width: geometry.size.width, height: coverHeight)
+                    .frame(width: width, height: coverHeight)
                     .clipped()
                     .mask {
                         if isFrosted {
                             LinearGradient(stops: [
                                 .init(color: .white, location: 0),
-                                .init(color: .white, location: effectiveFadeStart),
-                                .init(color: .white.opacity(0.76), location: effectiveFadeStart + fadeSpan * 0.32),
-                                .init(color: .white.opacity(0.34), location: effectiveFadeStart + fadeSpan * 0.68),
-                                .init(color: .clear, location: 1)
-                            ], startPoint: .top, endPoint: .bottom)
-                        } else if isDeep {
-                            LinearGradient(stops: [
-                                .init(color: .white, location: 0),
-                                .init(color: .white, location: effectiveFadeStart),
-                                .init(color: .white.opacity(0.68), location: effectiveFadeStart + fadeSpan * 0.42),
-                                .init(color: .white.opacity(0.22), location: effectiveFadeStart + fadeSpan * 0.76),
+                                .init(color: .white, location: effectiveFadeStart * 0.90),
+                                .init(color: .white.opacity(0.82), location: effectiveFadeStart + fadeSpan * 0.24),
+                                .init(color: .white.opacity(0.42), location: effectiveFadeStart + fadeSpan * 0.58),
+                                .init(color: .white.opacity(0.12), location: effectiveFadeStart + fadeSpan * 0.84),
                                 .init(color: .clear, location: 1)
                             ], startPoint: .top, endPoint: .bottom)
                         } else {

@@ -1076,7 +1076,9 @@
     "Find a photo": "Buscar foto",
     "Scan with your computer's camera app, or open:": "Escanea con la cámara de tu computadora o abre:",
     "and enter the code": "e ingresa el código",
-    "Stop transfer": "Detener transferencia"
+    "Stop transfer": "Detener transferencia",
+    "Rich color-sampled matte backdrop with a soft halo fade under the cover.": "Fondo mate del color de la portada con un suave desvanecido bajo la imagen.",
+    "Progressive variable blur that mirrors and melts the lower cover across the controls.": "Difuminado óptico progresivo que extiende y funde la portada sobre los controles."
   },
   "fr": {
     "%d matches": "%d résultats",

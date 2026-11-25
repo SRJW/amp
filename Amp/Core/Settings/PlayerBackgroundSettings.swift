@@ -2,7 +2,6 @@ import Foundation
 
 enum PlayerGradientStyle: String, CaseIterable, Codable, Identifiable {
     case classic
-    case deepChromatic
     case frostedArtwork
 
     var id: String { rawValue }
@@ -10,16 +9,26 @@ enum PlayerGradientStyle: String, CaseIterable, Codable, Identifiable {
     var label: String {
         switch self {
         case .classic: "Classic"
-        case .deepChromatic: "Deep chromatic"
         case .frostedArtwork: "Frosted artwork"
         }
     }
 
     var description: String {
         switch self {
-        case .classic: "Soft muted single-tone fade beneath the album cover."
-        case .deepChromatic: "Rich 3-stop hue-shifted gradient that deepens at the bottom."
-        case .frostedArtwork: "Full-bleed blurred continuation of the album cover with a luminous haze."
+        case .classic: "Rich color-sampled matte backdrop with a soft halo fade under the cover."
+        case .frostedArtwork: "Progressive variable blur that mirrors and melts the lower cover across the controls."
+        }
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let raw = (try? container.decode(String.self)) ?? "classic"
+        switch raw {
+        case "frostedArtwork":
+            self = .frostedArtwork
+        default:
+            // Both "classic" and legacy "deepChromatic" map to the unified Classic style.
+            self = .classic
         }
     }
 }

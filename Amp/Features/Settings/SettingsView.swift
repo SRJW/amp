@@ -752,14 +752,10 @@ private struct PlayerBackgroundStyleSwatch: View {
     var body: some View {
         switch style {
         case .classic:
-            Circle()
-                .fill(LinearGradient(colors: [dominant, Color(red: 0.10, green: 0.06, blue: 0.06)], startPoint: .top, endPoint: .bottom))
-                .overlay(Circle().strokeBorder(.white.opacity(0.18), lineWidth: 1))
-        case .deepChromatic:
             let stops = PlayerBackdropPalette.deepStops(for: dominant)
             Circle()
-                .fill(LinearGradient(colors: [stops.top, stops.mid, stops.bottom], startPoint: .top, endPoint: .bottom))
-                .overlay(Circle().strokeBorder(.white.opacity(0.22), lineWidth: 1))
+                .fill(LinearGradient(colors: [dominant, stops.mid, stops.bottom], startPoint: .top, endPoint: .bottom))
+                .overlay(Circle().strokeBorder(.white.opacity(0.20), lineWidth: 1))
         case .frostedArtwork:
             Circle()
                 .fill(
