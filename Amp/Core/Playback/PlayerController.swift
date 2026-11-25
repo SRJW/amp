@@ -60,6 +60,8 @@ final class PlayerController {
     private(set) var restoreFinished = false
     private(set) var sleepTimerDeadline: Date?
     private(set) var sleepTimerEndOfTrack = false
+    private(set) var sleepTimerPlayLastSongToEnd = true
+    private(set) var sleepTimerConfiguredMinutes = 30
     @ObservationIgnored private var sleepTimerTask: Task<Void, Never>?
     var sleepTimerActive: Bool { sleepTimerEndOfTrack || sleepTimerDeadline != nil }
     @ObservationIgnored private var consecutiveErrors = 0
@@ -73,9 +75,16 @@ final class PlayerController {
     @ObservationIgnored private var artwork: MPMediaItemArtwork?
     @ObservationIgnored private var artworkSongId: Int64?
 
-    func setSleepTimer(minutes: Int) {
+    func setSleepTimer(minutes: Int, playLastSongToEnd: Bool = false) {
         cancelSleepTimer()
-        guard minutes > 0 else { return }
+        sleepTimerPlayLastSongToEnd = playLastSongToEnd
+        guard minutes > 0 else {
+            if playLastSongToEnd {
+                sleepTimerEndOfTrack = true
+            }
+            return
+        }
+        sleepTimerConfiguredMinutes = minutes
         let deadline = Date().addingTimeInterval(TimeInterval(minutes * 60))
         sleepTimerDeadline = deadline
         sleepTimerTask = Task { [weak self] in
@@ -87,6 +96,7 @@ final class PlayerController {
 
     func setSleepTimerEndOfTrack() {
         cancelSleepTimer()
+        sleepTimerPlayLastSongToEnd = true
         sleepTimerEndOfTrack = true
     }
 
@@ -98,8 +108,15 @@ final class PlayerController {
     }
 
     private func triggerSleepTimer() {
-        cancelSleepTimer()
-        if intendsToPlay { pause() }
+        let finishCurrentTrack = sleepTimerPlayLastSongToEnd && intendsToPlay && state.currentSong != nil
+        sleepTimerTask = nil
+        sleepTimerDeadline = nil
+        if finishCurrentTrack {
+            sleepTimerEndOfTrack = true
+        } else {
+            sleepTimerEndOfTrack = false
+            if intendsToPlay { pause() }
+        }
     }
 
     /// Media3's "previous restarts the song after 3 s".

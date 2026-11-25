@@ -28,6 +28,7 @@ struct NowPlayingView: View {
     @State private var marksRevision = 0
     @State private var showsVisualizer = false
     @State private var showsAudioDetails = false
+    @State private var showsSleepTimer = false
     @GestureState private var artworkGestureActive = false
 
     private var artworkControls: PlayerBackdropPalette.ControlColors? {
@@ -153,6 +154,14 @@ struct NowPlayingView: View {
         .background(backdrop(state.currentSong).ignoresSafeArea())
         .contentShape(Rectangle())
         .overlay(alignment: .bottom) { toast }
+        .overlay {
+            if showsSleepTimer {
+                SleepTimerOverlay {
+                    showsSleepTimer = false
+                }
+                .zIndex(20)
+            }
+        }
         .animation(.easeInOut(duration: 0.2), value: actions.message)
         .routerSheets(active: true)
         .sheet(isPresented: $showsQueue) { QueueSheet().preferredColorScheme(themeScheme) }
@@ -264,6 +273,7 @@ struct NowPlayingView: View {
         let showGoToArtist = canOpenArtist && !pinned.contains(.goToArtist)
         let showGoToAlbum = canOpenAlbum && !pinned.contains(.goToAlbum)
         let showBookmarks = !pinned.contains(.bookmarks)
+        let showSleepTimer = !pinned.contains(.sleepTimer)
         let showVisualizer = !pinned.contains(.visualizer)
         let showMusicInfo = !pinned.contains(.musicInfo)
         return Menu {
@@ -306,8 +316,14 @@ struct NowPlayingView: View {
                     }
                 }
             }
-            if showBookmarks || showVisualizer || showMusicInfo {
+            if showSleepTimer || showBookmarks || showVisualizer || showMusicInfo {
                 Section {
+                    if showSleepTimer {
+                        Button { showsSleepTimer = true } label: {
+                            Label(player.sleepTimerActive ? L("Sleep timer (on)") : L("Sleep timer"),
+                                  systemImage: player.sleepTimerActive ? "moon.zzz.fill" : "moon.zzz")
+                        }
+                    }
                     if showBookmarks {
                         Button { showsMarks = true } label: {
                             Label(player.state.abLoop?.enabled == true ? L("Bookmarks & A–B loop (on)") : L("Bookmarks & A–B loop"), systemImage: "bookmark.square")
@@ -436,37 +452,30 @@ struct NowPlayingView: View {
             }
             .accessibilityLabel(L("Equalizer"))
         case .sleepTimer:
-            sleepTimerMenu(iconWidth: iconWidth)
+            sleepTimerButton(iconWidth: iconWidth)
         }
     }
 
-    private func sleepTimerMenu(iconWidth: CGFloat) -> some View {
+    private func sleepTimerButton(iconWidth: CGFloat) -> some View {
         let active = player.sleepTimerActive
-        return Menu {
-            if player.sleepTimerEndOfTrack {
-                Text(L("Active: End of track"))
-            } else if let deadline = player.sleepTimerDeadline {
-                let remaining = max(1, Int(ceil(deadline.timeIntervalSinceNow / 60)))
-                Text(L("Active: %d min left", remaining))
-            }
-            Button(L("15 minutes")) { player.setSleepTimer(minutes: 15) }
-            Button(L("30 minutes")) { player.setSleepTimer(minutes: 30) }
-            Button(L("45 minutes")) { player.setSleepTimer(minutes: 45) }
-            Button(L("60 minutes")) { player.setSleepTimer(minutes: 60) }
-            Button(L("End of track")) { player.setSleepTimerEndOfTrack() }
-            if active {
-                Divider()
-                Button(L("Turn off timer"), role: .destructive) { player.cancelSleepTimer() }
-            }
+        return Button {
+            showsSleepTimer = true
         } label: {
-            Image(systemName: active ? "moon.zzz.fill" : "moon.zzz")
-                .resizable().scaledToFit()
-                .frame(width: iconWidth, height: iconWidth)
-                .foregroundStyle(playerInk.opacity(active ? 1 : PlayerLayoutMetrics.idleOpacity))
-                .frame(width: 48, height: 48)
-                .contentShape(Rectangle())
+            ZStack {
+                if active || showsSleepTimer {
+                    Circle()
+                        .fill(playerInk.opacity(0.16))
+                        .frame(width: 40, height: 40)
+                }
+                Image(systemName: active ? "moon.zzz.fill" : "moon.zzz")
+                    .resizable().scaledToFit()
+                    .frame(width: iconWidth, height: iconWidth)
+                    .foregroundStyle(playerInk.opacity(active || showsSleepTimer ? 1 : PlayerLayoutMetrics.idleOpacity))
+            }
+            .frame(width: 48, height: 48)
+            .contentShape(Rectangle())
         }
-        .menuStyle(.button)
+        .buttonStyle(.plain)
         .accessibilityLabel(L("Sleep timer"))
     }
 

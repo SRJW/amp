@@ -68,8 +68,10 @@ struct AlbumDetailView: View {
     @Environment(LibraryActions.self) private var actions
     @Environment(AppRouter.self) private var router
     @Environment(AppSettings.self) private var settings
+    @Environment(\.dismiss) private var dismiss
     @State private var songs: [Song] = []
     @State private var artworkTarget: ArtworkTarget?
+    @State private var pendingAlbumDeletion = false
 
     var body: some View {
         let origin = CollectionRef.album(albumId)
@@ -108,18 +110,41 @@ struct AlbumDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             Menu {
-                Button { songs.reversed().forEach { actions.playNext($0) } } label: { Label("Play next", systemImage: "text.line.first.and.arrowtriangle.forward") }
-                Button { songs.forEach { actions.addToQueue($0) } } label: { Label("Add to queue", systemImage: "text.badge.plus") }
-                if radioAvailable { Button { router.open(.radio(.album(albumId))) } label: { Label("Browse radio", systemImage: "dot.radiowaves.left.and.right") } }
-                Button { router.songsForPlaylist = songs } label: { Label("Add to playlist", systemImage: "music.note.list") }
+                Button { songs.reversed().forEach { actions.playNext($0) } } label: { Label(L("Play next"), systemImage: "text.line.first.and.arrowtriangle.forward") }
+                Button { songs.forEach { actions.addToQueue($0) } } label: { Label(L("Add to queue"), systemImage: "text.badge.plus") }
+                if radioAvailable { Button { router.open(.radio(.album(albumId))) } label: { Label(L("Browse radio"), systemImage: "dot.radiowaves.left.and.right") } }
+                Button { router.songsForPlaylist = songs } label: { Label(L("Add to playlist"), systemImage: "music.note.list") }
                 Button { actions.fixTags(songs) } label: {
-                    Label("Fix tags online", systemImage: "wand.and.stars")
+                    Label(L("Fix tags online"), systemImage: "wand.and.stars")
                 }
                 if let album = library.album(albumId) {
-                    Button { artworkTarget = .album(album) } label: { Label("Find a cover", systemImage: "photo") }
+                    Button { artworkTarget = .album(album) } label: { Label(L("Find a cover"), systemImage: "photo") }
+                }
+                if !songs.isEmpty {
+                    Divider()
+                    Button(role: .destructive) { pendingAlbumDeletion = true } label: {
+                        Label(L("Delete from device"), systemImage: "trash")
+                    }
                 }
             } label: { Image(systemName: "ellipsis") }
             .accessibilityLabel("Album options")
+        }
+        .confirmationDialog(
+            L("Delete album from device?"),
+            isPresented: $pendingAlbumDeletion,
+            titleVisibility: .visible
+        ) {
+            Button(L("Delete from device"), role: .destructive) {
+                let targetSongs = songs
+                let deleted = actions.deleteFromDevice(targetSongs)
+                if deleted.count == targetSongs.count && !deleted.isEmpty {
+                    dismiss()
+                }
+            }
+            Button(L("Cancel"), role: .cancel) {}
+        } message: {
+            let albumTitle = library.album(albumId).map { CollectionDisplayTitle.normalized($0.title) } ?? ""
+            Text(L("Permanently delete %d songs from “%@” from amp's folder in Files, the library and playlists? This cannot be undone.", songs.count, albumTitle))
         }
         .sheet(item: $artworkTarget) { ArtworkPickerSheet(target: $0) }
         .task(id: library.songs) { songs = (try? library.database.songsOfAlbum(albumId)) ?? [] }
