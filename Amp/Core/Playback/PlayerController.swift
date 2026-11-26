@@ -919,7 +919,7 @@ final class PlayerController {
                 wasTempoMatched,
                 planned.plan.durationMs,
                 planned.plan.spec.outgoingCutMs,
-                planned.plan.incomingStartMs
+                Int(planned.plan.incomingStartMs)
             )
             updateSmartBlendStatus(position: position)
         }
