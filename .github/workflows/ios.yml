@@ -63,6 +63,8 @@ jobs:
       run: |
         xcrun swiftc -target "$(uname -m)-apple-macosx14.0" -parse-as-library Amp/Core/Common/HTTPClient.swift Amp/Core/Settings/ReleaseChecker.swift Tools/Tests/ReleaseChecker/main.swift -o "$RUNNER_TEMP/amp-release-tests"
         "$RUNNER_TEMP/amp-release-tests"
+    - name: Verify light and dark brand assets
+      run: python3 Tools/verify_brand_assets.py
     - name: Build unsigned app
       run: |
         set -o pipefail
@@ -174,7 +176,7 @@ jobs:
           build/flarestore-verification.json
         if-no-files-found: warn
   cover-checks:
-    if: ${{ !inputs.artifact_run && github.ref == 'refs/heads/without-animated-art' && github.event.deleted != true }}
+    if: ${{ !inputs.artifact_run && inputs.validation_scope != 'branding-only' && github.ref == 'refs/heads/without-animated-art' && github.event.deleted != true }}
     uses: ./.github/workflows/player-interaction.yml
     with:
       scope: ${{ inputs.validation_scope || 'full-player' }}
@@ -265,6 +267,7 @@ jobs:
         options:
         - full-player
         - animation-only
+        - branding-only
         - navigation-alignment-only
         - artist-motion-only
         - waveforms-only

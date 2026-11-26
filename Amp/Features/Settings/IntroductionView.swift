@@ -118,9 +118,10 @@ private struct IntroductionIllustration: View {
             switch page {
             case "welcome":
                 HStack(spacing: 20) {
-                    Image(systemName: "play.fill").font(.system(size: 32, weight: .black))
-                        .foregroundStyle(palette.onPrimary).frame(width: 88, height: 88)
-                        .background(palette.primary, in: Circle()).shadow(color: palette.primary.opacity(0.2), radius: 18, y: 10)
+                    Image("AmpLogo")
+                        .resizable().scaledToFit().frame(width: 88, height: 88)
+                        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                        .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("amp").font(.system(size: 58, weight: .heavy)).tracking(-3)
                         Text("Your music, amplified.").font(.system(size: 12, weight: .medium)).foregroundStyle(palette.onSurfaceVariant)

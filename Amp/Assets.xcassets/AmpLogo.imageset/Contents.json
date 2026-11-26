@@ -1,1 +1,22 @@
-{"images":[{"filename":"AmpLogo.png","idiom":"universal"}],"info":{"author":"xcode","version":1}}
+{
+  "images": [
+    {
+      "filename": "AmpLogo.png",
+      "idiom": "universal"
+    },
+    {
+      "appearances": [
+        {
+          "appearance": "luminosity",
+          "value": "dark"
+        }
+      ],
+      "filename": "AmpLogo-Dark.png",
+      "idiom": "universal"
+    }
+  ],
+  "info": {
+    "author": "xcode",
+    "version": 1
+  }
+}
