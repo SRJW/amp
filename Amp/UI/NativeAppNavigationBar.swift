@@ -4,7 +4,7 @@ import UIKit
 /// A real system tab bar owns the selection lens and its touch/drag physics.
 /// The fourth slot remains an action menu rather than changing the app's route.
 @available(iOS 26.0, *)
-struct NativeAppNavigationBar: UIViewControllerRepresentable {
+struct NativeAppNavigationBar: UIViewRepresentable {
     let width: CGFloat
     let selectedIndex: Int
     let selectedTint: UIColor
@@ -15,17 +15,18 @@ struct NativeAppNavigationBar: UIViewControllerRepresentable {
     let onSelect: (LibrarySection) -> Void
     let onOpenTool: (Tool) -> Void
 
-    func makeUIViewController(context: Context) -> NativeNavigationController {
-        NativeNavigationController()
+    func makeUIView(context: Context) -> NativeNavigationView {
+        NativeNavigationView()
     }
 
-    func updateUIViewController(_ controller: NativeNavigationController, context: Context) {
-        controller.configure(self)
+    func updateUIView(_ view: NativeNavigationView, context: Context) {
+        view.configure(self)
     }
 }
 
 @available(iOS 26.0, *)
-final class NativeNavigationController: UITabBarController, UITabBarControllerDelegate {
+final class NativeNavigationView: UIView, UITabBarDelegate {
+    private let tabBar = PositionedNativeTabBar()
     private var configuration: NativeAppNavigationBar?
     private let menuButton = UIButton(type: .custom)
     private var menuKey = ""
@@ -33,34 +34,28 @@ final class NativeNavigationController: UITabBarController, UITabBarControllerDe
     private var previousSelectedTint: UIColor?
     private var previousIdleTint: UIColor?
 
-    override func viewDidLoad() {
-        super.viewDidLoad()
-        // Keep UIKit's own container and floating-tab infrastructure intact.
-        view.backgroundColor = .clear
-        view.isOpaque = false
-        view.insetsLayoutMarginsFromSafeArea = false
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        backgroundColor = .clear
+        isOpaque = false
+        insetsLayoutMarginsFromSafeArea = false
         tabBar.insetsLayoutMarginsFromSafeArea = false
         tabBar.directionalLayoutMargins = .zero
-        delegate = self
-        mode = .tabBar
-        tabBarMinimizeBehavior = .never
-        view.clipsToBounds = false
+        tabBar.delegate = self
+        clipsToBounds = false
         tabBar.clipsToBounds = false
         tabBar.accessibilityIdentifier = "ampNativeTabBar"
         let labels = [L("Library"), L("Equalizer"), L("Search"), L("Menu")]
         let ids = ["appSection.library", "appSection.equalizer", "appSection.search", "nativeMenuSlot"]
-        viewControllers = (0..<4).map { index in
-            let child = UIViewController()
-            child.view.backgroundColor = .clear
-            child.view.isOpaque = false
-            child.view.isUserInteractionEnabled = false
-            child.view.accessibilityElementsHidden = true
-            child.tabBarItem = UITabBarItem(title: nil, image: Self.images[index], selectedImage: Self.images[index])
-            child.tabBarItem.accessibilityLabel = labels[index]
-            child.tabBarItem.accessibilityIdentifier = ids[index]
-            if index == 3 { child.tabBarItem.isAccessibilityElement = false }
-            return child
+        tabBar.items = (0..<4).map { index in
+            let item = UITabBarItem(title: nil, image: Self.images[index], selectedImage: Self.images[index])
+            item.tag = index
+            item.accessibilityLabel = labels[index]
+            item.accessibilityIdentifier = ids[index]
+            if index == 3 { item.isAccessibilityElement = false }
+            return item
         }
+        addSubview(tabBar)
         // Transparent only in its artwork: the native tab item still draws the
         // menu glyph. UIButton owns the real UIMenu hit target and accessibility.
         menuButton.backgroundColor = .clear
@@ -68,28 +63,30 @@ final class NativeNavigationController: UITabBarController, UITabBarControllerDe
         menuButton.preferredMenuElementOrder = .fixed
         menuButton.accessibilityIdentifier = "appMenu"
         menuButton.accessibilityLabel = L("Menu")
-        view.addSubview(menuButton)
+        addSubview(menuButton)
     }
 
-    override func viewDidLayoutSubviews() {
-        super.viewDidLayoutSubviews()
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
         guard let configuration else { return }
-        tabBar.frame = view.bounds
+        tabBar.frame = bounds
         tabBar.itemPositioning = .centered
         tabBar.itemWidth = configuration.width * AppNavigationMetrics.selectionWidthFraction
         tabBar.itemSpacing = 0
         let hitSize = AppNavigationMetrics.buttonsHeight
         menuButton.frame = CGRect(x: configuration.width * PlayerLayoutMetrics.navigationCentresW[3] - hitSize / 2,
-                                  y: (view.bounds.height - hitSize) / 2,
+                                  y: (bounds.height - hitSize) / 2,
                                   width: hitSize, height: hitSize)
-        view.bringSubviewToFront(menuButton)
+        bringSubviewToFront(menuButton)
     }
 
     func configure(_ configuration: NativeAppNavigationBar) {
         self.configuration = configuration
-        loadViewIfNeeded()
-        view.overrideUserInterfaceStyle = configuration.dark ? .dark : .light
-        if selectedIndex != configuration.selectedIndex { selectedIndex = configuration.selectedIndex }
+        overrideUserInterfaceStyle = configuration.dark ? .dark : .light
+        let selectedItem = tabBar.items?[configuration.selectedIndex]
+        if tabBar.selectedItem !== selectedItem { tabBar.selectedItem = selectedItem }
         menuButton.isSelected = configuration.selectedIndex == 3
         menuButton.accessibilityLabel = L("Menu")
         let key = Tool.available.map { $0.rawValue + ":" + L($0.label) }.joined(separator: "|")
@@ -134,19 +131,15 @@ final class NativeNavigationController: UITabBarController, UITabBarControllerDe
                                   animations: apply)
             } else { apply() }
         }
-        view.setNeedsLayout()
+        setNeedsLayout()
     }
 
-    func tabBarController(_ tabBarController: UITabBarController, shouldSelect viewController: UIViewController) -> Bool {
-        guard let index = viewControllers?.firstIndex(of: viewController) else { return false }
-        // A drag toward Menu must not select an empty page. Direct presses land
-        // on menuButton, whose system menu is independent of tab selection.
-        return index < 3
-    }
-
-    func tabBarController(_ tabBarController: UITabBarController, didSelect viewController: UIViewController) {
-        guard let index = viewControllers?.firstIndex(of: viewController), index < 3 else { return }
-        configuration?.onSelect([.library, .equalizer, .search][index])
+    func tabBar(_ tabBar: UITabBar, didSelect item: UITabBarItem) {
+        guard item.tag < 3 else {
+            if let configuration { tabBar.selectedItem = tabBar.items?[configuration.selectedIndex] }
+            return
+        }
+        configuration?.onSelect([.library, .equalizer, .search][item.tag])
     }
 
     private static let clearIndicator = UIGraphicsImageRenderer(size: CGSize(width: 1, height: 1)).image { _ in }
@@ -165,4 +158,11 @@ final class NativeNavigationController: UITabBarController, UITabBarControllerDe
         renderer.scale = UIScreen.main.scale
         return (renderer.uiImage ?? UIImage()).withRenderingMode(.alwaysTemplate)
     }
+}
+
+/// AppFixedNavigation already accounts for the window's bottom safe area.
+/// Do not let a nested native bar subtract that inset a second time.
+@available(iOS 26.0, *)
+private final class PositionedNativeTabBar: UITabBar {
+    override var safeAreaInsets: UIEdgeInsets { .zero }
 }

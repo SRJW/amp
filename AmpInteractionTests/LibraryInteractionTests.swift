@@ -163,6 +163,15 @@ final class LibraryInteractionTests: XCTestCase {
         let geometry = XCTAttachment(string: measurements)
         geometry.name = "Native navigation screen measurements"
         geometry.lifetime = .keepAlways; add(geometry)
+        // Compare against the original shared button row, not merely against
+        // another equally displaced native bar. The menu retains that anchor.
+        let anchor = initialFrames["appMenu"] ?? .zero
+        let barWidth = anchor.midX / 0.857
+        for (index, identifier) in identifiers.enumerated() {
+            let frame = initialFrames[identifier] ?? .zero
+            XCTAssertEqual(frame.midX, barWidth * [0.143, 0.381, 0.619, 0.857][index], accuracy: 0.5, identifier)
+            XCTAssertEqual(frame.midY, anchor.midY, accuracy: 0.5, identifier)
+        }
         for identifier in identifiers { XCTAssertEqual(app.buttons.matching(identifier: identifier).count, 1) }
         func navigationMatchesLibrary() -> Bool {
             let measured = navigationFrames()
