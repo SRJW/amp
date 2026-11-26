@@ -178,46 +178,34 @@ struct AppNavigationButtons: View {
         let artworkURL = player.state.currentSong?.url
         let resolvedProgress = playerProgress ?? (inPlayer ? 1 : 0)
         let interactiveBarEnabled = settings.playerBackground.navBarCapsule || resolvedProgress < 0.5
-        let activeSectionIndex: Int = switch router.section {
-        case .library: 0
-        case .equalizer: 1
-        case .search: 2
-        }
         Group {
             if #available(iOS 26.0, *), usesNativeBar {
                 let blend = PlayerCoverGeometry.chromeOpacity(resolvedProgress)
-                NativeAppNavigationBar(
-                    width: width, selectedIndex: selectedIndex,
-                    selectedTint: nativeTint(from: libraryTint(selected: true), to: playerTint(selected: true), amount: blend),
-                    idleTint: nativeTint(from: libraryTint(selected: false), to: playerTint(selected: false), amount: blend),
-                    showsSurface: settings.playerBackground.navBarCapsule || resolvedProgress < 0.5,
-                    dark: colorScheme == .dark, reduceMotion: reduceMotion,
-                    onSelect: { section in
-                        withAnimation(reduceMotion ? nil : .easeInOut(duration: AppNavigationMetrics.duration)) { router.activate(section) }
-                    }, onOpenTool: { router.open($0) })
-                .frame(width: width, height: AppNavigationMetrics.capsuleHeight)
-                .padding(.vertical, -(AppNavigationMetrics.capsuleHeight - AppNavigationMetrics.buttonsHeight) / 2)
+                ZStack {
+                    NativeAppNavigationBar(
+                        width: width, selectedIndex: selectedIndex,
+                        selectedTint: nativeTint(from: libraryTint(selected: true), to: playerTint(selected: true), amount: blend),
+                        idleTint: nativeTint(from: libraryTint(selected: false), to: playerTint(selected: false), amount: blend),
+                        showsSurface: true,
+                        dark: colorScheme == .dark, reduceMotion: reduceMotion,
+                        onSelect: { section in
+                            withAnimation(reduceMotion ? nil : .easeInOut(duration: AppNavigationMetrics.duration)) { router.activate(section) }
+                        }, onOpenTool: { router.open($0) })
+                    .frame(width: width, height: AppNavigationMetrics.capsuleHeight)
+                    .padding(.vertical, -(AppNavigationMetrics.capsuleHeight - AppNavigationMetrics.buttonsHeight) / 2)
+                    .opacity(settings.playerBackground.navBarCapsule ? 1 : 1 - blend)
+                    .allowsHitTesting(interactiveBarEnabled)
+                    .accessibilityHidden(!interactiveBarEnabled)
+                    if !settings.playerBackground.navBarCapsule {
+                        navigationContent(progress: 1)
+                            .opacity(blend)
+                            .allowsHitTesting(!interactiveBarEnabled)
+                            .accessibilityHidden(interactiveBarEnabled)
+                    }
+                }
+                .frame(width: width, height: AppNavigationMetrics.buttonsHeight)
             } else {
-                AppNavigationBarContent(
-                    width: width,
-                    playerProgress: resolvedProgress,
-                    selectedIndex: selectedIndex,
-                    activeSectionIndex: activeSectionIndex,
-                    hasPresentedTool: router.presentedTool != nil,
-                    showsPlayerCapsule: settings.playerBackground.navBarCapsule,
-                    glassEnabled: settings.glassEnabled,
-                    contact: contact,
-                    playerCapsuleFill: playerCapsuleFill,
-                    selectionFallbackFill: colorScheme == .dark ? Color.white.opacity(0.14) : Color.black.opacity(0.08),
-                    librarySelectedColor: libraryTint(selected: true),
-                    libraryIdleColor: libraryTint(selected: false),
-                    playerSelectedColor: playerTint(selected: true),
-                    playerIdleColor: playerTint(selected: false),
-                    onSelectSection: { section in
-                        withAnimation(reduceMotion ? nil : .easeInOut(duration: AppNavigationMetrics.duration)) { router.activate(section) }
-                    },
-                    onOpenTool: { tool in router.open(tool) }
-                )
+                navigationContent(progress: resolvedProgress)
             }
         }
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: artworkDominant)
@@ -260,6 +248,34 @@ struct AppNavigationButtons: View {
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in contact = nil }
 
     }
+    private func navigationContent(progress: CGFloat) -> some View {
+        let routeIndex: Int = switch router.section {
+        case .library: 0
+        case .equalizer: 1
+        case .search: 2
+        }
+        return AppNavigationBarContent(
+            width: width,
+            playerProgress: progress,
+            selectedIndex: selectedIndex,
+            activeSectionIndex: routeIndex,
+            hasPresentedTool: router.presentedTool != nil,
+            showsPlayerCapsule: settings.playerBackground.navBarCapsule,
+            glassEnabled: settings.glassEnabled,
+            contact: contact,
+            playerCapsuleFill: playerCapsuleFill,
+            selectionFallbackFill: colorScheme == .dark ? Color.white.opacity(0.14) : Color.black.opacity(0.08),
+            librarySelectedColor: libraryTint(selected: true),
+            libraryIdleColor: libraryTint(selected: false),
+            playerSelectedColor: playerTint(selected: true),
+            playerIdleColor: playerTint(selected: false),
+            onSelectSection: { section in
+                withAnimation(reduceMotion ? nil : .easeInOut(duration: AppNavigationMetrics.duration)) { router.activate(section) }
+            },
+            onOpenTool: { tool in router.open(tool) }
+        )
+    }
+
     private func nativeTint(from a: Color, to b: Color, amount: Double) -> UIColor {
         let t = amount.clamped(0, 1)
         let a = a.resolve(in: environment), b = b.resolve(in: environment)

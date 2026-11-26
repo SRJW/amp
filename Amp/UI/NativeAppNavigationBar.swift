@@ -4,7 +4,7 @@ import UIKit
 /// A real system tab bar owns the selection lens and its touch/drag physics.
 /// The fourth slot remains an action menu rather than changing the app's route.
 @available(iOS 26.0, *)
-struct NativeAppNavigationBar: UIViewRepresentable {
+struct NativeAppNavigationBar: UIViewControllerRepresentable {
     let width: CGFloat
     let selectedIndex: Int
     let selectedTint: UIColor
@@ -15,18 +15,19 @@ struct NativeAppNavigationBar: UIViewRepresentable {
     let onSelect: (LibrarySection) -> Void
     let onOpenTool: (Tool) -> Void
 
-    func makeUIView(context: Context) -> NativeNavigationView {
-        NativeNavigationView()
+    func makeUIViewController(context: Context) -> NativeNavigationHost {
+        NativeNavigationHost()
     }
 
-    func updateUIView(_ view: NativeNavigationView, context: Context) {
-        view.configure(self)
+    func updateUIViewController(_ controller: NativeNavigationHost, context: Context) {
+        controller.loadViewIfNeeded()
+        (controller.view as? NativeNavigationView)?.configure(self)
     }
 }
 
 @available(iOS 26.0, *)
 final class NativeNavigationView: UIView, UITabBarDelegate {
-    private let tabBar = PositionedNativeTabBar()
+    private let tabBar = UITabBar()
     private var configuration: NativeAppNavigationBar?
     private let menuButton = UIButton(type: .custom)
     private var menuKey = ""
@@ -71,15 +72,18 @@ final class NativeNavigationView: UIView, UITabBarDelegate {
     override func layoutSubviews() {
         super.layoutSubviews()
         guard let configuration else { return }
-        tabBar.frame = bounds
-        tabBar.itemPositioning = .centered
-        tabBar.itemWidth = configuration.width * AppNavigationMetrics.selectionWidthFraction
-        tabBar.itemSpacing = 0
+        if tabBar.frame != bounds { tabBar.frame = bounds }
+        if tabBar.itemPositioning != .centered { tabBar.itemPositioning = .centered }
+        let itemWidth = configuration.width * AppNavigationMetrics.selectionWidthFraction
+        if tabBar.itemWidth != itemWidth { tabBar.itemWidth = itemWidth }
+        if tabBar.itemSpacing != 0 { tabBar.itemSpacing = 0 }
         let hitSize = AppNavigationMetrics.buttonsHeight
         menuButton.frame = CGRect(x: configuration.width * PlayerLayoutMetrics.navigationCentresW[3] - hitSize / 2,
                                   y: (bounds.height - hitSize) / 2,
                                   width: hitSize, height: hitSize)
         bringSubviewToFront(menuButton)
+        tabBar.accessibilityValue = "host=\(bounds); safe=\(safeAreaInsets); barSafe=\(tabBar.safeAreaInsets); margins=\(layoutMargins); fit=\(tabBar.sizeThatFits(bounds.size))"
+
     }
 
     func configure(_ configuration: NativeAppNavigationBar) {
@@ -107,6 +111,9 @@ final class NativeNavigationView: UIView, UITabBarDelegate {
             previousSelectedTint = configuration.selectedTint
             previousIdleTint = configuration.idleTint
             let appearance = UITabBarAppearance()
+            appearance.stackedItemPositioning = .centered
+            appearance.stackedItemWidth = configuration.width * AppNavigationMetrics.selectionWidthFraction
+            appearance.stackedItemSpacing = 0
             if configuration.showsSurface { appearance.configureWithDefaultBackground() }
             else {
                 appearance.configureWithTransparentBackground()
@@ -131,7 +138,6 @@ final class NativeNavigationView: UIView, UITabBarDelegate {
                                   animations: apply)
             } else { apply() }
         }
-        setNeedsLayout()
     }
 
     func tabBar(_ tabBar: UITabBar, didSelect item: UITabBarItem) {
@@ -160,9 +166,27 @@ final class NativeNavigationView: UIView, UITabBarDelegate {
     }
 }
 
-/// AppFixedNavigation already accounts for the window's bottom safe area.
-/// Do not let a nested native bar subtract that inset a second time.
+/// Isolate the navigation from the containing screen's system minimum margins.
+/// Only this host's safe area is normalized; the app's content keeps iOS insets.
 @available(iOS 26.0, *)
-private final class PositionedNativeTabBar: UITabBar {
-    override var safeAreaInsets: UIEdgeInsets { .zero }
+final class NativeNavigationHost: UIViewController {
+    override func loadView() { view = NativeNavigationView() }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        viewRespectsSystemMinimumLayoutMargins = false
+        view.directionalLayoutMargins = .zero
+        view.insetsLayoutMarginsFromSafeArea = false
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        guard let window = view.window else { return }
+        let rect = view.convert(view.bounds, to: window)
+        let overlap = max(0, rect.maxY - window.safeAreaLayoutGuide.layoutFrame.maxY)
+        let inset = -overlap
+        if abs(additionalSafeAreaInsets.bottom - inset) > 0.1 {
+            additionalSafeAreaInsets.bottom = inset
+        }
+    }
 }

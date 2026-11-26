@@ -155,6 +155,7 @@ jobs:
             -only-testing:AmpInteractionTests/LibraryInteractionTests/testGlassContactKeepsButtonActionsAndCancelsVerticalExit
             -only-testing:AmpInteractionTests/LibraryInteractionTests/testNativeMenuSettingsWorksAfterWifiTransferWithoutSwitchingTabs
           )
+          test_filters+=(-test-timeouts-enabled YES -maximum-test-execution-time-allowance 180)
         elif [ "${{ inputs.scope }}" = 'artist-motion-only' ]; then
           test_filters=(
             -only-testing:AmpInteractionTests/LibraryInteractionTests/testArtistPortraitScrollReturnsWithoutMovingNavigationOrBlockingActions
