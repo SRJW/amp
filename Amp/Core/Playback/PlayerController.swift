@@ -67,6 +67,11 @@ final class PlayerController {
     @ObservationIgnored private var consecutiveErrors = 0
     @ObservationIgnored private var plannedTransition: (entryId: UUID, nextEntryId: UUID, plan: Planned)?
     @ObservationIgnored private var pendingTransitionCommit: Task<Void, Never>?
+    @ObservationIgnored private var smartBlendAnalysisTask: Task<Void, Never>?
+    @ObservationIgnored private var plannedSmartBlendTempoMatched = false
+    @ObservationIgnored private var activeSmartBlendEndUptime: TimeInterval?
+    @ObservationIgnored private var activeSmartBlendMeta: (tempoMatched: Bool, durationMs: Int, outgoingCutMs: Int, incomingStartMs: Int)?
+    private(set) var smartBlendStatus: SmartBlendStatus?
     @ObservationIgnored private var wasPlayingBeforeInterruption = false
     @ObservationIgnored private var headphonePolicy = HeadphoneRoutePolicy()
     @ObservationIgnored private let settings: AppSettings?
@@ -175,6 +180,12 @@ final class PlayerController {
         pendingTransitionCommit = nil
     }
 
+    private func clearActiveSmartBlendMix() {
+        activeSmartBlendEndUptime = nil
+        activeSmartBlendMeta = nil
+        updateSmartBlendStatus(position: currentPositionMs())
+    }
+
     func play() {
         guard !state.queue.isEmpty else { return }
         headphonePolicy.userDidPlay()
@@ -198,6 +209,7 @@ final class PlayerController {
 
     private func pauseInternal() {
         cancelPendingTransitionCommit()
+        clearActiveSmartBlendMix()
         audioPreparation?.cancel(); audioPreparation = nil; preparingPlayIntent = false
         refreshPosition()
         engine.pause()
@@ -535,13 +547,20 @@ final class PlayerController {
         }
         if playing && (!state.isPlaying || !engine.isRunning) { activateAudioSession() }
         do {
+            let wasAlreadyPlaying = state.isPlaying && engine.isRunning
+            let handoffSpec = transitions.config.global.manualSpec
             try engine.play(entryId: entry.id, url: entry.song.url, positionMs: positionMs, startPlaying: playing,
-                            handoffSpec: transitions.config.global.manualSpec)
+                            handoffSpec: handoffSpec)
+            if wasAlreadyPlaying, playing, !engine.bitPerfectEnabled, let handoffSpec, handoffSpec.preset == .blend {
+                activeSmartBlendEndUptime = ProcessInfo.processInfo.systemUptime + Double(handoffSpec.durationMs) / 1000.0
+                activeSmartBlendMeta = (false, handoffSpec.durationMs, 0, 0)
+            }
             setPosition(positionMs)
             state.durationMs = entry.song.durationMs
             if playing { consecutiveErrors = 0 }
             currentEntryChanged(sameEntryRepeated: sameEntryRepeated)
             playingChanged(playing)
+            updateSmartBlendStatus(position: positionMs)
         } catch AudioEngine.EngineError.notReady {
             // One shared setup survives a cancelled/changed play request; only the latest
             // request may start audio once it is ready. No second tap is needed.
@@ -731,6 +750,7 @@ final class PlayerController {
         engine.releaseFinishedOutgoing()
         checkTransition(position: position)
         checkGapless(position: position)
+        updateSmartBlendStatus(position: position)
     }
 
     /// While playing only [clock] moves; [state] keeps the position of the last seek, start or pause.
@@ -751,31 +771,134 @@ final class PlayerController {
 
     /// Re-plans the boundary after the current entry (entry change, seek, queue edit, repeat, loop, settings).
     private func reevaluateTransition() {
+        smartBlendAnalysisTask?.cancel()
+        smartBlendAnalysisTask = nil
+        plannedSmartBlendTempoMatched = false
+
         guard !engine.bitPerfectEnabled, let current = state.currentEntry else {
             plannedTransition = nil
+            updateSmartBlendStatus(position: currentPositionMs())
             return
         }
         let nextIndex = PlayOrder.next(after: state.currentIndex, count: state.queue.count, repeatMode: state.repeatMode, userSkip: true) ?? -1
         let next = state.queue.indices.contains(nextIndex) ? state.queue[nextIndex] : nil
         let resolved = next.map { transitions.resolve(outgoing: current.origin, incoming: $0.origin) }
         let automaticAllowed = (transitions.config.global.automaticMode ?? .all).allows(shuffled: state.shuffleModeEnabled)
-        let spec = resolved.flatMap { automaticAllowed || $0.source != .globalDefault ? $0.spec : nil }
+        let rawSpec = resolved.flatMap { automaticAllowed || $0.source != .globalDefault ? $0.spec : nil }
+        let immediateSpec = rawSpec.map { SmartBlendAutoMix.smoothedSpec(from: $0) }
         let info = BoundaryInfo(
-            spec: spec, nextIndex: nextIndex, repeatMode: state.repeatMode, abLoopEnabled: state.abLoop?.enabled == true,
+            spec: immediateSpec, nextIndex: nextIndex, repeatMode: state.repeatMode, abLoopEnabled: state.abLoop?.enabled == true,
             outgoingDurationMs: current.song.durationMs, incomingDurationMs: next?.song.durationMs ?? 0
         )
         if let plan = TransitionPlanner.plan(info).planned, let next {
             plannedTransition = (current.id, next.id, plan)
+            if let rawSpec, rawSpec.preset == .blend {
+                let currentEntryId = current.id
+                let nextEntryId = next.id
+                let outgoingSong = current.song
+                let incomingSong = next.song
+                smartBlendAnalysisTask = Task { @MainActor [weak self] in
+                    let analysis = await SmartBlendAutoMixStore.shared.analyze(
+                        spec: rawSpec,
+                        outgoing: outgoingSong,
+                        incoming: incomingSong
+                    )
+                    guard !Task.isCancelled,
+                          let self,
+                          !self.engine.bitPerfectEnabled,
+                          self.state.currentEntry?.id == currentEntryId,
+                          self.plannedTransition?.entryId == currentEntryId,
+                          self.plannedTransition?.nextEntryId == nextEntryId
+                    else { return }
+                    let refinedInfo = BoundaryInfo(
+                        spec: analysis.spec,
+                        nextIndex: nextIndex,
+                        repeatMode: self.state.repeatMode,
+                        abLoopEnabled: self.state.abLoop?.enabled == true,
+                        outgoingDurationMs: outgoingSong.durationMs,
+                        incomingDurationMs: incomingSong.durationMs
+                    )
+                    guard let refinedPlan = TransitionPlanner.plan(refinedInfo).planned else { return }
+                    let nowPos = self.currentPositionMs()
+                    self.plannedSmartBlendTempoMatched = analysis.tempoMatched
+                    if nowPos < refinedPlan.startAtMs - Self.transitionLeadMs - 100 {
+                        self.plannedTransition = (currentEntryId, nextEntryId, refinedPlan)
+                    } else if let existing = self.plannedTransition {
+                        // Keep the already-approaching startAtMs if the trimmed cut point already passed,
+                        // while still applying the incoming auto-cue and smooth DJ curve.
+                        var safeSpec = analysis.spec
+                        safeSpec.outgoingCutMs = existing.plan.spec.outgoingCutMs
+                        safeSpec.durationMs = existing.plan.durationMs
+                        let fallbackInfo = BoundaryInfo(
+                            spec: safeSpec,
+                            nextIndex: nextIndex,
+                            repeatMode: self.state.repeatMode,
+                            abLoopEnabled: self.state.abLoop?.enabled == true,
+                            outgoingDurationMs: outgoingSong.durationMs,
+                            incomingDurationMs: incomingSong.durationMs
+                        )
+                        if let safePlan = TransitionPlanner.plan(fallbackInfo).planned {
+                            self.plannedTransition = (currentEntryId, nextEntryId, safePlan)
+                        }
+                    }
+                    self.updateSmartBlendStatus(position: nowPos)
+                }
+            }
         } else {
             plannedTransition = nil
         }
+        updateSmartBlendStatus(position: currentPositionMs())
+    }
+
+    private func updateSmartBlendStatus(position: Int64) {
+        guard state.isPlaying, !engine.bitPerfectEnabled else {
+            if smartBlendStatus != nil { smartBlendStatus = nil }
+            return
+        }
+        let now = ProcessInfo.processInfo.systemUptime
+        if let endUptime = activeSmartBlendEndUptime, let meta = activeSmartBlendMeta {
+            if now < endUptime {
+                let status = SmartBlendStatus(
+                    phase: .mixing,
+                    tempoMatched: meta.tempoMatched,
+                    durationMs: meta.durationMs,
+                    outgoingCutMs: meta.outgoingCutMs,
+                    incomingStartMs: meta.incomingStartMs
+                )
+                if smartBlendStatus != status { smartBlendStatus = status }
+                return
+            } else {
+                activeSmartBlendEndUptime = nil
+                activeSmartBlendMeta = nil
+            }
+        }
+        if let planned = plannedTransition,
+           planned.entryId == state.currentEntry?.id,
+           planned.plan.spec.preset == .blend {
+            let untilStart = planned.plan.startAtMs - position
+            if untilStart > 0 && untilStart <= 6_000 {
+                let status = SmartBlendStatus(
+                    phase: .preparing,
+                    tempoMatched: plannedSmartBlendTempoMatched,
+                    durationMs: planned.plan.durationMs,
+                    outgoingCutMs: planned.plan.spec.outgoingCutMs,
+                    incomingStartMs: planned.plan.spec.incomingStartMs
+                )
+                if smartBlendStatus != status { smartBlendStatus = status }
+                return
+            }
+        }
+        if smartBlendStatus != nil { smartBlendStatus = nil }
     }
 
     private func checkTransition(position: Int64) {
         guard let planned = plannedTransition, planned.entryId == state.currentEntry?.id, state.isPlaying else { return }
         let untilStart = planned.plan.startAtMs - position
         guard untilStart <= Self.transitionLeadMs else { return }
+        let wasTempoMatched = plannedSmartBlendTempoMatched
         plannedTransition = nil
+        smartBlendAnalysisTask?.cancel()
+        smartBlendAnalysisTask = nil
         guard untilStart > 50, state.queue.indices.contains(planned.plan.nextIndex),
               state.queue[planned.plan.nextIndex].id == planned.nextEntryId
         else { return } // too late (e.g. seeked there): the boundary plays normally
@@ -788,6 +911,17 @@ final class PlayerController {
             )
         } catch {
             return
+        }
+        if planned.plan.spec.preset == .blend {
+            let totalSeconds = Double(untilStart + Int64(planned.plan.durationMs)) / 1000.0
+            activeSmartBlendEndUptime = ProcessInfo.processInfo.systemUptime + totalSeconds
+            activeSmartBlendMeta = (
+                wasTempoMatched,
+                planned.plan.durationMs,
+                planned.plan.spec.outgoingCutMs,
+                planned.plan.incomingStartMs
+            )
+            updateSmartBlendStatus(position: position)
         }
         // The queue moves on when the crossfade starts, as on Android.
         let delay = Double(untilStart) / 1000

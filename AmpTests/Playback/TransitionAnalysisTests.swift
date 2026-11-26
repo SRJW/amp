@@ -66,4 +66,154 @@ final class TransitionAnalysisTests: XCTestCase {
         XCTAssertNil(TransitionAnalysisStore.decode(url: url, range: 1500..<2500))
         XCTAssertNil(TransitionAnalysisStore.decode(url: url, range: 0..<21_000))
     }
+
+    func testSmartBlendAutoMixSmoothsOverlapCurvesAndPreservesCustomEdits() {
+        let stockBlend = TransitionSpec.preset(.blend, base: TransitionSpec(durationMs: 4_000))
+        let smoothed = SmartBlendAutoMix.smoothedSpec(from: stockBlend)
+        XCTAssertEqual(smoothed.preset, .blend)
+        XCTAssertTrue(smoothed.bassSwap)
+        XCTAssertEqual(smoothed.filter, .highPassInOut)
+        // Smooth DJ S-curve enters gradually instead of jumping to 1.0 at t = 0.03
+        XCTAssertLessThan(smoothed.gain(.incoming, 0.03), 0.15)
+        XCTAssertEqual(smoothed.gain(.incoming, 0.32), 0.80, accuracy: 0.01)
+        XCTAssertEqual(smoothed.gain(.outgoing, 0.68), 0.80, accuracy: 0.01)
+        XCTAssertTrue(SmartBlendAutoMix.isAutomaticBlend(smoothed))
+
+        // Hand-edited custom curves in Transition Studio must remain untouched
+        let handEdited = TransitionEditing.movePoint(stockBlend, .incoming, index: 1, t: 0.25, gain: 0.42)
+        XCTAssertFalse(SmartBlendAutoMix.isAutomaticBlend(handEdited))
+        XCTAssertEqual(SmartBlendAutoMix.smoothedSpec(from: handEdited), handEdited)
+    }
+
+    func testSmartBlendAutoMixTrimsOutroTailSilenceAndSkipsIntroSilence() {
+        // Outgoing 15 s slice (300 bins of 50 ms): active musical body for 11.5 s (230 bins), then 3.5 s of quiet tail
+        var outRms = [Float](repeating: 0.32, count: 300)
+        for i in 230..<300 { outRms[i] = 0.003 }
+        let outSlice = TransitionAudioSlice(
+            peaks: outRms.map { min(1.0, $0 * 1.4) },
+            rms: outRms,
+            startMs: 185_000,
+            durationMs: 15_000,
+            sampleRate: 44_100,
+            channels: 2,
+            peak: 0.45,
+            meanRMS: 0.25
+        )
+
+        // Incoming 8 s slice (320 bins of 25 ms): 1.2 s (48 bins) of dead silence, then strong musical attack
+        var inRms = [Float](repeating: 0.30, count: 320)
+        for i in 0..<48 { inRms[i] = 0.001 }
+        let inSlice = TransitionAudioSlice(
+            peaks: inRms.map { min(1.0, $0 * 1.5) },
+            rms: inRms,
+            startMs: 0,
+            durationMs: 8_000,
+            sampleRate: 44_100,
+            channels: 2,
+            peak: 0.45,
+            meanRMS: 0.26
+        )
+
+        let base = TransitionSpec.preset(.blend, base: TransitionSpec(durationMs: 4_000))
+        let result = SmartBlendAutoMix.analyze(
+            spec: base,
+            outgoingDurationMs: 200_000,
+            incomingDurationMs: 180_000,
+            outgoingSlice: outSlice,
+            incomingSlice: inSlice
+        )
+        // 3,500 ms tail minus ~250 ms natural decay margin ≈ 3,250 ms cut
+        XCTAssertGreaterThanOrEqual(result.outgoingCutMs, 3_000)
+        XCTAssertLessThanOrEqual(result.outgoingCutMs, 3_500)
+        // 1,200 ms intro silence minus 1 bin pre-attack breath ≈ 1,175 ms start
+        XCTAssertGreaterThanOrEqual(result.incomingStartMs, 1_100)
+        XCTAssertLessThanOrEqual(result.incomingStartMs, 1_300)
+
+        // Manual cues set in Transition Studio are respected and not overwritten
+        var manualCued = base
+        manualCued.outgoingCutMs = 1_500
+        manualCued.incomingStartMs = 500
+        let preserved = SmartBlendAutoMix.analyze(
+            spec: manualCued,
+            outgoingDurationMs: 200_000,
+            incomingDurationMs: 180_000,
+            outgoingSlice: outSlice,
+            incomingSlice: inSlice
+        )
+        XCTAssertEqual(preserved.outgoingCutMs, 1_500)
+        XCTAssertEqual(preserved.incomingStartMs, 500)
+    }
+
+    func testSmartBlendAutoMixQuantizesDurationToBeatPhraseWhenTemposMatch() {
+        // 120 BPM = 500 ms per beat -> 10 bins per beat at 50 ms/bin
+        var outRms = [Float](repeating: 0.18, count: 300)
+        for i in stride(from: 0, to: 300, by: 10) { outRms[i] = 0.55 }
+        let outSlice = TransitionAudioSlice(
+            peaks: outRms.map { min(1.0, $0 * 1.3) },
+            rms: outRms,
+            startMs: 185_000,
+            durationMs: 15_000,
+            sampleRate: 44_100,
+            channels: 2,
+            peak: 0.72,
+            meanRMS: 0.24
+        )
+
+        // Incoming 120 BPM = 500 ms per beat -> 20 bins per beat at 25 ms/bin, with phase offset +150 ms (6 bins)
+        var inRms = [Float](repeating: 0.18, count: 320)
+        for i in stride(from: 6, to: 320, by: 20) { inRms[i] = 0.55 }
+        let inSlice = TransitionAudioSlice(
+            peaks: inRms.map { min(1.0, $0 * 1.3) },
+            rms: inRms,
+            startMs: 0,
+            durationMs: 8_000,
+            sampleRate: 44_100,
+            channels: 2,
+            peak: 0.72,
+            meanRMS: 0.24
+        )
+
+        let base = TransitionSpec.preset(.blend, base: TransitionSpec(durationMs: 4_300))
+        let matched = SmartBlendAutoMix.analyze(
+            spec: base,
+            outgoingDurationMs: 200_000,
+            incomingDurationMs: 180_000,
+            outgoingSlice: outSlice,
+            incomingSlice: inSlice,
+            outgoingBpm: 120,
+            incomingBpm: 120
+        )
+        XCTAssertTrue(matched.tempoMatched)
+        // 8 beats at 120 BPM (500 ms/beat) = 4,000 ms
+        XCTAssertEqual(matched.durationMs, 4_000)
+        // Incoming beat phase (+150 ms) is aligned to the outgoing beat grid
+        XCTAssertEqual(Double(matched.incomingStartMs), 150.0, accuracy: 30.0)
+
+        // Incompatible tempos (128 BPM vs 92 BPM) do not force tempoMatched
+        let mismatched = SmartBlendAutoMix.analyze(
+            spec: base,
+            outgoingDurationMs: 200_000,
+            incomingDurationMs: 180_000,
+            outgoingSlice: nil,
+            incomingSlice: nil,
+            outgoingBpm: 128,
+            incomingBpm: 92
+        )
+        XCTAssertFalse(mismatched.tempoMatched)
+    }
+
+    func testShortManualModePreservesSmartBlendPresetAndSmoothCurve() {
+        var global = GlobalTransitionSettings()
+        global.defaultChoice = .custom(TransitionSpec.preset(.blend, base: TransitionSpec(durationMs: 5_000)))
+        global.manualMode = .short
+        global.shortManualDurationMs = 800
+        let manual = global.manualSpec
+        XCTAssertNotNil(manual)
+        XCTAssertEqual(manual?.durationMs, 800)
+        XCTAssertEqual(manual?.preset, .blend)
+        XCTAssertEqual(manual?.bassSwap, true)
+        XCTAssertEqual(manual?.filter, .highPassInOut)
+        XCTAssertLessThan(manual?.gain(.incoming, 0.03) ?? 1, 0.15)
+    }
 }
+

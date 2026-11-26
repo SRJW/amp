@@ -84,10 +84,23 @@ struct NowPlayingView: View {
                         .frame(width: width - 20, height: waveformHeight)
                         .position(x: width / 2, y: waveformCentreY)
                     Button { showsAudioDetails = true } label: {
-                        Text(audioSummary(song)).font(.system(size: 10.5 * PlayerLayoutMetrics.technicalTextScale, weight: .bold))
-                            .foregroundStyle(artworkControls?.accentInk.opacity(0.80) ?? playerInk)
-                            .lineLimit(1).minimumScaleFactor(0.75)
+                        if let blendStatus = player.smartBlendStatus {
+                            HStack(spacing: 4) {
+                                Image(systemName: blendStatus.phase == .mixing ? "waveform" : "sparkles")
+                                    .font(.system(size: 9.5, weight: .bold))
+                                Text(blendStatus.badgeText.uppercased())
+                                    .font(.system(size: 10.5 * PlayerLayoutMetrics.technicalTextScale, weight: .bold))
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.75)
+                            }
+                            .foregroundStyle(artworkControls?.accentInk.opacity(0.92) ?? playerInk)
+                        } else {
+                            Text(audioSummary(song)).font(.system(size: 10.5 * PlayerLayoutMetrics.technicalTextScale, weight: .bold))
+                                .foregroundStyle(artworkControls?.accentInk.opacity(0.80) ?? playerInk)
+                                .lineLimit(1).minimumScaleFactor(0.75)
+                        }
                     }
+                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: player.smartBlendStatus)
                     .frame(width: width - 24)
                     .position(x: width / 2, y: bitrateCentreY)
                     if !sharedNavigation {

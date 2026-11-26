@@ -579,13 +579,17 @@ struct GlobalTransitionSettings: Equatable, Codable {
     var manualSpec: TransitionSpec? {
         guard masterEnabled else { return nil }
         switch manualMode ?? .linked {
-        case .off: return nil
-        case .linked: return defaultChoice.specOrNil
-        case .custom: return defaultChoice.specOrNil
+        case .off:
+            return nil
+        case .linked, .custom:
+            return defaultChoice.specOrNil.map { SmartBlendAutoMix.smoothedSpec(from: $0) }
         case .short:
-            var spec = TransitionSpec()
+            let base = defaultChoice.specOrNil ?? TransitionSpec()
+            var spec = TransitionSpec.preset(base.preset, base: base)
+            spec.outgoingCutMs = 0
+            spec.incomingStartMs = 0
             spec.durationMs = min(max(shortManualDurationMs ?? 500, 500), 2_000)
-            return spec
+            return SmartBlendAutoMix.smoothedSpec(from: spec)
         }
     }
 }
