@@ -13,6 +13,7 @@ struct SmartBlendStatus: Equatable, Sendable {
     let outgoingCutMs: Int
     let incomingStartMs: Int
 
+    @MainActor
     var badgeText: String {
         switch phase {
         case .preparing:
