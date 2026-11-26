@@ -166,10 +166,10 @@ final class LibraryInteractionTests: XCTestCase {
         // Compare against the original shared button row, not merely against
         // another equally displaced native bar. The menu retains that anchor.
         let anchor = initialFrames["appMenu"] ?? .zero
-        let barWidth = anchor.midX / 0.857
+        let barFrame = mini.frame
         for (index, identifier) in identifiers.enumerated() {
             let frame = initialFrames[identifier] ?? .zero
-            XCTAssertEqual(frame.midX, barWidth * [0.143, 0.381, 0.619, 0.857][index], accuracy: 0.5, identifier)
+            XCTAssertEqual(frame.midX, barFrame.minX + barFrame.width * [0.143, 0.381, 0.619, 0.857][index], accuracy: 0.5, identifier)
             XCTAssertEqual(frame.midY, anchor.midY, accuracy: 0.5, identifier)
         }
         for identifier in identifiers { XCTAssertEqual(app.buttons.matching(identifier: identifier).count, 1) }
