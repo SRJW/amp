@@ -156,6 +156,13 @@ final class LibraryInteractionTests: XCTestCase {
         let initialFrames = navigationFrames()
         XCTAssertEqual(Set(initialFrames.keys), Set(identifiers))
         let libraryFrames = identifiers.map { initialFrames[$0] ?? .zero }
+        let measurements = identifiers.map { id -> String in
+            let frame = initialFrames[id] ?? .zero
+            return "\(id): centre=(\(frame.midX), \(frame.midY)), size=(\(frame.width), \(frame.height))"
+        }.joined(separator: "\n")
+        let geometry = XCTAttachment(string: measurements)
+        geometry.name = "Native navigation screen measurements"
+        geometry.lifetime = .keepAlways; add(geometry)
         for identifier in identifiers { XCTAssertEqual(app.buttons.matching(identifier: identifier).count, 1) }
         func navigationMatchesLibrary() -> Bool {
             let measured = navigationFrames()

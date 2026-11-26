@@ -33,16 +33,14 @@ final class NativeNavigationController: UITabBarController, UITabBarControllerDe
     private var previousSelectedTint: UIColor?
     private var previousIdleTint: UIColor?
 
-    override func loadView() {
-        // This small host is already positioned against the shared bottom safe
-        // area by AppFixedNavigation. Do not inset its tab contents a second time.
-        view = NavigationHostView()
-        view.backgroundColor = .clear
-        view.isOpaque = false
-    }
-
     override func viewDidLoad() {
         super.viewDidLoad()
+        // Keep UIKit's own container and floating-tab infrastructure intact.
+        view.backgroundColor = .clear
+        view.isOpaque = false
+        view.insetsLayoutMarginsFromSafeArea = false
+        tabBar.insetsLayoutMarginsFromSafeArea = false
+        tabBar.directionalLayoutMargins = .zero
         delegate = self
         mode = .tabBar
         tabBarMinimizeBehavior = .never
@@ -54,6 +52,7 @@ final class NativeNavigationController: UITabBarController, UITabBarControllerDe
         viewControllers = (0..<4).map { index in
             let child = UIViewController()
             child.view.backgroundColor = .clear
+            child.view.isOpaque = false
             child.view.isUserInteractionEnabled = false
             child.view.accessibilityElementsHidden = true
             child.tabBarItem = UITabBarItem(title: nil, image: Self.images[index], selectedImage: Self.images[index])
@@ -66,6 +65,7 @@ final class NativeNavigationController: UITabBarController, UITabBarControllerDe
         // menu glyph. UIButton owns the real UIMenu hit target and accessibility.
         menuButton.backgroundColor = .clear
         menuButton.showsMenuAsPrimaryAction = true
+        menuButton.preferredMenuElementOrder = .fixed
         menuButton.accessibilityIdentifier = "appMenu"
         menuButton.accessibilityLabel = L("Menu")
         view.addSubview(menuButton)
@@ -165,8 +165,4 @@ final class NativeNavigationController: UITabBarController, UITabBarControllerDe
         renderer.scale = UIScreen.main.scale
         return (renderer.uiImage ?? UIImage()).withRenderingMode(.alwaysTemplate)
     }
-}
-
-private final class NavigationHostView: UIView {
-    override var safeAreaInsets: UIEdgeInsets { .zero }
 }
