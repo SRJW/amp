@@ -61,6 +61,8 @@ final class LibraryInteractionTests: XCTestCase {
 
     @MainActor func testNativeMenuSettingsWorksAfterWifiTransferWithoutSwitchingTabs() {
         let app = launch("player-light")
+        XCTAssertTrue(app.tabBars["ampNativeTabBar"].waitForExistence(timeout: 30),
+                      "This regression must exercise the genuine UIKit tab bar, not the legacy fallback")
         let menu = app.buttons["appMenu"]
         XCTAssertTrue(menu.waitForExistence(timeout: 30))
         for _ in 0..<2 {

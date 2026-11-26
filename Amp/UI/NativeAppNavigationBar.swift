@@ -48,6 +48,7 @@ final class NativeNavigationController: UITabBarController, UITabBarControllerDe
         tabBarMinimizeBehavior = .never
         view.clipsToBounds = false
         tabBar.clipsToBounds = false
+        tabBar.accessibilityIdentifier = "ampNativeTabBar"
         let labels = [L("Library"), L("Equalizer"), L("Search"), L("Menu")]
         let ids = ["appSection.library", "appSection.equalizer", "appSection.search", "nativeMenuSlot"]
         viewControllers = (0..<4).map { index in
@@ -110,7 +111,11 @@ final class NativeNavigationController: UITabBarController, UITabBarControllerDe
             previousIdleTint = configuration.idleTint
             let appearance = UITabBarAppearance()
             if configuration.showsSurface { appearance.configureWithDefaultBackground() }
-            else { appearance.configureWithTransparentBackground() }
+            else {
+                appearance.configureWithTransparentBackground()
+                appearance.selectionIndicatorTintColor = .clear
+                appearance.selectionIndicatorImage = Self.clearIndicator
+            }
             for layout in [appearance.stackedLayoutAppearance, appearance.inlineLayoutAppearance,
                            appearance.compactInlineLayoutAppearance] {
                 layout.normal.iconColor = configuration.idleTint
@@ -143,6 +148,8 @@ final class NativeNavigationController: UITabBarController, UITabBarControllerDe
         guard let index = viewControllers?.firstIndex(of: viewController), index < 3 else { return }
         configuration?.onSelect([.library, .equalizer, .search][index])
     }
+
+    private static let clearIndicator = UIGraphicsImageRenderer(size: CGSize(width: 1, height: 1)).image { _ in }
 
     private static let images: [UIImage] = [
         glyph(PlayerLibraryGlyph(), width: 32),
