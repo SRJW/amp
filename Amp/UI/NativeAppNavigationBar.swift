@@ -10,6 +10,8 @@ struct NativeAppNavigationBar: UIViewControllerRepresentable {
     let selectedTint: UIColor
     let idleTint: UIColor
     let showsSurface: Bool
+    let opacity: Double
+    let accessibilityActive: Bool
     let dark: Bool
     let reduceMotion: Bool
     let onSelect: (LibrarySection) -> Void
@@ -20,8 +22,7 @@ struct NativeAppNavigationBar: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ controller: NativeNavigationHost, context: Context) {
-        controller.loadViewIfNeeded()
-        (controller.view as? NativeNavigationView)?.configure(self)
+        controller.configure(self)
     }
 }
 
@@ -34,6 +35,7 @@ final class NativeNavigationView: UIView, UITabBarDelegate {
     private var surface: Bool?
     private var previousSelectedTint: UIColor?
     private var previousIdleTint: UIColor?
+    private var previousWidth: CGFloat?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -82,12 +84,20 @@ final class NativeNavigationView: UIView, UITabBarDelegate {
                                   y: (bounds.height - hitSize) / 2,
                                   width: hitSize, height: hitSize)
         bringSubviewToFront(menuButton)
+        #if DEBUG
         tabBar.accessibilityValue = "host=\(bounds); safe=\(safeAreaInsets); barSafe=\(tabBar.safeAreaInsets); margins=\(layoutMargins); fit=\(tabBar.sizeThatFits(bounds.size))"
+        #endif
 
     }
 
     func configure(_ configuration: NativeAppNavigationBar) {
         self.configuration = configuration
+        accessibilityElementsHidden = !configuration.accessibilityActive
+        isUserInteractionEnabled = configuration.accessibilityActive
+        isHidden = configuration.opacity <= 0.001
+        tabBar.accessibilityElementsHidden = !configuration.accessibilityActive
+        tabBar.items?.forEach { $0.isAccessibilityElement = configuration.accessibilityActive && $0.tag < 3 }
+        menuButton.isAccessibilityElement = configuration.accessibilityActive
         overrideUserInterfaceStyle = configuration.dark ? .dark : .light
         let selectedItem = tabBar.items?[configuration.selectedIndex]
         if tabBar.selectedItem !== selectedItem { tabBar.selectedItem = selectedItem }
@@ -103,10 +113,11 @@ final class NativeNavigationView: UIView, UITabBarDelegate {
                 }
             })
         }
-        if surface != configuration.showsSurface
+        if previousWidth != configuration.width || surface != configuration.showsSurface
             || previousSelectedTint?.isEqual(configuration.selectedTint) != true
             || previousIdleTint?.isEqual(configuration.idleTint) != true {
             let changesSurface = surface != nil && surface != configuration.showsSurface
+            previousWidth = configuration.width
             surface = configuration.showsSurface
             previousSelectedTint = configuration.selectedTint
             previousIdleTint = configuration.idleTint
@@ -166,27 +177,48 @@ final class NativeNavigationView: UIView, UITabBarDelegate {
     }
 }
 
-/// Isolate the navigation from the containing screen's system minimum margins.
-/// Only this host's safe area is normalized; the app's content keeps iOS insets.
+/// A hosting controller can publicly disable safe-area propagation for this
+/// already positioned control without changing the app's main content insets.
 @available(iOS 26.0, *)
-final class NativeNavigationHost: UIViewController {
-    override func loadView() { view = NativeNavigationView() }
+final class NativeNavigationHost: UIHostingController<NativeNavigationSurface> {
+    init() {
+        super.init(rootView: NativeNavigationSurface(configuration: nil))
+        safeAreaRegions = []
+    }
+
+    @MainActor required dynamic init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        view.backgroundColor = .clear
+        view.isOpaque = false
+        view.clipsToBounds = false
         viewRespectsSystemMinimumLayoutMargins = false
         view.directionalLayoutMargins = .zero
         view.insetsLayoutMarginsFromSafeArea = false
     }
 
-    override func viewDidLayoutSubviews() {
-        super.viewDidLayoutSubviews()
-        guard let window = view.window else { return }
-        let rect = view.convert(view.bounds, to: window)
-        let overlap = max(0, rect.maxY - window.safeAreaLayoutGuide.layoutFrame.maxY)
-        let inset = -overlap
-        if abs(additionalSafeAreaInsets.bottom - inset) > 0.1 {
-            additionalSafeAreaInsets.bottom = inset
-        }
+    func configure(_ configuration: NativeAppNavigationBar) {
+        loadViewIfNeeded()
+        rootView = NativeNavigationSurface(configuration: configuration)
+        view.alpha = configuration.opacity
+        view.isHidden = configuration.opacity <= 0.001
+        view.accessibilityElementsHidden = !configuration.accessibilityActive
+        view.isUserInteractionEnabled = configuration.accessibilityActive
+    }
+}
+
+@available(iOS 26.0, *)
+struct NativeNavigationSurface: View {
+    let configuration: NativeAppNavigationBar?
+    var body: some View { NativeNavigationUIKitView(configuration: configuration).ignoresSafeArea() }
+}
+
+@available(iOS 26.0, *)
+private struct NativeNavigationUIKitView: UIViewRepresentable {
+    let configuration: NativeAppNavigationBar?
+    func makeUIView(context: Context) -> NativeNavigationView { NativeNavigationView() }
+    func updateUIView(_ view: NativeNavigationView, context: Context) {
+        if let configuration { view.configure(configuration) }
     }
 }

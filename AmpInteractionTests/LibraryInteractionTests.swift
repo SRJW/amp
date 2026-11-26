@@ -169,33 +169,27 @@ final class LibraryInteractionTests: XCTestCase {
         // another equally displaced native bar. The menu retains that anchor.
         let anchor = initialFrames["appMenu"] ?? .zero
         let barFrame = app.frame.insetBy(dx: 12, dy: 0)
-        for (index, identifier) in identifiers.enumerated() {
+        let originalCentresMatch = identifiers.enumerated().allSatisfy { index, identifier in
             let frame = initialFrames[identifier] ?? .zero
-            XCTAssertEqual(frame.midX, barFrame.minX + barFrame.width * [0.143, 0.381, 0.619, 0.857][index], accuracy: 0.5, identifier)
-            XCTAssertEqual(frame.midY, anchor.midY, accuracy: 0.5, identifier)
+            let expectedX = barFrame.minX + barFrame.width * [0.143, 0.381, 0.619, 0.857][index]
+            return abs(frame.midX - expectedX) <= 0.5 && abs(frame.midY - anchor.midY) <= 0.5
         }
+        XCTAssertTrue(originalCentresMatch, "Original icon positions changed:\n\(measurements)\n\(String(describing: app.tabBars["ampNativeTabBar"].value))")
         for identifier in identifiers { XCTAssertEqual(app.buttons.matching(identifier: identifier).count, 1) }
         func navigationMatchesLibrary() -> Bool {
             let measured = navigationFrames()
             return zip(identifiers, libraryFrames).allSatisfy { identifier, expected in
                 guard let actual = measured[identifier] else { return false }
-                return abs(actual.midX - expected.midX) < 0.5 && abs(actual.midY - expected.midY) < 0.5
+                return abs(actual.midX - expected.midX) <= 0.5 && abs(actual.midY - expected.midY) <= 0.5
             }
         }
         mini.tap()
         XCTAssertTrue(app.buttons["nowPlayingTitle"].waitForExistence(timeout: 10))
         for identifier in identifiers { XCTAssertEqual(app.buttons.matching(identifier: identifier).count, 1,
-                                                       "The transition must reuse one persistent navigation row") }
+                                                       "Only one active control per icon must be exposed during the transition") }
         let aligned = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in navigationMatchesLibrary() }, object: nil)
         XCTAssertEqual(XCTWaiter.wait(for: [aligned], timeout: 20), .completed,
                        "The full player must preserve every Library navigation button's screen coordinates")
-        for (identifier, expected) in zip(identifiers, libraryFrames) {
-            let actual = app.buttons[identifier].frame
-            XCTAssertEqual(actual.midX, expected.midX, accuracy: 0.5, identifier)
-            XCTAssertEqual(actual.midY, expected.midY, accuracy: 0.5, identifier)
-            // A native tab and a plain player button have different touch-area
-            // bounds. Their icon centres must remain at the same screen point.
-        }
         let playerScreenshot = XCTAttachment(screenshot: app.screenshot())
         playerScreenshot.name = "Player navigation without capsule or labels"; playerScreenshot.lifetime = .keepAlways
         add(playerScreenshot)

@@ -187,17 +187,18 @@ struct AppNavigationButtons: View {
                         selectedTint: nativeTint(from: libraryTint(selected: true), to: playerTint(selected: true), amount: blend),
                         idleTint: nativeTint(from: libraryTint(selected: false), to: playerTint(selected: false), amount: blend),
                         showsSurface: true,
+                        opacity: settings.playerBackground.navBarCapsule ? 1 : 1 - blend,
+                        accessibilityActive: interactiveBarEnabled,
                         dark: colorScheme == .dark, reduceMotion: reduceMotion,
                         onSelect: { section in
                             withAnimation(reduceMotion ? nil : .easeInOut(duration: AppNavigationMetrics.duration)) { router.activate(section) }
                         }, onOpenTool: { router.open($0) })
                     .frame(width: width, height: AppNavigationMetrics.capsuleHeight)
                     .padding(.vertical, -(AppNavigationMetrics.capsuleHeight - AppNavigationMetrics.buttonsHeight) / 2)
-                    .opacity(settings.playerBackground.navBarCapsule ? 1 : 1 - blend)
                     .allowsHitTesting(interactiveBarEnabled)
                     .accessibilityHidden(!interactiveBarEnabled)
                     if !settings.playerBackground.navBarCapsule {
-                        navigationContent(progress: 1)
+                        navigationContent(progress: 1, accessibilityActive: !interactiveBarEnabled)
                             .opacity(blend)
                             .allowsHitTesting(!interactiveBarEnabled)
                             .accessibilityHidden(interactiveBarEnabled)
@@ -248,7 +249,7 @@ struct AppNavigationButtons: View {
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in contact = nil }
 
     }
-    private func navigationContent(progress: CGFloat) -> some View {
+    private func navigationContent(progress: CGFloat, accessibilityActive: Bool = true) -> some View {
         let routeIndex: Int = switch router.section {
         case .library: 0
         case .equalizer: 1
@@ -256,6 +257,7 @@ struct AppNavigationButtons: View {
         }
         return AppNavigationBarContent(
             width: width,
+            accessibilityActive: accessibilityActive,
             playerProgress: progress,
             selectedIndex: selectedIndex,
             activeSectionIndex: routeIndex,
@@ -291,6 +293,7 @@ struct AppNavigationButtons: View {
 /// in lockstep with Now Playing's presentation progress during both drags and animations.
 private struct AppNavigationBarContent: View, Animatable {
     let width: CGFloat
+    var accessibilityActive = true
     var playerProgress: CGFloat
     let selectedIndex: Int
     let activeSectionIndex: Int
@@ -381,6 +384,7 @@ private struct AppNavigationBarContent: View, Animatable {
                 .menuOrder(.fixed)
                 .accessibilityLabel(L(AppNavigationMetrics.menuLabel))
                 .accessibilityIdentifier("appMenu")
+                .accessibilityHidden(!accessibilityActive)
                 .position(x: width * PlayerLayoutMetrics.navigationCentresW[3], y: 24)
             }
             .font(.system(size: 28 * PlayerLayoutMetrics.navigationIconScale, weight: .heavy))
@@ -444,6 +448,7 @@ private struct AppNavigationBarContent: View, Animatable {
             .accessibilityLabel(title)
             .accessibilityIdentifier("appSection.\(section.rawValue)")
             .accessibilityAddTraits(isPlayerSelected ? .isSelected : [])
+            .accessibilityHidden(!accessibilityActive)
             .position(x: width * PlayerLayoutMetrics.navigationCentresW[index], y: 24)
     }
 
