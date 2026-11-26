@@ -118,6 +118,12 @@ struct AppNavigationButtons: View {
     @Environment(\.palette) private var palette
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(AppSettings.self) private var settings
+    @Environment(\.self) private var environment
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    private var usesNativeBar: Bool {
+        if #available(iOS 26.0, *) { return settings.glassEnabled && !reduceTransparency }
+        return false
+    }
     @State private var contact: NavigationGlassContact?
     @State private var artworkDominant: UInt32 = LyricsPalette.fallback.artworkDominant
     @State private var artworkRevision = 0
@@ -177,26 +183,43 @@ struct AppNavigationButtons: View {
         case .equalizer: 1
         case .search: 2
         }
-        AppNavigationBarContent(
-            width: width,
-            playerProgress: resolvedProgress,
-            selectedIndex: selectedIndex,
-            activeSectionIndex: activeSectionIndex,
-            hasPresentedTool: router.presentedTool != nil,
-            showsPlayerCapsule: settings.playerBackground.navBarCapsule,
-            glassEnabled: settings.glassEnabled,
-            contact: contact,
-            playerCapsuleFill: playerCapsuleFill,
-            selectionFallbackFill: colorScheme == .dark ? Color.white.opacity(0.14) : Color.black.opacity(0.08),
-            librarySelectedColor: libraryTint(selected: true),
-            libraryIdleColor: libraryTint(selected: false),
-            playerSelectedColor: playerTint(selected: true),
-            playerIdleColor: playerTint(selected: false),
-            onSelectSection: { section in
-                withAnimation(reduceMotion ? nil : .easeInOut(duration: AppNavigationMetrics.duration)) { router.activate(section) }
-            },
-            onOpenTool: { tool in router.open(tool) }
-        )
+        Group {
+            if #available(iOS 26.0, *), usesNativeBar {
+                let blend = PlayerCoverGeometry.chromeOpacity(resolvedProgress)
+                NativeAppNavigationBar(
+                    width: width, selectedIndex: selectedIndex,
+                    selectedTint: nativeTint(from: libraryTint(selected: true), to: playerTint(selected: true), amount: blend),
+                    idleTint: nativeTint(from: libraryTint(selected: false), to: playerTint(selected: false), amount: blend),
+                    showsSurface: settings.playerBackground.navBarCapsule || resolvedProgress < 0.5,
+                    dark: colorScheme == .dark, reduceMotion: reduceMotion,
+                    onSelect: { section in
+                        withAnimation(reduceMotion ? nil : .easeInOut(duration: AppNavigationMetrics.duration)) { router.activate(section) }
+                    }, onOpenTool: { router.open($0) })
+                .frame(width: width, height: AppNavigationMetrics.capsuleHeight)
+                .padding(.vertical, -(AppNavigationMetrics.capsuleHeight - AppNavigationMetrics.buttonsHeight) / 2)
+            } else {
+                AppNavigationBarContent(
+                    width: width,
+                    playerProgress: resolvedProgress,
+                    selectedIndex: selectedIndex,
+                    activeSectionIndex: activeSectionIndex,
+                    hasPresentedTool: router.presentedTool != nil,
+                    showsPlayerCapsule: settings.playerBackground.navBarCapsule,
+                    glassEnabled: settings.glassEnabled,
+                    contact: contact,
+                    playerCapsuleFill: playerCapsuleFill,
+                    selectionFallbackFill: colorScheme == .dark ? Color.white.opacity(0.14) : Color.black.opacity(0.08),
+                    librarySelectedColor: libraryTint(selected: true),
+                    libraryIdleColor: libraryTint(selected: false),
+                    playerSelectedColor: playerTint(selected: true),
+                    playerIdleColor: playerTint(selected: false),
+                    onSelectSection: { section in
+                        withAnimation(reduceMotion ? nil : .easeInOut(duration: AppNavigationMetrics.duration)) { router.activate(section) }
+                    },
+                    onOpenTool: { tool in router.open(tool) }
+                )
+            }
+        }
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: artworkDominant)
         .animation(reduceMotion ? nil : .spring(response: AppNavigationMetrics.selectionDuration, dampingFraction: 0.86), value: selectedIndex)
         .onReceive(NotificationCenter.default.publisher(for: ArtworkLoader.didChange)) { note in
@@ -209,7 +232,7 @@ struct AppNavigationButtons: View {
             artworkDominant = sampled.artworkDominant
         }
         .background {
-            NavigationGlassTouchObserver(enabled: interactiveBarEnabled, changed: { sample in
+            NavigationGlassTouchObserver(enabled: !usesNativeBar && interactiveBarEnabled, changed: { sample in
                 guard abs(sample.width - width) < 0.5 else { return }
                 let height = AppNavigationMetrics.buttonsHeight
                 guard sample.point.y >= -height / 2, sample.point.y <= height * 1.5 else {
@@ -237,6 +260,15 @@ struct AppNavigationButtons: View {
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in contact = nil }
 
     }
+    private func nativeTint(from a: Color, to b: Color, amount: Double) -> UIColor {
+        let t = amount.clamped(0, 1)
+        let a = a.resolve(in: environment), b = b.resolve(in: environment)
+        return UIColor(red: CGFloat(Double(a.red) + (Double(b.red) - Double(a.red)) * t),
+                       green: CGFloat(Double(a.green) + (Double(b.green) - Double(a.green)) * t),
+                       blue: CGFloat(Double(a.blue) + (Double(b.blue) - Double(a.blue)) * t),
+                       alpha: CGFloat(Double(a.opacity) + (Double(b.opacity) - Double(a.opacity)) * t))
+    }
+
 }
 
 /// Continuously interpolates the bottom navigation capsule, selection pill, and icon colors

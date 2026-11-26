@@ -65,12 +65,12 @@ final class LibraryInteractionTests: XCTestCase {
         XCTAssertTrue(menu.waitForExistence(timeout: 30))
         for _ in 0..<2 {
             menu.tap()
-            let wifi = app.buttons["appMenu.wifiTransfer"]
+            let wifi = app.buttons.matching(NSPredicate(format: "identifier == %@ OR label == %@", "appMenu.wifiTransfer", "Wi-Fi Transfer")).firstMatch
             XCTAssertTrue(wifi.waitForExistence(timeout: 5))
             wifi.tap()
             XCTAssertTrue(app.buttons["Start transfer"].waitForExistence(timeout: 10))
             menu.tap()
-            let settings = app.buttons["appMenu.settings"]
+            let settings = app.buttons.matching(NSPredicate(format: "identifier == %@ OR label == %@", "appMenu.settings", "Settings")).firstMatch
             XCTAssertTrue(settings.waitForExistence(timeout: 5))
             settings.tap()
             XCTAssertTrue(app.buttons["settingsMusicLibrary"].waitForExistence(timeout: 10),
@@ -190,7 +190,7 @@ final class LibraryInteractionTests: XCTestCase {
         XCTAssertTrue(mini.waitForExistence(timeout: 10))
         XCTAssertTrue(navigationMatchesLibrary(), "Returning to Library must leave its capsule and mini player in place")
         app.buttons["appMenu"].tap()
-        app.buttons["appMenu.settings"].tap()
+        app.buttons.matching(NSPredicate(format: "identifier == %@ OR label == %@", "appMenu.settings", "Settings")).firstMatch.tap()
         let librarySettings = app.buttons["settingsMusicLibrary"]
         XCTAssertTrue(librarySettings.waitForExistence(timeout: 10))
         for _ in 0..<5 {
@@ -314,7 +314,7 @@ final class LibraryInteractionTests: XCTestCase {
 
         func openLibrarySettings() {
             app.buttons["appMenu"].tap()
-            app.buttons["appMenu.settings"].tap()
+            app.buttons.matching(NSPredicate(format: "identifier == %@ OR label == %@", "appMenu.settings", "Settings")).firstMatch.tap()
             let librarySettings = app.buttons["settingsMusicLibrary"]
             XCTAssertTrue(librarySettings.waitForExistence(timeout: 10))
             for _ in 0..<5 {
@@ -423,10 +423,10 @@ final class LibraryInteractionTests: XCTestCase {
         }
         field.typeText("Local fixture\n")
         app.buttons["appMenu"].tap()
-        XCTAssertTrue(app.buttons["appMenu.settings"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "identifier == %@ OR label == %@", "appMenu.settings", "Settings")).firstMatch.waitForExistence(timeout: 5))
         XCTAssertEqual(app.buttons.matching(identifier: "appMenu.equalizer").count, 1)
         XCTAssertFalse(app.staticTexts["VYBE"].exists)
-        app.buttons["appMenu.settings"].tap()
+        app.buttons.matching(NSPredicate(format: "identifier == %@ OR label == %@", "appMenu.settings", "Settings")).firstMatch.tap()
         let close = app.buttons["closeTool"]
         XCTAssertTrue(close.waitForExistence(timeout: 10))
         close.tap()
