@@ -88,7 +88,7 @@ assert asset['state'] == 'uploaded' and asset['size'] == ipa.stat().st_size
 if asset.get('digest'):
     assert asset['digest'] == 'sha256:' + hashlib.sha256(ipa.read_bytes()).hexdigest()
 PY
-if [ "$(gh api "repos/$GH_REPO/releases/$release_id" --jq '.draft')" = 'true' ]; then
+if [ "${IPA_KEEP_DRAFT:-false}" != 'true' ] && [ "$(gh api "repos/$GH_REPO/releases/$release_id" --jq '.draft')" = 'true' ]; then
   gh api --method PATCH "repos/$GH_REPO/releases/$release_id" -F draft=false >/dev/null
 fi
 printf '[Download %s directly](https://github.com/%s/releases/download/%s/%s)\n' \

@@ -230,6 +230,7 @@ jobs:
         GH_TOKEN: ${{ github.token }}
         GH_REPO: ${{ github.repository }}
         NATIVE_CHECKS_RESULT: separate-workflow
+        IPA_KEEP_DRAFT: ${{ inputs.validation_scope == 'navigation-alignment-only' }}
       run: bash Tools/publish_ipa.sh dist/amp.ipa
 'on':
   push:

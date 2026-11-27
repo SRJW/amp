@@ -80,6 +80,7 @@ struct AppFixedNavigation: View {
                 GeometryReader { geometry in
                     AppNavigationButtons(
                         width: max(geometry.size.width - 2 * AppNavigationMetrics.horizontalInset, 0),
+                        nativeCanvasSize: geometry.size,
                         inPlayer: router.showsNowPlaying && router.presentedTool == nil,
                         playerProgress: playerProgress
                     )
@@ -108,6 +109,7 @@ struct AppFixedNavigation: View {
 /// Inside the full player only these four controls appear, at its existing positions.
 struct AppNavigationButtons: View {
     let width: CGFloat
+    var nativeCanvasSize: CGSize? = nil
     var inPlayer = false
     var playerProgress: CGFloat? = nil
     @Environment(\.playerForegroundInk) private var playerInk
@@ -184,6 +186,7 @@ struct AppNavigationButtons: View {
         }
         AppNavigationBarContent(
             width: width,
+            nativeCanvasSize: nativeCanvasSize,
             playerProgress: resolvedProgress,
             selectedIndex: selectedIndex,
             activeSectionIndex: activeSectionIndex,
@@ -248,6 +251,7 @@ struct AppNavigationButtons: View {
 /// in lockstep with Now Playing's presentation progress during both drags and animations.
 private struct AppNavigationBarContent: View, Animatable {
     let width: CGFloat
+    let nativeCanvasSize: CGSize?
     var playerProgress: CGFloat
     let selectedIndex: Int
     let activeSectionIndex: Int
@@ -279,6 +283,7 @@ private struct AppNavigationBarContent: View, Animatable {
             if #available(iOS 26.0, *), usesNativeGlass {
                 NativeNavigationGlass(
                     selectedIndex: selectedIndex,
+                    canvasSize: nativeCanvasSize ?? UIScreen.main.bounds.size,
                     selectedTint: uiColor(blendedColor(from: librarySelectedColor, to: playerSelectedColor, amount: blend)),
                     idleTint: uiColor(blendedColor(from: libraryIdleColor, to: playerIdleColor, amount: blend)),
                     opacity: 1 - blend, interactive: playerProgress < 0.5,
