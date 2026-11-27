@@ -126,21 +126,6 @@ jobs:
         defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool NO
         open -a Simulator --args -CurrentDeviceUDID "$UI_SIMULATOR_ID"
         xcrun simctl bootstatus "$UI_SIMULATOR_ID" -b > build/ui-boot.log 2>&1
-    - name: Capture the native navigation before interaction checks
-      if: ${{ inputs.scope == 'navigation-alignment-only' }}
-      run: |
-        xcrun simctl install "$UI_SIMULATOR_ID" build/DerivedData/Build/Products/Debug-iphonesimulator/Amp.app
-        xcrun simctl launch "$UI_SIMULATOR_ID" com.amp --amp-interaction-probe=player-light
-        sleep 8
-        xcrun simctl io "$UI_SIMULATOR_ID" screenshot build/native-navigation-preview.png
-        xcrun simctl terminate "$UI_SIMULATOR_ID" com.amp
-    - name: Upload the native navigation preview
-      if: ${{ inputs.scope == 'navigation-alignment-only' && !cancelled() }}
-      uses: actions/upload-artifact@v4
-      with:
-        name: amp-native-navigation-preview
-        path: build/native-navigation-preview.png
-        if-no-files-found: error
     - name: Run real cover swipe and dismissal checks
       if: ${{ inputs.scope != 'animation-only' }}
       run: |
@@ -170,7 +155,6 @@ jobs:
             -only-testing:AmpInteractionTests/LibraryInteractionTests/testGlassContactKeepsButtonActionsAndCancelsVerticalExit
             -only-testing:AmpInteractionTests/LibraryInteractionTests/testNativeMenuSettingsWorksAfterWifiTransferWithoutSwitchingTabs
           )
-          test_filters+=(-test-timeouts-enabled YES -default-test-execution-time-allowance 180 -maximum-test-execution-time-allowance 180)
         elif [ "${{ inputs.scope }}" = 'artist-motion-only' ]; then
           test_filters=(
             -only-testing:AmpInteractionTests/LibraryInteractionTests/testArtistPortraitScrollReturnsWithoutMovingNavigationOrBlockingActions

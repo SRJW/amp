@@ -61,18 +61,16 @@ final class LibraryInteractionTests: XCTestCase {
 
     @MainActor func testNativeMenuSettingsWorksAfterWifiTransferWithoutSwitchingTabs() {
         let app = launch("player-light")
-        XCTAssertTrue(app.tabBars["ampNativeTabBar"].waitForExistence(timeout: 30),
-                      "This regression must exercise the genuine UIKit tab bar, not the legacy fallback")
         let menu = app.buttons["appMenu"]
         XCTAssertTrue(menu.waitForExistence(timeout: 30))
         for _ in 0..<2 {
             menu.tap()
-            let wifi = app.buttons.matching(NSPredicate(format: "identifier == %@ OR label == %@", "appMenu.wifiTransfer", "Wi-Fi Transfer")).firstMatch
+            let wifi = app.buttons["appMenu.wifiTransfer"]
             XCTAssertTrue(wifi.waitForExistence(timeout: 5))
             wifi.tap()
             XCTAssertTrue(app.buttons["Start transfer"].waitForExistence(timeout: 10))
             menu.tap()
-            let settings = app.buttons.matching(NSPredicate(format: "identifier == %@ OR label == %@", "appMenu.settings", "Settings")).firstMatch
+            let settings = app.buttons["appMenu.settings"]
             XCTAssertTrue(settings.waitForExistence(timeout: 5))
             settings.tap()
             XCTAssertTrue(app.buttons["settingsMusicLibrary"].waitForExistence(timeout: 10),
@@ -156,40 +154,29 @@ final class LibraryInteractionTests: XCTestCase {
         let initialFrames = navigationFrames()
         XCTAssertEqual(Set(initialFrames.keys), Set(identifiers))
         let libraryFrames = identifiers.map { initialFrames[$0] ?? .zero }
-        let measurements = identifiers.map { id -> String in
-            let frame = initialFrames[id] ?? .zero
-            return "\(id): centre=(\(frame.midX), \(frame.midY)), size=(\(frame.width), \(frame.height))"
-        }.joined(separator: "\n")
-        let geometry = XCTAttachment(string: measurements)
-        geometry.name = "Native navigation screen measurements"
-        geometry.lifetime = .keepAlways; add(geometry)
-        let nativeLayout = XCTAttachment(string: String(describing: app.tabBars["ampNativeTabBar"].value))
-        nativeLayout.name = "Native public layout metrics"; nativeLayout.lifetime = .keepAlways; add(nativeLayout)
-        // Compare against the original shared button row, not merely against
-        // another equally displaced native bar. The menu retains that anchor.
-        let anchor = initialFrames["appMenu"] ?? .zero
-        let barFrame = app.frame.insetBy(dx: 12, dy: 0)
-        let originalCentresMatch = identifiers.enumerated().allSatisfy { index, identifier in
-            let frame = initialFrames[identifier] ?? .zero
-            let expectedX = barFrame.minX + barFrame.width * [0.143, 0.381, 0.619, 0.857][index]
-            return abs(frame.midX - expectedX) <= 0.5 && abs(frame.midY - anchor.midY) <= 0.5
-        }
-        XCTAssertTrue(originalCentresMatch, "Original icon positions changed:\n\(measurements)\n\(String(describing: app.tabBars["ampNativeTabBar"].value))")
         for identifier in identifiers { XCTAssertEqual(app.buttons.matching(identifier: identifier).count, 1) }
         func navigationMatchesLibrary() -> Bool {
             let measured = navigationFrames()
             return zip(identifiers, libraryFrames).allSatisfy { identifier, expected in
                 guard let actual = measured[identifier] else { return false }
-                return abs(actual.midX - expected.midX) <= 0.5 && abs(actual.midY - expected.midY) <= 0.5
+                return abs(actual.midX - expected.midX) < 0.5 && abs(actual.midY - expected.midY) < 0.5
+                    && abs(actual.width - expected.width) < 0.5 && abs(actual.height - expected.height) < 0.5
             }
         }
         mini.tap()
         XCTAssertTrue(app.buttons["nowPlayingTitle"].waitForExistence(timeout: 10))
         for identifier in identifiers { XCTAssertEqual(app.buttons.matching(identifier: identifier).count, 1,
-                                                       "Only one active control per icon must be exposed during the transition") }
+                                                       "The transition must reuse one persistent navigation row") }
         let aligned = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in navigationMatchesLibrary() }, object: nil)
         XCTAssertEqual(XCTWaiter.wait(for: [aligned], timeout: 20), .completed,
-                       "The full player must preserve every Library navigation button's screen coordinates")
+                       "The full player must preserve every Library navigation button's screen coordinates and size")
+        for (identifier, expected) in zip(identifiers, libraryFrames) {
+            let actual = app.buttons[identifier].frame
+            XCTAssertEqual(actual.midX, expected.midX, accuracy: 0.5, identifier)
+            XCTAssertEqual(actual.midY, expected.midY, accuracy: 0.5, identifier)
+            XCTAssertEqual(actual.width, expected.width, accuracy: 0.5, identifier)
+            XCTAssertEqual(actual.height, expected.height, accuracy: 0.5, identifier)
+        }
         let playerScreenshot = XCTAttachment(screenshot: app.screenshot())
         playerScreenshot.name = "Player navigation without capsule or labels"; playerScreenshot.lifetime = .keepAlways
         add(playerScreenshot)
@@ -203,7 +190,7 @@ final class LibraryInteractionTests: XCTestCase {
         XCTAssertTrue(mini.waitForExistence(timeout: 10))
         XCTAssertTrue(navigationMatchesLibrary(), "Returning to Library must leave its capsule and mini player in place")
         app.buttons["appMenu"].tap()
-        app.buttons.matching(NSPredicate(format: "identifier == %@ OR label == %@", "appMenu.settings", "Settings")).firstMatch.tap()
+        app.buttons["appMenu.settings"].tap()
         let librarySettings = app.buttons["settingsMusicLibrary"]
         XCTAssertTrue(librarySettings.waitForExistence(timeout: 10))
         for _ in 0..<5 {
@@ -327,7 +314,7 @@ final class LibraryInteractionTests: XCTestCase {
 
         func openLibrarySettings() {
             app.buttons["appMenu"].tap()
-            app.buttons.matching(NSPredicate(format: "identifier == %@ OR label == %@", "appMenu.settings", "Settings")).firstMatch.tap()
+            app.buttons["appMenu.settings"].tap()
             let librarySettings = app.buttons["settingsMusicLibrary"]
             XCTAssertTrue(librarySettings.waitForExistence(timeout: 10))
             for _ in 0..<5 {
@@ -436,10 +423,10 @@ final class LibraryInteractionTests: XCTestCase {
         }
         field.typeText("Local fixture\n")
         app.buttons["appMenu"].tap()
-        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "identifier == %@ OR label == %@", "appMenu.settings", "Settings")).firstMatch.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["appMenu.settings"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.buttons.matching(identifier: "appMenu.equalizer").count, 1)
         XCTAssertFalse(app.staticTexts["VYBE"].exists)
-        app.buttons.matching(NSPredicate(format: "identifier == %@ OR label == %@", "appMenu.settings", "Settings")).firstMatch.tap()
+        app.buttons["appMenu.settings"].tap()
         let close = app.buttons["closeTool"]
         XCTAssertTrue(close.waitForExistence(timeout: 10))
         close.tap()

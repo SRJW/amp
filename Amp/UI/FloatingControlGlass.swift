@@ -30,7 +30,7 @@ struct FloatingControlGlass: ViewModifier {
     }
 
     @ViewBuilder private func surface<Control: View>(_ control: Control, interactive: Bool) -> some View {
-        if let cornerRadius, cornerRadius < 30 {
+        if let cornerRadius {
             control.glassSurface(cornerRadius: cornerRadius, enabled: enabled, interactive: interactive)
         } else {
             control.glassCapsule(enabled: enabled, interactive: interactive)
