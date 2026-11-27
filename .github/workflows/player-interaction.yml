@@ -152,8 +152,11 @@ jobs:
         for glyph in report['glyphs']:
             assert abs(glyph['x'] - glyph['targetX']) <= 0.5, glyph
             assert abs(glyph['y'] - glyph['targetY']) <= 0.5, glyph
-            assert abs(glyph['width'] - glyph['originalWidth']) <= 0.75, glyph
-            assert abs(glyph['height'] - glyph['originalHeight']) <= 0.75, glyph
+            # Alpha bounds include whole pixels at both edges. The native
+            # template bitmap uses fractional density after inverse fitting;
+            # allow one 2x pixel per edge while keeping centres within 0.5 pt.
+            assert abs(glyph['width'] - glyph['originalWidth']) <= 1.0, glyph
+            assert abs(glyph['height'] - glyph['originalHeight']) <= 1.0, glyph
         PYPROBE
     - name: Upload native navigation preview and measurements
       if: ${{ inputs.scope == 'navigation-alignment-only' && !cancelled() }}
