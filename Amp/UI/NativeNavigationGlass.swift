@@ -56,6 +56,12 @@ final class NativeNavigationGlassView: UIView, UITabBarDelegate {
         setNeedsLayout()
     }
 
+    override func safeAreaInsetsDidChange() {
+        super.safeAreaInsetsDidChange()
+        calibratedSize = .zero
+        setNeedsLayout()
+    }
+
     func configure(_ configuration: NativeNavigationGlass) {
         self.configuration = configuration
         alpha = configuration.opacity
@@ -144,10 +150,11 @@ final class NativeNavigationGlassView: UIView, UITabBarDelegate {
 
     private func nativeSurface(controls: [UIControl]) -> CGRect {
         var roundedSurfaces: [CGRect] = []
+        let minimumHeight = controls.map { $0.convert($0.bounds, to: bar).height }.min() ?? 0
         func visit(_ view: UIView) {
             let rect = view.convert(view.bounds, to: bar)
             if view.layer.cornerRadius > 0, rect.width > bounds.width / 2,
-               rect.height > 0, rect.height <= bounds.height, rect.width <= bounds.width {
+               rect.height >= minimumHeight, rect.height <= bounds.height, rect.width <= bounds.width {
                 roundedSurfaces.append(rect)
             }
             view.subviews.forEach(visit)
@@ -170,7 +177,9 @@ final class NativeNavigationGlassView: UIView, UITabBarDelegate {
             view.subviews.forEach(visit)
         }
         bar.subviews.forEach(visit)
-        let result = matches.count == 4 ? matches : candidates
+        let result = matches.count == 4 ? matches : candidates.filter { control in
+            !candidates.contains { $0 !== control && $0.isDescendant(of: control) }
+        }
         return result.sorted { $0.convert($0.bounds, to: bar).midX < $1.convert($1.bounds, to: bar).midX }
     }
 
