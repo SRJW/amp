@@ -153,14 +153,14 @@ final class NativeNavigationGlassView: UIView, UITabBarDelegate {
         let minimumHeight = controls.map { $0.convert($0.bounds, to: bar).height }.min() ?? 0
         func visit(_ view: UIView) {
             let rect = view.convert(view.bounds, to: bar)
-            if view.layer.cornerRadius > 0, rect.width > bounds.width / 2,
+            if max(view.layer.cornerRadius, view.effectiveRadius(corner: .topLeft)) > 0, rect.width > bounds.width / 2,
                rect.height >= minimumHeight, rect.height <= bounds.height, rect.width <= bounds.width {
                 roundedSurfaces.append(rect)
             }
             view.subviews.forEach(visit)
         }
         bar.subviews.forEach(visit)
-        if let surface = roundedSurfaces.max(by: { $0.width * $0.height < $1.width * $1.height }) { return surface }
+        if let surface = roundedSurfaces.min(by: { $0.width * $0.height < $1.width * $1.height }) { return surface }
         var ancestor = controls[0].superview
         while let candidate = ancestor, !controls.allSatisfy({ $0.isDescendant(of: candidate) }) { ancestor = candidate.superview }
         return (ancestor ?? bar).convert((ancestor ?? bar).bounds, to: bar)
@@ -180,7 +180,15 @@ final class NativeNavigationGlassView: UIView, UITabBarDelegate {
         let result = matches.count == 4 ? matches : candidates.filter { control in
             !candidates.contains { $0 !== control && $0.isDescendant(of: control) }
         }
-        return result.sorted { $0.convert($0.bounds, to: bar).midX < $1.convert($1.bounds, to: bar).midX }
+        let sorted = result.sorted { $0.convert($0.bounds, to: bar).midX < $1.convert($1.bounds, to: bar).midX }
+        // UIKit retains stacked/inline presentation copies as sibling controls.
+        // They share a tab centre; count the resting tab once, not each copy.
+        let pixel = 1 / max(traitCollection.displayScale, 1)
+        return sorted.reduce(into: [UIControl]()) { tabs, control in
+            let x = control.convert(control.bounds, to: bar).midX
+            if let previous = tabs.last, abs(previous.convert(previous.bounds, to: bar).midX - x) <= pixel { return }
+            tabs.append(control)
+        }
     }
 
     private static func image(_ index: Int, inverseScale: CGSize, displayScale: CGFloat) -> UIImage {
