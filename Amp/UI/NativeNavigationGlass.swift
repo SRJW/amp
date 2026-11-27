@@ -157,12 +157,14 @@ private final class NativeGlassHost: UIViewController, UITabBarControllerDelegat
             tx: targetInBar.midX - bar.bounds.midX - imageScale.width * (surface.midX - bar.bounds.midX),
             ty: targetInBar.midY - centreY)
         bar.layer.sublayerTransform = CATransform3DMakeAffineTransform(transform)
+        var offsets = Array(repeating: CGPoint.zero, count: 4)
         for (index, control) in controls.enumerated() {
             guard let icon = Self.imageView(in: control) else { continue }
             let centre = icon.convert(CGPoint(x: icon.bounds.midX, y: icon.bounds.midY), to: view)
             let destination = CGPoint(x: target.minX + target.width * PlayerLayoutMetrics.navigationCentresW[index], y: target.midY)
             let offset = CGPoint(x: (destination.x - centre.x) / imageScale.width,
                                  y: destination.y - centre.y)
+            offsets[index] = offset
             // The floating UIKit appearance ignores legacy item.imageInsets.
             // Move pixels inside their bitmap canvas instead of moving controls.
             bar.items?[index].image = Self.image(index, inverseScale: imageScale,
@@ -172,13 +174,59 @@ private final class NativeGlassHost: UIViewController, UITabBarControllerDelegat
         bar.layoutIfNeeded()
         calibratedSize = view.bounds.size
         calibratedTarget = target
-        #if DEBUG
+        let fittedTarget = target
+        let fittedOffsets = offsets
         DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
+            guard let self, self.calibratedTarget == fittedTarget else { return }
             self.bar.layoutIfNeeded()
-            self.writeMetrics(controls: self.itemControls(), surface: surface)
+            // UIKit can round a template image's canvas independently of its
+            // visible pixels. Correct that residual once, without resizing or
+            // moving the native controls or their contact animation.
+            UIView.performWithoutAnimation {
+                for (index, control) in self.itemControls().enumerated() {
+                    guard index < fittedOffsets.count,
+                          let visible = self.visibleGlyph(in: control),
+                          let reference = Self.referenceBounds(index, displayScale: self.traitCollection.displayScale) else { continue }
+                    let destination = CGPoint(
+                        x: fittedTarget.minX + fittedTarget.width * PlayerLayoutMetrics.navigationCentresW[index] + reference.midX,
+                        y: fittedTarget.midY + reference.midY)
+                    let delta = CGPoint(x: destination.x - visible.midX, y: destination.y - visible.midY)
+                    guard abs(delta.x) > 0.25 || abs(delta.y) > 0.25 else { continue }
+                    let offset = CGPoint(x: fittedOffsets[index].x + delta.x / self.imageScale.width,
+                                         y: fittedOffsets[index].y + delta.y)
+                    self.bar.items?[index].image = Self.image(index, inverseScale: self.imageScale,
+                        displayScale: self.traitCollection.displayScale, offset: offset)
+                }
+                self.bar.setNeedsLayout()
+                self.bar.layoutIfNeeded()
+            }
+            #if DEBUG
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.calibratedTarget == fittedTarget else { return }
+                self.writeMetrics(controls: self.itemControls(), surface: surface)
+            }
+            #endif
         }
-        #endif
+    }
+
+    private func visibleGlyph(in control: UIControl) -> CGRect? {
+        guard let icon = Self.imageView(in: control), let image = icon.image,
+              let pixels = Self.alphaBounds(image) else { return nil }
+        let content = Self.contentRect(icon, image: image)
+        let local = CGRect(x: content.minX + pixels.minX * content.width,
+                           y: content.minY + pixels.minY * content.height,
+                           width: pixels.width * content.width, height: pixels.height * content.height)
+        return icon.layer.convert(local, to: view.window?.layer ?? view.layer)
+    }
+
+    /// Bounds relative to the original image canvas centre, including the
+    /// intentional baseline/asymmetry in amp's custom glyphs.
+    private static func referenceBounds(_ index: Int, displayScale: CGFloat) -> CGRect? {
+        let image = Self.image(index, inverseScale: CGSize(width: 1, height: 1), displayScale: displayScale)
+        guard let pixels = Self.alphaBounds(image) else { return nil }
+        return CGRect(x: (pixels.minX - 0.5) * image.size.width,
+                      y: (pixels.minY - 0.5) * image.size.height,
+                      width: pixels.width * image.size.width, height: pixels.height * image.size.height)
     }
 
     func tabBarController(_ tabBarController: UITabBarController, shouldSelect viewController: UIViewController) -> Bool {
@@ -257,7 +305,6 @@ private final class NativeGlassHost: UIViewController, UITabBarControllerDelegat
         return view.subviews.compactMap { imageView(in: $0) }.first
     }
 
-    #if DEBUG
     /// Read actual alpha pixels; a canvas centre alone cannot detect an
     /// ignored image inset or a clipped/displaced glyph.
     private static func alphaBounds(_ image: UIImage) -> CGRect? {
@@ -298,7 +345,6 @@ private final class NativeGlassHost: UIViewController, UITabBarControllerDelegat
         }
         return CGRect(x: icon.bounds.midX - size.width / 2, y: icon.bounds.midY - size.height / 2, width: size.width, height: size.height)
     }
-    #endif
 
     private func writeMetrics(controls: [UIControl], surface: CGRect) {
         #if DEBUG
