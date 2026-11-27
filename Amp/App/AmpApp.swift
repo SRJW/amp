@@ -36,6 +36,9 @@ struct AmpApp: App {
                         openRequestedPlayer()
                     }
                 }
+                .onReceive(NotificationCenter.default.publisher(for: HomeScreenQuickActionManager.didRequestNotification)) { _ in
+                    performPendingQuickAction()
+                }
                 .onContinueUserActivity("com.amp.nowplaying") { _ in
                     logLifecycle("onContinueUserActivity type=com.amp.nowplaying")
                     playerLaunch.request()
@@ -50,20 +53,51 @@ struct AmpApp: App {
                     activity.userInfo = services.player.state.currentSong.map { ["songID": $0.id] }
                     activity.targetContentIdentifier = services.player.state.currentSong.map { "amp.track.\($0.id)" }
                 }
+                .onChange(of: services.settings.language) { _, _ in
+                    HomeScreenQuickActionManager.shared.refreshShortcutItems()
+                }
                 .onChange(of: services.player.restoreFinished, initial: true) { _, ready in
                     if ready {
                         openRequestedPlayer()
+                        performPendingQuickAction()
                         services.player.refreshSystemPlayback()
                     }
                 }
                 .onChange(of: scenePhase, initial: true) { previous, phase in
                     logLifecycle(previous == phase ? "scenePhase initial=\(phase)" : "scenePhase \(previous) -> \(phase)")
                     if phase == .active {
+                        HomeScreenQuickActionManager.shared.refreshShortcutItems()
                         if PlayerLaunchSignal.consume() { playerLaunch.request() }
                         openRequestedPlayer()
+                        performPendingQuickAction()
                         services.player.refreshSystemPlayback()
+                    } else if phase == .background {
+                        HomeScreenQuickActionManager.shared.refreshShortcutItems()
                     }
                 }
+        }
+    }
+
+    private func performPendingQuickAction() {
+        guard let action = HomeScreenQuickActionManager.shared.consumePending(restored: services.player.restoreFinished) else { return }
+        logLifecycle("performPendingQuickAction action=\(action.rawValue)")
+        switch action {
+        case .shuffleAll:
+            let songs = services.library.songs
+            if !songs.isEmpty {
+                services.player.setShuffleModeEnabled(true)
+                services.player.playSongs(songs.shuffled(), startIndex: 0)
+                services.router.openPlayer()
+            } else {
+                services.router.activate(.library)
+            }
+        case .search:
+            services.router.activate(.search)
+        case .favorites:
+            services.router.activate(.library)
+            services.router.open(.category(.favorites))
+        case .wifiTransfer:
+            services.router.open(.wifiTransfer)
         }
     }
 

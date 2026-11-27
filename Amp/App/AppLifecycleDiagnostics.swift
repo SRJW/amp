@@ -10,6 +10,10 @@ final class AppLifecycleDiagnostics: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         LifecycleLog.record("app.launch bundleIdentifier=\(Bundle.main.bundleIdentifier ?? "nil") executable=\(Bundle.main.object(forInfoDictionaryKey: "CFBundleExecutable") as? String ?? "nil")")
+        if let shortcut = launchOptions?[.shortcutItem] as? UIApplicationShortcutItem {
+            HomeScreenQuickActionManager.shared.handle(shortcut)
+        }
+        HomeScreenQuickActionManager.shared.refreshShortcutItems()
         for (name, event) in [
             (UIScene.willEnterForegroundNotification, "sceneWillEnterForeground"),
             (UIScene.didActivateNotification, "sceneDidBecomeActive"),
@@ -24,6 +28,24 @@ final class AppLifecycleDiagnostics: NSObject, UIApplicationDelegate {
             })
         }
         return true
+    }
+
+    func application(_ application: UIApplication,
+                     configurationForConnecting connectingSceneSession: UISceneSession,
+                     options: UIScene.ConnectionOptions) -> UISceneConfiguration {
+        if let shortcut = options.shortcutItem {
+            HomeScreenQuickActionManager.shared.handle(shortcut)
+        }
+        let configuration = UISceneConfiguration(name: nil, sessionRole: connectingSceneSession.role)
+        configuration.delegateClass = AppSceneShortcutDelegate.self
+        return configuration
+    }
+
+    func application(_ application: UIApplication,
+                     performActionFor shortcutItem: UIApplicationShortcutItem,
+                     completionHandler: @escaping (Bool) -> Void) {
+        let handled = HomeScreenQuickActionManager.shared.handle(shortcutItem)
+        completionHandler(handled)
     }
 }
 
