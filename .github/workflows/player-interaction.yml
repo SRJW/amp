@@ -126,6 +126,37 @@ jobs:
         defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool NO
         open -a Simulator --args -CurrentDeviceUDID "$UI_SIMULATOR_ID"
         xcrun simctl bootstatus "$UI_SIMULATOR_ID" -b > build/ui-boot.log 2>&1
+    - name: Capture and measure native navigation before interaction checks
+      if: ${{ inputs.scope == 'navigation-alignment-only' }}
+      run: |
+        xcrun simctl install "$UI_SIMULATOR_ID" build/DerivedData/Build/Products/Debug-iphonesimulator/Amp.app
+        xcrun simctl launch "$UI_SIMULATOR_ID" com.amp --amp-interaction-probe=player-light
+        sleep 8
+        xcrun simctl io "$UI_SIMULATOR_ID" screenshot build/native-navigation-preview.png
+        probe_container=$(xcrun simctl get_app_container "$UI_SIMULATOR_ID" com.amp data)
+        cp "$probe_container/Documents/amp-native-navigation-probe.json" build/native-navigation-probe.json
+        xcrun simctl terminate "$UI_SIMULATOR_ID" com.amp
+        python3 - <<'PYPROBE'
+        import json
+        from pathlib import Path
+        report = json.loads(Path('build/native-navigation-probe.json').read_text())
+        print(json.dumps(report, indent=2))
+        assert report['backend'] == 'UITabBar' and report['controls'] == 4
+        assert len(report['glyphs']) == 4, 'Measure all four actual UIKit glyphs'
+        assert report['height'] == 60
+        for glyph in report['glyphs']:
+            assert abs(glyph['x'] - glyph['targetX']) <= 0.5, glyph
+            assert abs(glyph['y'] - glyph['targetY']) <= 0.5, glyph
+        PYPROBE
+    - name: Upload native navigation preview and measurements
+      if: ${{ inputs.scope == 'navigation-alignment-only' && !cancelled() }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: amp-native-navigation-preview
+        path: |
+          build/native-navigation-preview.png
+          build/native-navigation-probe.json
+        if-no-files-found: warn
     - name: Run real cover swipe and dismissal checks
       if: ${{ inputs.scope != 'animation-only' }}
       run: |

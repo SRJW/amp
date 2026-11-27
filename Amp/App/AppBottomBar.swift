@@ -118,6 +118,11 @@ struct AppNavigationButtons: View {
     @Environment(\.palette) private var palette
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(AppSettings.self) private var settings
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    private var usesNativeNavigationGlass: Bool {
+        if #available(iOS 26.0, *) { return settings.glassEnabled && !reduceTransparency }
+        return false
+    }
     @State private var contact: NavigationGlassContact?
     @State private var artworkDominant: UInt32 = LyricsPalette.fallback.artworkDominant
     @State private var artworkRevision = 0
@@ -209,7 +214,7 @@ struct AppNavigationButtons: View {
             artworkDominant = sampled.artworkDominant
         }
         .background {
-            NavigationGlassTouchObserver(enabled: interactiveBarEnabled, changed: { sample in
+            NavigationGlassTouchObserver(enabled: interactiveBarEnabled && !usesNativeNavigationGlass, changed: { sample in
                 guard abs(sample.width - width) < 0.5 else { return }
                 let height = AppNavigationMetrics.buttonsHeight
                 guard sample.point.y >= -height / 2, sample.point.y <= height * 1.5 else {
@@ -269,49 +274,52 @@ private struct AppNavigationBarContent: View, Animatable {
         let blend = PlayerCoverGeometry.chromeOpacity(playerProgress)
         let barOpacity = showsPlayerCapsule ? 1.0 : (1 - blend)
         let lensX = contact?.lensX ?? width * PlayerLayoutMetrics.navigationCentresW[selectedIndex]
-        let liftAnimation: Animation? = environment.accessibilityReduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.82)
 
         ZStack {
-            // Layer 1 (Back): Outer 60 pt Liquid Glass capsule track (like iOS 26/27 UISegmentedControl track).
-            ZStack {
-                Color.clear
-                    .frame(width: width, height: AppNavigationMetrics.buttonsHeight)
-                    .modifier(FloatingControlGlass(enabled: glassEnabled,
-                                                   verticalOutset: (AppNavigationMetrics.capsuleHeight - AppNavigationMetrics.buttonsHeight) / 2,
-                                                   surfaceOpacity: barOpacity))
-                if showsPlayerCapsule && blend > 0.001 {
-                    let tintOpacity = glassEnabled ? (environment.colorScheme == .light ? 0.14 : 0.24) : 1.0
-                    Capsule().fill(playerCapsuleFill.opacity(tintOpacity))
-                        .frame(width: width, height: AppNavigationMetrics.capsuleHeight)
-                        .opacity(blend)
+            if #available(iOS 26.0, *), usesNativeGlass {
+                NativeNavigationGlass(
+                    selectedIndex: selectedIndex,
+                    selectedTint: uiColor(blendedColor(from: librarySelectedColor, to: playerSelectedColor, amount: blend)),
+                    idleTint: uiColor(blendedColor(from: libraryIdleColor, to: playerIdleColor, amount: blend)),
+                    opacity: 1 - blend, interactive: playerProgress < 0.5,
+                    dark: environment.colorScheme == .dark,
+                    onSelect: { index in onSelectSection([.library, .equalizer, .search][index]) })
+                .frame(width: width, height: AppNavigationMetrics.capsuleHeight)
+                .padding(.vertical, -(AppNavigationMetrics.capsuleHeight - AppNavigationMetrics.buttonsHeight) / 2)
+                .accessibilityHidden(true)
+            } else {
+                // Existing fallback for older systems and reduced transparency.
+                ZStack {
+                    Color.clear
+                        .frame(width: width, height: AppNavigationMetrics.buttonsHeight)
+                        .modifier(FloatingControlGlass(enabled: glassEnabled,
+                                                       verticalOutset: (AppNavigationMetrics.capsuleHeight - AppNavigationMetrics.buttonsHeight) / 2,
+                                                       surfaceOpacity: barOpacity))
+                    if showsPlayerCapsule && blend > 0.001 {
+                        let tintOpacity = glassEnabled ? (environment.colorScheme == .light ? 0.14 : 0.24) : 1.0
+                        Capsule().fill(playerCapsuleFill.opacity(tintOpacity))
+                            .frame(width: width, height: AppNavigationMetrics.capsuleHeight)
+                            .opacity(blend)
+                    }
+                    if !usesNativeGlass {
+                        Capsule().fill(selectionFallbackFill)
+                            .frame(width: lensWidth, height: lensHeight)
+                            .position(x: lensX, y: 24)
+                            .opacity(barOpacity)
+                    }
                 }
-                if !usesFloatingLens {
-                    Capsule().fill(selectionFallbackFill)
-                        .frame(width: lensWidth, height: lensHeight)
-                        .position(x: lensX, y: 24)
-                        .opacity(barOpacity)
-                }
-            }
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
-
-            // Layer 2 (Middle): Always-live iOS 26/27 Liquid Glass thumb pill (matches the native
-            // `.pickerStyle(.segmented)` glass thumb in Control Color: luminous specular pill at rest,
-            // expanding into a clear refractive lens as you slide across tabs).
-            raisedLens
-                .frame(width: lensWidth * lensScaleX, height: lensHeight * lensScaleY)
-                .animation(environment.accessibilityReduceMotion ? nil : .interactiveSpring(response: 0.16, dampingFraction: 0.86), value: contact?.speed)
-                .position(x: lensX, y: 24)
-                .opacity(barOpacity)
-                .animation(liftAnimation, value: contact != nil)
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
 
-            // Layer 3 (Front): Interactive buttons and glyphs stay 100% crisp above the lens.
+
+            }
+
+            // The same four fixed targets remain the accessibility/action row.
+            // UIKit draws the corresponding glyphs only while native glass is visible.
             ZStack {
-                button(L("Library"), section: .library, index: 0, blend: blend) { PlayerLibraryGlyph().scaleEffect(PlayerLayoutMetrics.navigationIconScale) }
-                button(L("Equalizer"), section: .equalizer, index: 1, blend: blend) { PlayerEqualizerGlyph().scaleEffect(PlayerLayoutMetrics.navigationIconScale) }
-                button(L("Search"), section: .search, index: 2, blend: blend) { PlayerSearchGlyph().scaleEffect(PlayerLayoutMetrics.navigationIconScale) }
+                button(L("Library"), section: .library, index: 0, blend: blend) { PlayerLibraryGlyph().scaleEffect(PlayerLayoutMetrics.navigationIconScale).opacity(usesNativeGlass ? blend : 1) }
+                button(L("Equalizer"), section: .equalizer, index: 1, blend: blend) { PlayerEqualizerGlyph().scaleEffect(PlayerLayoutMetrics.navigationIconScale).opacity(usesNativeGlass ? blend : 1) }
+                button(L("Search"), section: .search, index: 2, blend: blend) { PlayerSearchGlyph().scaleEffect(PlayerLayoutMetrics.navigationIconScale).opacity(usesNativeGlass ? blend : 1) }
                 Menu {
                     Section(L(AppNavigationMetrics.menuLabel)) {
                         ForEach(Tool.available) { tool in
@@ -322,7 +330,7 @@ private struct AppNavigationBarContent: View, Animatable {
                         }
                     }
                 } label: {
-                    navigationLabel(L("Menu")) { PlayerQueueGlyph().scaleEffect(PlayerLayoutMetrics.navigationIconScale) }
+                    navigationLabel(L("Menu")) { PlayerQueueGlyph().scaleEffect(PlayerLayoutMetrics.navigationIconScale).opacity(usesNativeGlass ? blend : 1) }
                         .foregroundStyle(blendedColor(
                             from: libraryColor(at: 3),
                             to: playerColor(at: 3),
@@ -343,14 +351,6 @@ private struct AppNavigationBarContent: View, Animatable {
 
     private var lensWidth: CGFloat { width * AppNavigationMetrics.selectionWidthFraction - AppNavigationMetrics.selectionInset * 2 }
     private var lensHeight: CGFloat { AppNavigationMetrics.capsuleHeight - AppNavigationMetrics.selectionInset * 2 }
-    private var lensScaleX: CGFloat {
-        guard let contact, !environment.accessibilityReduceMotion else { return 1 }
-        return 1.24 + contact.speed * 0.08
-    }
-    private var lensScaleY: CGFloat {
-        guard let contact, !environment.accessibilityReduceMotion else { return 1 }
-        return 1.15 - contact.speed * 0.04
-    }
     private func libraryColor(at index: Int) -> Color {
         let focus = contact?.focus(at: index) ?? (selectedIndex == index ? 1 : 0)
         return blendedColor(from: libraryIdleColor, to: librarySelectedColor, amount: focus)
@@ -359,24 +359,10 @@ private struct AppNavigationBarContent: View, Animatable {
         let focus = contact?.focus(at: index) ?? (!hasPresentedTool && activeSectionIndex == index ? 1 : 0)
         return blendedColor(from: playerIdleColor, to: playerSelectedColor, amount: focus)
     }
-    private var usesFloatingLens: Bool {
+    private var usesNativeGlass: Bool {
         if #available(iOS 26.0, *) { return glassEnabled && !environment.accessibilityReduceTransparency }
         return false
     }
-    @ViewBuilder private var raisedLens: some View {
-        if #available(iOS 26.0, *), usesFloatingLens {
-            let isDragging = contact != nil
-            Capsule()
-                .fill(Color.white.opacity(environment.colorScheme == .dark ? (isDragging ? 0.05 : 0.11) : (isDragging ? 0.22 : 0.62)))
-                .glassEffect(isDragging ? .clear : .regular, in: .capsule)
-                .shadow(
-                    color: Color.black.opacity(environment.colorScheme == .dark ? (isDragging ? 0.30 : 0.22) : (isDragging ? 0.12 : 0.08)),
-                    radius: isDragging ? 10 : 6,
-                    y: 2
-                )
-        } else { Color.clear }
-    }
-
     private func navigationLabel<Icon: View>(_ title: String, @ViewBuilder icon: () -> Icon) -> some View {
         ZStack {
             icon().position(x: 24, y: 24)
@@ -396,7 +382,13 @@ private struct AppNavigationBarContent: View, Animatable {
             .accessibilityLabel(title)
             .accessibilityIdentifier("appSection.\(section.rawValue)")
             .accessibilityAddTraits(isPlayerSelected ? .isSelected : [])
+            .allowsHitTesting(!usesNativeGlass || playerProgress >= 0.5)
             .position(x: width * PlayerLayoutMetrics.navigationCentresW[index], y: 24)
+    }
+
+    private func uiColor(_ color: Color) -> UIColor {
+        let value = color.resolve(in: environment)
+        return UIColor(red: CGFloat(value.red), green: CGFloat(value.green), blue: CGFloat(value.blue), alpha: CGFloat(value.opacity))
     }
 
     private func blendedColor(from a: Color, to b: Color, amount: Double) -> Color {
