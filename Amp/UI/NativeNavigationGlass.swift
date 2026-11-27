@@ -313,15 +313,16 @@ private final class NativeGlassHost: UIViewController, UITabBarControllerDelegat
             let local = CGRect(x: content.minX + pixels.minX * content.width,
                                y: content.minY + pixels.minY * content.height,
                                width: pixels.width * content.width, height: pixels.height * content.height)
-            let visible = icon.layer.convert(local, to: view.layer)
+            let visible = icon.layer.convert(local, to: view.window?.layer ?? view.layer)
             let originalOffset = CGPoint(x: (original.midX - 0.5) * reference.size.width,
                                          y: (original.midY - 0.5) * reference.size.height)
-            return ["index": Double(index), "x": visible.midX - target.minX - originalOffset.x,
-                    "y": visible.midY - target.minY - originalOffset.y,
-                    "targetX": target.width * PlayerLayoutMetrics.navigationCentresW[index], "targetY": target.height / 2,
-                    "width": visible.width, "height": visible.height,
-                    "originalWidth": original.width * reference.size.width,
-                    "originalHeight": original.height * reference.size.height]
+            return ["index": Double(index), "x": Double(visible.midX - target.minX - originalOffset.x),
+                    "y": Double(visible.midY - target.minY - originalOffset.y),
+                    "targetX": Double(target.width * PlayerLayoutMetrics.navigationCentresW[index]),
+                    "targetY": Double(target.height / CGFloat(2)),
+                    "width": Double(visible.width), "height": Double(visible.height),
+                    "originalWidth": Double(original.width * reference.size.width),
+                    "originalHeight": Double(original.height * reference.size.height)]
         }
         let formats: [[String: Int]] = controls.prefix(4).map { control in
             guard let bitmap = Self.imageView(in: control)?.image?.cgImage else { return [:] }
